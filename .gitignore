@@ -2,6 +2,7 @@
 storage_local
 wandb
 output
+roboverse_data
 
 
 # Byte-compiled / optimized / DLL files
@@ -12,6 +13,7 @@ __pycache__/
 
 # C extensions
 *.so
+*.out
 
 # Distribution / packaging
 .Python
