@@ -1,0 +1,65 @@
+# =====================================================================
+# Radial-Sphere telescopic robot — single source of truth for ALL params.
+#
+# Consumed by:
+#   * RadialSphereEnv          (via radial_sphere.config.load_config)
+#   * the scripted run() demo  (radial_sphere.py)
+#   * the random agent         (random_agent.py)
+#
+# Edit this file to change behaviour; nothing is hard-coded in the package.
+# =====================================================================
+
+robot:                    # the telescoping sphere
+  n_bars: 60              # number of prismatic bars (Fibonacci-distributed)
+  sphere_radius: 0.15     # core sphere radius (m)
+  max_extend: 0.12        # max bar extension (m); action maps to [0, this]
+  kp: 900.0               # actuator stiffness (position PD gain)
+  kv: 22.0                # actuator damping
+
+controller:               # scripted expert policy (used by the run() demo)
+  back_gain: 0.5          # push weight on back-facing bars (higher = faster)
+  down_gain: 0.4          # stance weight on downward-pointing bars
+  lookahead: 0.9          # path look-ahead arc length (m)
+
+path:                     # sinusoidal target path on the floor (path-nav scenario)
+  length: 6.0             # x-extent (m)
+  amplitude: 0.9          # lateral sine amplitude (m)
+  waves: 1.5              # number of sine periods over `length`
+
+scenario:                 # what the agent is asked to do (see scenario_generator.py)
+  kind: path              # default task: path (follow path) | goal (reach a point)
+  goal:                   # goal-finding arena: random goal sampled in these ranges
+    x_range: [2.0, 5.0]
+    y_range: [-1.5, 1.5]
+
+reward:
+  progress_coef: 1.0      # dense shaping weight on progress toward the path end
+  success: 10.0           # sparse bonus on reaching the goal
+  goal_eps: 0.45          # distance (m) to path end that counts as reached
+
+env:
+  max_steps: 2000         # episode length (env steps) before truncation
+  action_repeat: 1        # physics simulate() calls per env.step()
+  n_settle_steps: 300     # settle steps on reset (gravity seats the sphere)
+
+sim:
+  simulator: mujoco       # only mujoco supported (custom MJCF, no USD/URDF)
+  headless: true
+  num_envs: 1             # gym env is single-environment
+
+camera:                   # follows the sphere; looks toward the goal.
+  view: chase             # chase = behind/over-shoulder | bird = top-down high angle
+  follow: true            # re-center on the ball each step; false = fixed shot
+  # --- chase view ---
+  distance: 3.0           # how far behind the ball (m)
+  height: 1.7             # camera height (m)
+  look_ahead: 1.2         # aim this far ahead of the ball toward the goal (m)
+  look_height: 0.45       # aim height (m)
+  # --- bird view (near top-down) ---
+  bird_height: 7.0        # camera height above the ball (m)
+  bird_back: 1.8          # small offset behind the ball; keeps it off straight-down
+                          # (a perfectly vertical camera is degenerate)
+
+demo:                     # scripted run() demo settings
+  n_sim_steps: 2000       # control steps to roll out
+  frame_every: 17         # capture one video frame every N control steps

@@ -1,42 +1,38 @@
-"""Args configclass for the radial-sphere demo.
+"""Load the project's ``config.yaml`` (single source of truth) into a namespace.
 
-All tuneable parameters live here so callers only need:
+    from radial_sphere.config import load_config
+    cfg = load_config()
+    cfg.robot.n_bars        # 60
+    cfg.reward.goal_eps     # 0.45
 
-    from radial_sphere.config import Args
-    import tyro
-    args = tyro.cli(Args)
+The YAML lives at the project root (one level above this package).
 """
 from __future__ import annotations
 
-from typing import Literal
+import types
+from pathlib import Path
 
-from loguru import logger as log
+import yaml
 
-from metasim.utils import configclass
+# package dir → project root → config.yaml
+CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
 
 
-@configclass
-class Args:
-    """Arguments for the radial-sphere demo."""
+def _to_ns(obj):
+    if isinstance(obj, dict):
+        return types.SimpleNamespace(**{k: _to_ns(v) for k, v in obj.items()})
+    if isinstance(obj, list):
+        return [_to_ns(x) for x in obj]
+    return obj
 
-    # Only mujoco for now — we don't have USD/URDF for this custom robot.
-    sim: Literal["mujoco"] = "mujoco"
-    n_bars: int = 60
-    max_extend: float = 0.12
-    sphere_radius: float = 0.15
-    kp: float = 900.0
-    kv: float = 22.0
-    # Locomotion gains. Lower back_gain → gentler push → slower ball.
-    back_gain: float = 0.5
-    down_gain: float = 0.4
-    # ~ 4 s of physics @ dt=0.002 by default.  Bump for longer runs.
-    n_sim_steps: int = 2000
-    # Capture one obs every N sim steps → controls effective video frame rate.
-    frame_every: int = 17
-    # Initial settle steps where bars are held at base extension.
-    n_settle_steps: int = 300
-    num_envs: int = 1
-    headless: bool = True
 
-    def __post_init__(self):
-        log.info(f"Args: {self}")
+def load_config_dict(path: str | Path | None = None) -> dict:
+    """Return the raw nested dict."""
+    path = Path(path) if path else CONFIG_PATH
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def load_config(path: str | Path | None = None) -> types.SimpleNamespace:
+    """Return the config as a nested attribute namespace."""
+    return _to_ns(load_config_dict(path))

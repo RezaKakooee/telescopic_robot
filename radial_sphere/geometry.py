@@ -22,16 +22,26 @@ def fibonacci_sphere(n: int) -> np.ndarray:
     )
 
 
-def path_xy(s: float) -> np.ndarray:
+def path_xy(
+    s: float,
+    length: float = PATH_LENGTH,
+    amplitude: float = PATH_AMPLITUDE,
+    waves: float = PATH_WAVES,
+) -> np.ndarray:
     """Sinusoid in the xy plane, parameterised by x = s."""
-    f = 2 * np.pi * PATH_WAVES / PATH_LENGTH
-    return np.array([s, PATH_AMPLITUDE * np.sin(f * s)])
+    f = 2 * np.pi * waves / length
+    return np.array([s, amplitude * np.sin(f * s)])
 
 
-def sample_path(n: int = 240) -> np.ndarray:
-    """Discretise the path into n points along x ∈ [0, PATH_LENGTH]."""
-    s = np.linspace(0, PATH_LENGTH, n)
-    return np.stack([path_xy(si) for si in s], axis=0)
+def sample_path(
+    n: int = 240,
+    length: float = PATH_LENGTH,
+    amplitude: float = PATH_AMPLITUDE,
+    waves: float = PATH_WAVES,
+) -> np.ndarray:
+    """Discretise the path into n points along x ∈ [0, length]."""
+    s = np.linspace(0, length, n)
+    return np.stack([path_xy(si, length, amplitude, waves) for si in s], axis=0)
 
 
 def quat_to_rotmat(q: np.ndarray) -> np.ndarray:
