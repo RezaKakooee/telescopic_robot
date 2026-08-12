@@ -30,7 +30,7 @@ from metasim.utils.setup_util import get_handler
 from ._gym import gym
 from .action import ActionModel
 from .config import load_config
-from .mjcf import build_robot_mjcf
+from .mjcf import build_robot_mjcf, rolling_radius
 from .observation import ObservationModel
 from .render import Renderer
 from .reward import RewardModel
@@ -116,7 +116,11 @@ class RadialSphereEnv(gym.Env):
         self._follow_cam = bool(getattr(cam, "follow", True))
         view = getattr(cam, "view", "chase")
         spawn = np.asarray(self.scenario.spawn_xy, dtype=float)
-        d = np.asarray(self.scenario.goal, dtype=float) - spawn
+        # Aim along the path's initial tangent, not spawn → goal: on an
+        # out-and-back course the goal sits beside the spawn, and the camera
+        # should watch the outbound leg (the ball then returns toward it).
+        k = min(5, len(self.path_pts) - 1)
+        d = np.asarray(self.path_pts[k], dtype=float) - spawn
         n = float(np.linalg.norm(d))
         d = d / n if n > 1e-6 else np.array([1.0, 0.0])   # travel direction (xy)
 
@@ -196,7 +200,7 @@ class RadialSphereEnv(gym.Env):
         """Per-env reset dict: breadcrumb markers + goal marker + sphere at spawn."""
         spawn = self.scenario.spawn_xy
         goal = self.scenario.goal
-        spawn_z = float(self.cfg.robot.sphere_radius) + self.base_ext + 0.005
+        spawn_z = rolling_radius(float(self.cfg.robot.sphere_radius), self.base_ext) + 0.005
         objects = {
             f"marker_{i}": {
                 "pos": torch.tensor([float(pt[0]), float(pt[1]), 0.03]),

@@ -4,9 +4,11 @@ A :class:`Scenario` is a small, serialisable spec describing one task instance:
 where the sphere starts, where the goal is, the waypoints the controller/obs
 track, and the breadcrumb markers to render.  Two kinds are supported:
 
-* ``path``  — path navigation: follow a sinusoidal path to its end (the default).
-* ``goal``  — goal finding: reach a single goal point (random within an arena);
-              the waypoints are just a straight line spawn → goal.
+* ``path``      — path navigation: follow a sinusoidal path to its end.
+* ``goal``      — goal finding: reach a single goal point (random within an
+                  arena); the waypoints are just a straight line spawn → goal.
+* ``roundtrip`` — out-and-back: sine out, turnaround, return lane back beside
+                  the spawn — the ball comes back toward the chase camera.
 
 Generators:
 
@@ -22,9 +24,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .geometry import sample_path
+from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal")
+KINDS = ("path", "goal", "roundtrip")
 
 
 def _arc_length(pts: np.ndarray) -> float:
@@ -114,7 +116,21 @@ def goal_scenario(cfg, *, rng=None, name: str = "goal") -> Scenario:
     )
 
 
-_GENERATORS = {"path": path_scenario, "goal": goal_scenario}
+def roundtrip_scenario(cfg, *, rng=None, name: str = "roundtrip") -> Scenario:
+    """Out-and-back: follow the sine out, turn around, return beside the spawn."""
+    p = cfg.path
+    lane = float(getattr(p, "lane_offset", 3.0 * float(p.amplitude)))
+    pts = sample_roundtrip(480, p.length, p.amplitude, p.waves, lane).astype(np.float32)
+    markers = pts[::8].copy()
+    return Scenario(
+        kind="roundtrip", name=name,
+        spawn_xy=pts[0].copy(), goal=pts[-1].copy(),
+        path_pts=pts, markers=markers, path_length=_arc_length(pts),
+    )
+
+
+_GENERATORS = {"path": path_scenario, "goal": goal_scenario,
+               "roundtrip": roundtrip_scenario}
 
 
 def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> Scenario:

@@ -34,25 +34,28 @@ from .geometry import (
     path_xy,
     quat_to_rotmat,
     sample_path,
+    sample_roundtrip,
 )
-from .mjcf import build_robot_mjcf
+from .mjcf import build_robot_mjcf, rolling_radius
 from .observation import ObservationModel
 from .radial_sphere import RadialSphereEnv, GymCompatWrapper, make_compat_env
-from .render import Renderer
+from .render import Renderer, VideoRecorder
 from .reward import RewardModel
-from .scenario import Scenario, generate_scenario, path_scenario, goal_scenario, KINDS
+from .scenario import (Scenario, generate_scenario, path_scenario, goal_scenario,
+                       roundtrip_scenario, KINDS)
 from .snapshot import make_run_dir, save_code
 from ._gym import gym
 
 __all__ = [
     "RadialSphereEnv", "GymCompatWrapper", "make_compat_env",
     "load_config", "load_config_dict",
-    "Scenario", "generate_scenario", "path_scenario", "goal_scenario", "KINDS",
+    "Scenario", "generate_scenario", "path_scenario", "goal_scenario",
+    "roundtrip_scenario", "KINDS",
     "make_run_dir", "save_code",
-    "ActionModel", "ObservationModel", "RewardModel", "Renderer",
-    "fibonacci_sphere", "path_xy", "sample_path", "quat_to_rotmat",
+    "ActionModel", "ObservationModel", "RewardModel", "Renderer", "VideoRecorder",
+    "fibonacci_sphere", "path_xy", "sample_path", "sample_roundtrip", "quat_to_rotmat",
     "PATH_LENGTH", "PATH_AMPLITUDE", "PATH_WAVES",
-    "build_robot_mjcf", "desired_direction", "bar_targets",
+    "build_robot_mjcf", "rolling_radius", "desired_direction", "bar_targets",
 ]
 
 

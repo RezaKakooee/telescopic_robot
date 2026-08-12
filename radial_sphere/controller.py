@@ -52,7 +52,7 @@ def bar_targets(
     drive: float = 1.0,
     back_gain: float = 0.9,
     down_gain: float = 0.4,
-    base: float = 0.15,
+    base: float = 0.05,
 ) -> np.ndarray:
     """Compute per-bar extension targets in metres.
 
@@ -68,11 +68,19 @@ def bar_targets(
 
     Returns:
         targets: (n_bars,) extension values in [0, max_extend].
+
+    The per-bar score is min-max normalised each step, so the least favourable
+    bar retracts fully to ``base`` and the most favourable extends to
+    ``max_extend`` — the full telescoping travel is used every step (a fixed
+    affine map left all bars ≥ ~40 % extended, which made the telescoping
+    barely visible).  The gains shape *which* bars extend, not the amplitude.
     """
     R = quat_to_rotmat(quat)
     dirs_world = dirs_body @ R.T
     align = dirs_world[:, 0] * d_hat[0] + dirs_world[:, 1] * d_hat[1]
     downward = np.clip(-dirs_world[:, 2], 0.0, 1.0)
     score = -back_gain * align + down_gain * downward
-    frac = np.clip(base + 0.5 * drive * (1.0 + score), 0.0, 1.0)
+    span = float(score.max() - score.min())
+    norm = (score - score.min()) / span if span > 1e-9 else np.full_like(score, 0.5)
+    frac = np.clip(base + drive * (1.0 - base) * norm, 0.0, 1.0)
     return frac * max_extend
