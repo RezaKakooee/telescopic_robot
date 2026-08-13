@@ -30,11 +30,25 @@ path:                     # sinusoidal target path on the floor (path/roundtrip)
                           # must stay well above controller.lookahead
 
 scenario:                 # what the agent is asked to do (see scenario_generator.py)
-  kind: roundtrip         # path (follow path) | goal (reach a point) |
-                          # roundtrip (out and back — ball returns toward camera)
+  kind: maze              # path | goal | roundtrip | obstacle |
+                          # maze (navigate thin-wall corridors; see scenario.maze)
+  randomize: false        # goal/obstacle kinds: resample the task every reset
   goal:                   # goal-finding arena: random goal sampled in these ranges
     x_range: [2.0, 5.0]
     y_range: [-1.5, 1.5]
+  obstacles:              # obstacle kind: random pillars between spawn and goal
+    n_range: [3, 6]       # pillars per episode (max defines the sim objects)
+    n_blocking: 2         # of those, this many sit ON the spawn→goal line
+    radius: 0.25          # pillar radius (m); fixed — the sim world is built once
+    clearance: 0.7        # keep-out distance around spawn and goal (m)
+    min_gap: 0.7          # smallest surface gap between two pillars (m)
+  maze:                   # maze kind: corridors of thin iron walls
+    level: 1              # 1 = serpentine corridor (levels 2/3 come later)
+    cell: 1.5             # corridor width (m); ball is ~0.5 m wide
+    cols: 5               # grid width (cells)
+    rows: 4               # grid height (cells) — level 1 path ≈ 28 m
+    wall_thickness: 0.04  # thin like sheet iron
+    wall_height: 0.5
 
 reward:
   progress_coef: 1.0      # dense shaping weight on progress toward the path end
@@ -53,7 +67,11 @@ sim:
   num_envs: 1             # gym env is single-environment
 
 camera:                   # follows the sphere; looks toward the goal.
-  view: chase             # chase = behind/over-shoulder | bird = top-down high angle
+  enabled: true           # build the chase camera; off = much faster stepping
+                          # (RL training disables it and re-enables for eval)
+  view: bird_fixed        # chase = follows behind | bird = top-down, follows |
+                          # bird_fixed = one static camera seeing the whole maze
+                          # (best for maze; use chase for open-floor tasks)
   follow: true            # re-center on the ball each step; false = fixed shot
   # --- chase view ---
   distance: 2.0           # how far behind the ball (m)
@@ -65,6 +83,28 @@ camera:                   # follows the sphere; looks toward the goal.
   bird_height: 7.0        # camera height above the ball (m)
   bird_back: 1.8          # small offset behind the ball; keeps it off straight-down
                           # (a perfectly vertical camera is degenerate)
+
+rl:                       # high-level steering policy (train_rl.py / eval_rl.py)
+  decision_every: 10      # low-level env steps one RL action is held for
+  include_drive: true     # RL also commands speed (drive), not just direction
+  obs_obstacles: 3        # nearest pillars in the observation (3 dims each)
+  obs_lidar: 16           # lidar rays (wall/pillar distances) in the observation
+  lidar_range: 3.0        # lidar max distance (m)
+  n_envs: 4               # parallel training envs (SubprocVecEnv)
+  total_steps: 200000     # PPO timesteps (high-level decisions) to train
+  max_steps: 4000         # episode cap during training (low-level env steps);
+                          # the ~28 m maze corridor needs ~3500
+  n_settle_steps: 100     # shorter reset settle during training
+  checkpoint_every: 50000 # save a checkpoint every N timesteps
+  lr: 0.0003
+  gamma: 0.99
+  n_steps: 256            # PPO rollout length per env
+  batch_size: 512
+  ent_coef: 0.0
+  net: [64, 64]           # policy/value MLP hidden sizes
+  wandb: true             # log to Weights & Biases (project telescopic_robot)
+  device: cpu             # cpu | cuda — tiny MLP + CPU physics: cpu is faster;
+                          # switch to cuda for big nets / image observations
 
 video:                    # episode video capture (agent scripts)
   frame_every: 2          # capture one frame every N env steps; lower = slower,

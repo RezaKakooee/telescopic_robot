@@ -24,7 +24,7 @@ Modular pieces (see each module's docstring):
 from __future__ import annotations
 
 from .action import ActionModel
-from .config import load_config, load_config_dict
+from .config import load_config, load_config_cli, load_config_dict
 from .controller import bar_targets, desired_direction
 from .geometry import (
     PATH_AMPLITUDE,
@@ -42,15 +42,19 @@ from .radial_sphere import RadialSphereEnv, GymCompatWrapper, make_compat_env
 from .render import Renderer, VideoRecorder
 from .reward import RewardModel
 from .scenario import (Scenario, generate_scenario, path_scenario, goal_scenario,
-                       roundtrip_scenario, KINDS)
+                       roundtrip_scenario, obstacle_scenario, maze_scenario, KINDS)
+from .log import setup_logging
+from .run_id import build_run_id, normalize_name
 from .snapshot import make_run_dir, save_code
+from .steering import SteeringEnv
 from ._gym import gym
 
 __all__ = [
-    "RadialSphereEnv", "GymCompatWrapper", "make_compat_env",
-    "load_config", "load_config_dict",
+    "RadialSphereEnv", "GymCompatWrapper", "make_compat_env", "SteeringEnv",
+    "load_config", "load_config_cli", "load_config_dict",
+    "setup_logging", "build_run_id", "normalize_name",
     "Scenario", "generate_scenario", "path_scenario", "goal_scenario",
-    "roundtrip_scenario", "KINDS",
+    "roundtrip_scenario", "obstacle_scenario", "maze_scenario", "KINDS",
     "make_run_dir", "save_code",
     "ActionModel", "ObservationModel", "RewardModel", "Renderer", "VideoRecorder",
     "fibonacci_sphere", "path_xy", "sample_path", "sample_roundtrip", "quat_to_rotmat",

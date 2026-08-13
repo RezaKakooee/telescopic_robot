@@ -22,7 +22,8 @@ from loguru import logger as log
 
 from metasim.constants import PhysicStateType
 from metasim.scenario.cameras import PinholeCameraCfg
-from metasim.scenario.objects import PrimitiveSphereCfg
+from metasim.scenario.objects import (PrimitiveCubeCfg, PrimitiveCylinderCfg,
+                                     PrimitiveSphereCfg)
 from metasim.scenario.robot import BaseActuatorCfg, RobotCfg
 from metasim.scenario.scenario import ScenarioCfg
 from metasim.utils.setup_util import get_handler
@@ -40,6 +41,8 @@ from .snapshot import STORAGE_DIR
 ROBOT_NAME = "radial_sphere"
 GOAL_NAME = "goal"
 CAMERA_NAME = "chase"
+PILLAR_HEIGHT = 0.8
+PILLAR_PARK = 60.0     # unused pillars wait far outside the arena
 
 
 class RadialSphereEnv(gym.Env):
@@ -52,13 +55,22 @@ class RadialSphereEnv(gym.Env):
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
 
     def __init__(self, config=None, *, scenario=None, max_steps=None, output_dir=None,
-                 render_mode="rgb_array", seed=None):
+                 render_mode="rgb_array", seed=None, enable_camera=None, randomize=None):
         super().__init__()
         # config may be a namespace, a path to a config.yaml, or None (default).
         self.cfg = config if (config is not None and not isinstance(config, (str, Path))) \
             else load_config(config)
         self.render_mode = render_mode
         self.rng = np.random.default_rng(seed)
+
+        # Camera is optional: rendering the chase camera inside get_states()
+        # dominates step time, so RL training runs with it disabled.
+        self.enable_camera = bool(enable_camera if enable_camera is not None
+                                  else getattr(self.cfg.camera, "enabled", True))
+        # Resample the goal every reset (goal kind only) so a policy cannot
+        # memorise a single target.
+        self._randomize = bool(randomize if randomize is not None
+                               else getattr(self.cfg.scenario, "randomize", False))
 
         # Where the generated robot MJCF is written. Defaults under storage_local
         # so nothing lands outside it; agents pass their run dir.
@@ -124,6 +136,25 @@ class RadialSphereEnv(gym.Env):
         n = float(np.linalg.norm(d))
         d = d / n if n > 1e-6 else np.array([1.0, 0.0])   # travel direction (xy)
 
+        if view == "bird_fixed":
+            # One static camera above the arena centre; sees the whole maze.
+            walls = np.asarray(self.scenario.walls, dtype=float).reshape(-1, 4)
+            if len(walls):
+                cx = (walls[:, [0, 2]].min() + walls[:, [0, 2]].max()) / 2
+                cy = (walls[:, [1, 3]].min() + walls[:, [1, 3]].max()) / 2
+                extent = max(walls[:, [0, 2]].max() - walls[:, [0, 2]].min(),
+                             walls[:, [1, 3]].max() - walls[:, [1, 3]].min())
+            else:
+                mid = (spawn + np.asarray(self.scenario.goal, dtype=float)) / 2
+                cx, cy = float(mid[0]), float(mid[1])
+                extent = float(np.linalg.norm(self.scenario.goal - spawn)) + 2.0
+            h = 1.15 * extent + 1.0
+            self._cam_pos0 = np.array([cx, cy - 0.06 * extent - 0.3, h])
+            self._cam_lookat0 = np.array([cx, cy, 0.0])
+            self._follow_cam = False
+            self._cam_offset = self._cam_pos0.copy()
+            return
+
         if view == "bird":
             back, h = float(cam.bird_back), float(cam.bird_height)
             self._cam_pos0 = np.array([spawn[0] - d[0] * back, spawn[1] - d[1] * back, h])
@@ -179,7 +210,7 @@ class RadialSphereEnv(gym.Env):
         scenario.cameras = [
             PinholeCameraCfg(name=CAMERA_NAME, width=1280, height=720,
                              pos=tuple(self._cam_pos0), look_at=tuple(self._cam_lookat0))
-        ]
+        ] if self.enable_camera else []
 
         # Visual markers: small red breadcrumbs along the path + a big green goal.
         scenario.objects = [
@@ -191,6 +222,44 @@ class RadialSphereEnv(gym.Env):
             PrimitiveSphereCfg(name=GOAL_NAME, radius=0.08,
                                color=[0.2, 0.9, 0.3], physics=PhysicStateType.RIGIDBODY)
         )
+
+        # Obstacle pillars: always instantiate the maximum count (the sim world
+        # is built once); episodes park the unused ones outside the arena.
+        # Free-base but 100 kg — set_states can move them, the ball cannot.
+        ob_cfg = getattr(self.cfg.scenario, "obstacles", None)
+        pillar_r = float(getattr(ob_cfg, "radius", 0.25)) if ob_cfg else 0.25
+        self.n_pillars = int(getattr(ob_cfg, "n_range", (3, 6))[1]) \
+            if self.scenario.kind == "obstacle" else len(self.scenario.obstacles)
+        for i in range(self.n_pillars):
+            scenario.objects.append(
+                PrimitiveCylinderCfg(name=f"pillar_{i}", radius=pillar_r,
+                                     height=PILLAR_HEIGHT, mass=100.0,
+                                     color=[0.55, 0.35, 0.20],
+                                     physics=PhysicStateType.RIGIDBODY)
+            )
+
+        # Thin "iron" walls (maze kind): fixed base = truly immovable, so they
+        # are baked in at their scenario positions (maze layouts are fixed
+        # per env instance; no per-reset repositioning like the pillars).
+        mz = getattr(self.cfg.scenario, "maze", None)
+        wall_t = float(getattr(mz, "wall_thickness", 0.04)) if mz else 0.04
+        wall_h = float(getattr(mz, "wall_height", 0.5)) if mz else 0.5
+        for i, (wx1, wy1, wx2, wy2) in enumerate(
+                np.asarray(self.scenario.walls, dtype=float).reshape(-1, 4)):
+            length = float(np.hypot(wx2 - wx1, wy2 - wy1))
+            yaw = float(np.arctan2(wy2 - wy1, wx2 - wx1))
+            scenario.objects.append(
+                PrimitiveCubeCfg(
+                    name=f"wall_{i}",
+                    size=[length, wall_t, wall_h],
+                    color=[0.42, 0.44, 0.50, 1.0][:3],
+                    physics=PhysicStateType.GEOM,
+                    fix_base_link=True,
+                    default_position=[(wx1 + wx2) / 2, (wy1 + wy2) / 2, wall_h / 2],
+                    default_orientation=[float(np.cos(yaw / 2)), 0.0, 0.0,
+                                         float(np.sin(yaw / 2))],
+                )
+            )
 
         log.info(f"Using simulator: {self.cfg.sim.simulator}")
         self.handler = get_handler(scenario)
@@ -212,6 +281,17 @@ class RadialSphereEnv(gym.Env):
             "pos": torch.tensor([float(goal[0]), float(goal[1]), 0.08]),
             "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
         }
+        # place this episode's pillars; park the surplus outside the arena
+        pillars = np.asarray(self.scenario.obstacles, dtype=float).reshape(-1, 3)
+        for i in range(self.n_pillars):
+            if i < len(pillars):
+                px, py = float(pillars[i, 0]), float(pillars[i, 1])
+            else:
+                px, py = PILLAR_PARK + 3.0 * i, PILLAR_PARK
+            objects[f"pillar_{i}"] = {
+                "pos": torch.tensor([px, py, PILLAR_HEIGHT / 2]),
+                "rot": torch.tensor([1.0, 0.0, 0.0, 0.0]),
+            }
         return {
             "objects": objects,
             "robots": {
@@ -230,6 +310,12 @@ class RadialSphereEnv(gym.Env):
         super().reset(seed=seed)
         if seed is not None:
             self.rng = np.random.default_rng(seed)
+
+        # Task randomisation: goal marker and pillars are only re-positioned,
+        # so no sim rebuild is needed.
+        if self._randomize and self.scenario.kind in ("goal", "obstacle"):
+            self._set_scenario(generate_scenario(
+                self.scenario.kind, self.cfg, seed=int(self.rng.integers(2 ** 31 - 1))))
 
         self.handler.set_states([self._init_state()])
 
@@ -278,6 +364,13 @@ class RadialSphereEnv(gym.Env):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+    def _set_scenario(self, scenario) -> None:
+        """Swap the task in place (same sim world; used by goal randomisation)."""
+        self.scenario = scenario
+        self.path_pts = np.asarray(scenario.path_pts, dtype=np.float32)
+        self.path_length = float(scenario.path_length)
+        self.obs_model = ObservationModel(self.cfg, self.path_pts, self.path_length)
+
     def _root_and_joints(self):
         rs = self._state.robots[ROBOT_NAME]
         root = rs.root_state[0].detach().cpu().numpy()
@@ -290,7 +383,7 @@ class RadialSphereEnv(gym.Env):
         Reads the core body position straight from physics (no extra render) and
         moves the camera by the same xy, keeping the configured viewing angle.
         """
-        if not self._follow_cam:
+        if not self._follow_cam or not self.enable_camera:
             return
         phys = self.handler.physics
         model = phys.model
@@ -305,12 +398,19 @@ class RadialSphereEnv(gym.Env):
         phys.forward()
 
     def _distance(self, ball_xy: np.ndarray) -> float:
+        """Distance to the goal: geodesic (through walls' free space) when the
+        scenario carries a field, else straight-line."""
+        geo = self.scenario.nav_distance(ball_xy)
+        if geo is not None:
+            return geo
         return float(np.linalg.norm(self.obs_model.goal - ball_xy))
 
     def _info(self, root: np.ndarray, dist: float) -> dict:
         return {
             "ball_xy": root[:2].copy(),
             "quat": root[3:7].copy(),
+            "lin_vel": root[7:10].copy(),
+            "ang_vel": root[10:13].copy(),
             "distance": dist,
             "step": self.step_count,
         }

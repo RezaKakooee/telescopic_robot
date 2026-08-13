@@ -12,9 +12,7 @@ All run outputs live under ``storage_local/`` (mirrors the ant project)::
 """
 from __future__ import annotations
 
-import os
 import shutil
-from datetime import datetime
 from pathlib import Path
 
 _PKG_DIR = Path(__file__).resolve().parent        # .../radial_sphere
@@ -22,17 +20,23 @@ _ROOT = _PKG_DIR.parent                            # project root
 STORAGE_DIR = _ROOT / "storage_local"
 
 
-def make_run_dir(tag: str) -> Path:
-    """Create ``storage_local/radial_sphere__<ts>__<jobid>__<tag>/renders/`` and return the run dir."""
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    job_id = os.environ.get("SLURM_JOB_ID", "local")
-    run_dir = STORAGE_DIR / f"radial_sphere__{ts}__{job_id}__{tag}"
+def make_run_dir(run_id: str) -> Path:
+    """Create ``storage_local/<run_id>/renders/`` and return the run dir.
+
+    ``run_id`` comes from :func:`radial_sphere.run_id.build_run_id`, so the
+    run dir, the ops .out log, and the wandb run share one name.
+    """
+    run_dir = STORAGE_DIR / run_id
     (run_dir / "renders").mkdir(parents=True, exist_ok=True)
     return run_dir
 
 
-def save_code(run_dir, script_path: str | None = None) -> Path:
-    """Snapshot the package source + config.yaml + entry script into ``<run_dir>/code/``."""
+def save_code(run_dir, script_path: str | None = None, cfg=None) -> Path:
+    """Snapshot the package source + config + entry script into ``<run_dir>/code/``.
+
+    Pass the loaded ``cfg`` to save the RESOLVED config (with CLI overrides
+    applied); otherwise the project default yaml is copied.
+    """
     dest = Path(run_dir) / "code"
     dest.mkdir(parents=True, exist_ok=True)
 
@@ -42,10 +46,14 @@ def save_code(run_dir, script_path: str | None = None) -> Path:
         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
         dirs_exist_ok=True,
     )
-    # config.yaml
-    cfg = _ROOT / "config.yaml"
-    if cfg.exists():
-        shutil.copy2(cfg, dest / "config.yaml")
+    # config: resolved if given, else the project default
+    if cfg is not None:
+        from omegaconf import OmegaConf
+        OmegaConf.save(cfg, dest / "config.yaml")
+    else:
+        default = _ROOT / "configs" / "rl" / "config.yaml"
+        if default.exists():
+            shutil.copy2(default, dest / "config.yaml")
     # entry script
     if script_path:
         sp = Path(script_path)

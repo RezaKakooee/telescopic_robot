@@ -13,10 +13,9 @@ green goal).  An agent then *does* a generated scenario via its ``--scenario``:
     python random_agent.py    --scenario storage_local/<run>/scenarios/goal.json
 
 Usage:
-    python scenario_generator.py                      # default kind from config
-    python scenario_generator.py --kind path
-    python scenario_generator.py --kind goal --count 5
-    python scenario_generator.py --kind goal --no-preview
+    python scripts/env/scenario_generator.py                   # kind from config
+    python scripts/env/scenario_generator.py --kind obstacle --count 5
+    python scripts/env/scenario_generator.py --kind goal --no-preview
 """
 from __future__ import annotations
 
@@ -30,12 +29,13 @@ import argparse
 import numpy as np
 import rootutils
 from loguru import logger as log
-from rich.logging import RichHandler
 
 rootutils.setup_root(__file__, pythonpath=True)
-log.configure(handlers=[{"sink": RichHandler(), "format": "{message}"}])
 
-from radial_sphere import KINDS, generate_scenario, load_config, make_run_dir  # noqa: E402
+from radial_sphere import (KINDS, build_run_id, generate_scenario,  # noqa: E402
+                           load_config_cli, make_run_dir, setup_logging)
+
+setup_logging()
 
 
 def main():
@@ -48,12 +48,18 @@ def main():
                    help="path to a config.yaml (default: project config.yaml)")
     p.add_argument("--no-preview", dest="preview", action="store_false",
                    help="skip rendering preview PNGs (faster; no sim build)")
+    p.add_argument("--config-name", "-cn", dest="config_name", default=None,
+                   help="config variant name under configs/rl/")
+    p.add_argument("overrides", nargs="*",
+                   help="config overrides as key=value (Hydra dotlist)")
     args = p.parse_args()
 
-    cfg = load_config(args.config)
+    cfg = load_config_cli(path=args.config, name=args.config_name,
+                          overrides=args.overrides)
     kind = args.kind or getattr(cfg.scenario, "kind", "path")
 
-    run_dir = make_run_dir(f"scenario__{kind}")
+    run_dir = make_run_dir(build_run_id("scenario_generator", tag=kind))
+    setup_logging(run_dir)
     sc_dir = run_dir / "scenarios"
     sc_dir.mkdir(parents=True, exist_ok=True)
 
