@@ -1,0 +1,10 @@
+defaults:
+  - config
+  - _self_
+
+# Random perfect maze: a new layout is installed at every episode reset.
+scenario:
+  kind: maze
+  randomize: true
+  maze:
+    level: 3

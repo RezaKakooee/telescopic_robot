@@ -1,0 +1,31 @@
+defaults:
+  - maze_level3
+  - _self_
+
+# Single fixed maze with fixed start and fixed goal
+scenario:
+  randomize: false
+  maze:
+    layout_seed: 0
+    random_endpoints: false
+    random_start: false
+    random_goal: false
+
+controller:
+  back_gain: 0.45
+  down_gain: 0.40
+  lookahead: 0.90
+  base: 0.04
+
+rl:
+  include_drive: false      # Pure 2D directional steering — forces active corner navigation
+  obs_endpoints: true
+  total_steps: 500000
+  n_envs: 6
+  n_steps: 256
+  batch_size: 512
+  net: [128, 128]
+  checkpoint_every: 25000
+  collision_cost: 0.003
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02

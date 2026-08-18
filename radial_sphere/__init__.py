@@ -39,7 +39,7 @@ from .geometry import (
 from .mjcf import build_robot_mjcf, rolling_radius
 from .observation import ObservationModel
 from .radial_sphere import RadialSphereEnv, GymCompatWrapper, make_compat_env
-from .render import Renderer, VideoRecorder
+from .render import Renderer, VideoRecorder, MultiVideoRecorder
 from .reward import RewardModel
 from .scenario import (Scenario, generate_scenario, path_scenario, goal_scenario,
                        roundtrip_scenario, obstacle_scenario, maze_scenario, KINDS)
@@ -47,16 +47,20 @@ from .log import setup_logging
 from .run_id import build_run_id, normalize_name
 from .snapshot import make_run_dir, save_code
 from .steering import SteeringEnv
+from .mujoco_mjcf import build_mujoco_scene_mjcf
+from .mujoco_env import MujocoRadialSphereEnv
+from .mujoco_steering import MujocoSteeringEnv
 from ._gym import gym
 
 __all__ = [
     "RadialSphereEnv", "GymCompatWrapper", "make_compat_env", "SteeringEnv",
+    "MujocoRadialSphereEnv", "MujocoSteeringEnv", "build_mujoco_scene_mjcf",
     "load_config", "load_config_cli", "load_config_dict",
     "setup_logging", "build_run_id", "normalize_name",
     "Scenario", "generate_scenario", "path_scenario", "goal_scenario",
     "roundtrip_scenario", "obstacle_scenario", "maze_scenario", "KINDS",
     "make_run_dir", "save_code",
-    "ActionModel", "ObservationModel", "RewardModel", "Renderer", "VideoRecorder",
+    "ActionModel", "ObservationModel", "RewardModel", "Renderer", "VideoRecorder", "MultiVideoRecorder",
     "fibonacci_sphere", "path_xy", "sample_path", "sample_roundtrip", "quat_to_rotmat",
     "PATH_LENGTH", "PATH_AMPLITUDE", "PATH_WAVES",
     "build_robot_mjcf", "rolling_radius", "desired_direction", "bar_targets",
@@ -75,6 +79,9 @@ def _register():
     if "RadialSphere-v0-compat" not in ids:
         gym.register(id="RadialSphere-v0-compat",
                      entry_point="radial_sphere:make_compat_env", max_episode_steps=max_steps)
+    if "RadialSphereMujoco-v0" not in ids:
+        gym.register(id="RadialSphereMujoco-v0",
+                     entry_point="radial_sphere:MujocoRadialSphereEnv", max_episode_steps=max_steps)
 
 
 _register()

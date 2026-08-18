@@ -1,0 +1,22 @@
+defaults:
+  - maze_level3
+  - _self_
+
+# Fixed maze layout (seed 0) with randomized start and goal pairs
+scenario:
+  maze:
+    layout_seed: 0
+    random_endpoints: true
+    random_start: false
+    random_goal: false
+    endpoint_min_route: 7.5
+    endpoint_max_route: 35.0
+
+rl:
+  include_drive: false
+  obs_endpoints: true
+  total_steps: 500000
+  n_steps: 256
+  batch_size: 512
+  net: [128, 128]
+  checkpoint_every: 25000

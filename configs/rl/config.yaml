@@ -32,7 +32,7 @@ path:                     # sinusoidal target path on the floor (path/roundtrip)
 scenario:                 # what the agent is asked to do (see scenario_generator.py)
   kind: maze              # path | goal | roundtrip | obstacle |
                           # maze (navigate thin-wall corridors; see scenario.maze)
-  randomize: false        # goal/obstacle kinds: resample the task every reset
+  randomize: false        # goal/obstacle/level-3 maze: resample every reset
   goal:                   # goal-finding arena: random goal sampled in these ranges
     x_range: [2.0, 5.0]
     y_range: [-1.5, 1.5]
@@ -43,17 +43,26 @@ scenario:                 # what the agent is asked to do (see scenario_generato
     clearance: 0.7        # keep-out distance around spawn and goal (m)
     min_gap: 0.7          # smallest surface gap between two pillars (m)
   maze:                   # maze kind: corridors of thin iron walls
-    level: 1              # 1 = serpentine corridor (levels 2/3 come later)
+    level: 1              # 1 = serpentine corridor | 3 = random perfect maze
     cell: 1.5             # corridor width (m); ball is ~0.5 m wide
     cols: 5               # grid width (cells)
     rows: 4               # grid height (cells) — level 1 path ≈ 28 m
-    wall_thickness: 0.04  # thin like sheet iron
-    wall_height: 0.5
+    min_route: 20.0       # level 3: preferred start→goal route range (m)
+    max_route: 35.0
+    generation_attempts: 100
+    layout_seed: null     # set an integer to keep walls fixed across episodes
+    random_endpoints: false
+    random_start: false
+    random_goal: false
+    endpoint_min_route: 7.5
+    endpoint_max_route: 35.0
+    wall_thickness: 0.08  # solid architectural walls with clean 3D depth
+    wall_height: 0.22
 
 reward:
   progress_coef: 1.0      # dense shaping weight on progress toward the path end
-  success: 10.0           # sparse bonus on reaching the goal
-  goal_eps: 0.45          # distance (m) to path end that counts as reached
+  success: 10.0           # sparse bonus only when the robot physically touches the goal
+  collision_cost: 0.003   # balanced penalty (~ -0.03 per decision step in wall contact)
 
 env:
   max_steps: 4000         # episode length (env steps) before truncation;
@@ -70,8 +79,8 @@ camera:                   # follows the sphere; looks toward the goal.
   enabled: true           # build the chase camera; off = much faster stepping
                           # (RL training disables it and re-enables for eval)
   view: bird_fixed        # chase = follows behind | bird = top-down, follows |
-                          # bird_fixed = one static camera seeing the whole maze
-                          # (best for maze; use chase for open-floor tasks)
+                          # bird_fixed = static camera seeing whole maze |
+                          # isometric = angled 3D perspective showcasing depth
   follow: true            # re-center on the ball each step; false = fixed shot
   # --- chase view ---
   distance: 2.0           # how far behind the ball (m)
@@ -83,6 +92,7 @@ camera:                   # follows the sphere; looks toward the goal.
   bird_height: 7.0        # camera height above the ball (m)
   bird_back: 1.8          # small offset behind the ball; keeps it off straight-down
                           # (a perfectly vertical camera is degenerate)
+  bird_margin: 0.35       # border around the arena in bird_fixed / isometric view (m)
 
 rl:                       # high-level steering policy (train_rl.py / eval_rl.py)
   decision_every: 10      # low-level env steps one RL action is held for
@@ -90,6 +100,7 @@ rl:                       # high-level steering policy (train_rl.py / eval_rl.py
   obs_obstacles: 3        # nearest pillars in the observation (3 dims each)
   obs_lidar: 16           # lidar rays (wall/pillar distances) in the observation
   lidar_range: 3.0        # lidar max distance (m)
+  obs_endpoints: true     # include (ball_xy, goal_xy, start_xy, rel_goal) task conditioning
   n_envs: 4               # parallel training envs (SubprocVecEnv)
   total_steps: 200000     # PPO timesteps (high-level decisions) to train
   max_steps: 4000         # episode cap during training (low-level env steps);

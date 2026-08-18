@@ -83,8 +83,8 @@ def build_robot_mjcf(
         # Per-bar hue so individual bars are trackable in videos: with uniform
         # colors the extension pattern (long at back, short at front) is fixed
         # relative to the chase camera and telescoping reads as a rigid ball.
-        rr, gg, bb = colorsys.hsv_to_rgb(k / n_bars, 0.85, 0.95)
-        fr, fg, fb = colorsys.hsv_to_rgb(k / n_bars, 0.85, 0.55)
+        rr, gg, bb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 1.00)
+        fr, fg, fb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 0.65)
         sleeve_from = (0.55 * sphere_radius) * u
         sleeve_to = sleeve_mouth * u
         rod_to = tip0 * u
@@ -95,7 +95,7 @@ def build_robot_mjcf(
             <geom name="sleeve_{k}" type="capsule"
                   fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
                           {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
-                  size="{sleeve_radius}" rgba="0.25 0.28 0.34 1" mass="0.005"
+                  size="{sleeve_radius}" rgba="1.0 0.82 0.15 1" mass="0.005"
                   contype="0" conaffinity="0"/>
             <body name="inner_{k}" pos="0 0 0">
                 <joint name="slide_{k}" type="slide"
@@ -126,7 +126,7 @@ def build_robot_mjcf(
     <worldbody>
         <body name="core" pos="0 0 0">
             <geom name="core_geom" type="sphere" size="{sphere_radius}"
-                  rgba="1.0 0.85 0.1 1" mass="0.5"/>
+                  rgba="1.0 0.82 0.15 1" mass="0.5"/>
             {''.join(bars)}
         </body>
     </worldbody>

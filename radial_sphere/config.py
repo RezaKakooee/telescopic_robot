@@ -35,8 +35,20 @@ def _default_path() -> Path:
 
 
 def load_config(path: str | Path | None = None) -> DictConfig:
-    """Load one yaml as a DictConfig (no CLI, no composition)."""
-    return OmegaConf.load(Path(path) if path else _default_path())
+    """Load a config YAML, composing Hydra ``defaults`` when present."""
+    chosen = Path(path) if path else _default_path()
+    raw = OmegaConf.load(chosen)
+    if "defaults" not in raw:
+        return raw
+
+    # Config presets such as maze_level3.yaml inherit from config.yaml. This
+    # path is also used during package import/registration, before entry-point
+    # scripts call load_config_cli(), so it must honour that composition too.
+    from hydra import compose, initialize_config_dir
+
+    with initialize_config_dir(config_dir=str(chosen.resolve().parent),
+                               version_base=None):
+        return compose(config_name=chosen.stem)
 
 
 def load_config_dict(path: str | Path | None = None) -> dict:

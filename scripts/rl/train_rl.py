@@ -21,6 +21,7 @@ except ImportError:
     pass
 
 import argparse
+from pathlib import Path
 
 import rootutils
 from loguru import logger as log
@@ -51,11 +52,13 @@ def make_env(cfg, kind: str, rank: int, run_dir, seed: int, max_steps: int):
     """Thunk building one training env in a worker process."""
     def _thunk():
         scenario = generate_scenario(kind, cfg, seed=seed + rank)
+        maze_level = int(getattr(getattr(cfg.scenario, "maze", None), "level", 1))
         return SteeringEnv(
             cfg,
             scenario=scenario,
             enable_camera=False,             # no rendering during training
-            randomize=(kind in ("goal", "obstacle")),   # new task every episode
+            randomize=(kind in ("goal", "obstacle") or
+                       (kind == "maze" and maze_level == 3)),
             max_steps=max_steps,
             output_dir=run_dir / "assets" / f"env_{rank}",
             seed=seed + rank,
@@ -71,6 +74,8 @@ def main():
     p.add_argument("--n-envs", type=int, default=None,
                    help="parallel envs (default: config rl.n_envs)")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--resume", default=None,
+                   help="prior run directory or PPO checkpoint to resume")
     p.add_argument("--config", default=None,
                    help="path to a config.yaml (default: configs/rl/config.yaml)")
     p.add_argument("--config-name", "-cn", dest="config_name", default=None,
@@ -92,8 +97,8 @@ def main():
     setup_logging(run_dir)
     save_code(run_dir, __file__, cfg=cfg)
     log.info(f"Run dir : {run_dir}")
-    log.info(f"kind={args.kind}  n_envs={n_envs}  total_steps={total_steps}  "
-             f"decision_every={rl.decision_every}")
+    log.info(f"kind={args.kind}  n_envs={n_envs}  additional_steps={total_steps}  "
+             f"decision_every={rl.decision_every}  resume={args.resume or 'no'}")
 
     # Optional Weights & Biases logging (mirrors the tensorboard metrics).
     use_wandb = bool(getattr(rl, "wandb", True))
@@ -103,6 +108,7 @@ def main():
             wandb.init(project="telescopic_robot", name=run_dir.name,
                        config={"kind": args.kind, "n_envs": n_envs,
                                "total_steps": total_steps, "seed": args.seed,
+                               "resume": args.resume,
                                **load_config_dict_section(rl)},
                        sync_tensorboard=True, dir=str(run_dir))
         except Exception as e:      # no network on the node, etc.
@@ -115,28 +121,52 @@ def main():
     # the login node has a tight per-user memory cap)
     venv = DummyVecEnv(thunks) if n_envs == 1 else SubprocVecEnv(thunks)
     venv = VecMonitor(venv)
-    venv = VecNormalize(venv, norm_obs=True, norm_reward=False, clip_obs=10.0)
-
-    model = PPO(
-        "MlpPolicy", venv,
-        learning_rate=float(rl.lr),
-        n_steps=int(rl.n_steps),
-        batch_size=int(rl.batch_size),
-        gamma=float(rl.gamma),
-        ent_coef=float(rl.ent_coef),
-        policy_kwargs=dict(net_arch=[int(x) for x in rl.net]),
-        seed=args.seed,
-        verbose=1,
-        device=str(getattr(rl, "device", "cpu")),
-        tensorboard_log=str(run_dir / "tb"),
-    )
+    resume_model = resume_stats = None
+    if args.resume:
+        source = Path(args.resume).resolve()
+        if source.is_dir():
+            resume_model = source / "checkpoints" / "final.zip"
+            resume_stats = source / "vecnormalize.pkl"
+        else:
+            resume_model = source
+            resume_stats = source.parent.parent / "vecnormalize.pkl"
+        if not resume_model.exists():
+            raise FileNotFoundError(f"resume checkpoint not found: {resume_model}")
+        if not resume_stats.exists():
+            raise FileNotFoundError(f"resume normalization stats not found: {resume_stats}")
+        venv = VecNormalize.load(str(resume_stats), venv)
+        venv.training = True
+        venv.norm_reward = False
+        model = PPO.load(
+            resume_model, env=venv,
+            device=str(getattr(rl, "device", "cpu")), verbose=1,
+            tensorboard_log=str(run_dir / "tb"),
+        )
+        log.info(f"resumed model → {resume_model} at {model.num_timesteps} timesteps")
+        log.info(f"resumed stats → {resume_stats}")
+    else:
+        venv = VecNormalize(venv, norm_obs=True, norm_reward=False, clip_obs=10.0)
+        model = PPO(
+            "MlpPolicy", venv,
+            learning_rate=float(rl.lr),
+            n_steps=int(rl.n_steps),
+            batch_size=int(rl.batch_size),
+            gamma=float(rl.gamma),
+            ent_coef=float(rl.ent_coef),
+            policy_kwargs=dict(net_arch=[int(x) for x in rl.net]),
+            seed=args.seed,
+            verbose=1,
+            device=str(getattr(rl, "device", "cpu")),
+            tensorboard_log=str(run_dir / "tb"),
+        )
 
     ckpt = CheckpointCallback(
         save_freq=max(int(rl.checkpoint_every) // n_envs, 1),
         save_path=str(run_dir / "checkpoints"), name_prefix="ppo",
         save_vecnormalize=True,   # lets eval_rl render intermediate checkpoints
     )
-    model.learn(total_timesteps=total_steps, callback=ckpt)
+    model.learn(total_timesteps=total_steps, callback=ckpt,
+                reset_num_timesteps=not bool(args.resume))
 
     model.save(run_dir / "checkpoints" / "final")
     venv.save(str(run_dir / "vecnormalize.pkl"))   # obs stats, needed at eval

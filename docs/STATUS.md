@@ -91,12 +91,12 @@ controller moves the 60 bars. See `docs/ENV_OVERVIEW.md` for the env details.
 
 ## Next steps (agreed direction)
 
-1. Maze **level 2 (rooms)** and **level 3 (random maze)** — the generator
-   design is in `docs/env_mockups/maze_env_proposal.html`; level 3 needs
-   per-episode wall randomization (fixed-size wall pieces, parked when
-   unused, like the pillars) and should drop the centreline `path_pts` crutch
-   (goal frame from the geodesic gradient or raw goal direction instead).
-2. Then RL must truly plan: on random mazes the policy cannot memorise, and
+1. Maze **level 3 (random maze)** is implemented from
+   `docs/env_mockups/maze_env_proposal.html`: constant-count fixed wall pieces
+   are repositioned every episode, with dead ends, lidar, geodesic reward,
+   and raw goal direction rather than a solution-route `path_pts` crutch.
+   Level 2 (rooms) remains unimplemented.
+2. Train level 3: on random mazes the policy cannot memorise, and
    the heuristic has no chance.
 3. Possible extras: cross-track penalty for path tasks, end-to-end 60-bar
    PPO baseline for comparison, sparse-reward variant.

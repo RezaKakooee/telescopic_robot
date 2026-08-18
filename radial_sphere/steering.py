@@ -43,6 +43,7 @@ from .controller import bar_targets, desired_direction
 from .radial_sphere import RadialSphereEnv
 
 N_BASE_OBS = 7
+N_ENDPOINT_OBS = 8  # ball_xy (2), goal_xy (2), start_xy (2), rel_goal_xy (2)
 FAR_PILLAR = (20.0, 0.0, 20.0)   # padding for absent obstacle slots
 
 
@@ -66,12 +67,14 @@ class SteeringEnv(gym.Env):
         self.k_obstacles = int(getattr(rl, "obs_obstacles", 3))
         self.n_lidar = int(getattr(rl, "obs_lidar", 16))
         self.lidar_range = float(getattr(rl, "lidar_range", 3.0))
+        self.obs_endpoints = bool(getattr(rl, "obs_endpoints", True))
+
         n_act = 3 if self.include_drive else 2
+        obs_dim = (N_BASE_OBS + 3 * self.k_obstacles + self.n_lidar +
+                   (N_ENDPOINT_OBS if self.obs_endpoints else 0))
         self.action_space = spaces.Box(-1.0, 1.0, shape=(n_act,), dtype=np.float32)
         self.observation_space = spaces.Box(
-            -np.inf, np.inf,
-            shape=(N_BASE_OBS + 3 * self.k_obstacles + self.n_lidar,),
-            dtype=np.float32)
+            -np.inf, np.inf, shape=(obs_dim,), dtype=np.float32)
         self._last_cmd = np.array([1.0, 0.0], dtype=np.float32)
         self._last_drive = 1.0
         self._info = None
@@ -91,6 +94,17 @@ class SteeringEnv(gym.Env):
         dist = info["distance"] / self.env.path_length
         parts = [v_gf, [info["ang_vel"][2]], [dist], self._last_cmd,
                  [self._last_drive]]
+        if self.obs_endpoints:
+            ball_xy = np.asarray(info["ball_xy"][:2], dtype=np.float32)
+            goal_xy = np.asarray(self.env.scenario.goal[:2], dtype=np.float32)
+            start_xy = np.asarray(self.env.scenario.spawn_xy[:2], dtype=np.float32)
+            rel_goal = goal_xy - ball_xy
+            parts.append(np.array([
+                ball_xy[0], ball_xy[1],
+                goal_xy[0], goal_xy[1],
+                start_xy[0], start_xy[1],
+                rel_goal[0], rel_goal[1],
+            ], dtype=np.float32))
         if self.k_obstacles > 0:
             parts.append(self._obstacle_obs(info["ball_xy"], g))
         if self.n_lidar > 0:
@@ -193,8 +207,11 @@ class SteeringEnv(gym.Env):
         self._last_drive = drive
         return self._observe(info), total_r, terminated, truncated, info
 
-    def render(self):
-        return self.env.render()
+    def render(self, camera_name: str | None = None):
+        return self.env.render(camera_name=camera_name)
+
+    def render_all(self) -> dict[str, np.ndarray]:
+        return self.env.render_all()
 
     def close(self):
         self.env.close()

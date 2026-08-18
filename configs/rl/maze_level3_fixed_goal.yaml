@@ -1,0 +1,11 @@
+defaults:
+  - maze_level3_fixed
+  - _self_
+
+# One fixed wall layout and one fixed canonical goal; random valid start per episode.
+scenario:
+  maze:
+    random_endpoints: false
+    random_start: true
+    endpoint_min_route: 7.5
+    endpoint_max_route: 35.0

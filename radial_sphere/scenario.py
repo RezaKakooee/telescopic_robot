@@ -19,6 +19,7 @@ Generators:
 from __future__ import annotations
 
 import json
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -276,7 +277,14 @@ def _geodesic_field(walls, bounds, goal, res: float = 0.25, inflate: float = 0.3
         field[i, j] = d
         for di, dj, c in steps:
             ni, nj = i + di, j + dj
-            if 0 <= ni < ny and 0 <= nj < nx and not blocked[ni, nj]:
+            if not (0 <= ni < ny and 0 <= nj < nx):
+                continue
+            # A diagonal step may not squeeze between two blocked cardinal
+            # neighbours (corner-cutting would pass through a wall endpoint).
+            cuts_corner = di != 0 and dj != 0 and (
+                blocked[i, nj] or blocked[ni, j]
+            )
+            if not blocked[ni, nj] and not cuts_corner:
                 ndist = d + c
                 if ndist < dist.get((ni, nj), np.inf):
                     dist[(ni, nj)] = ndist
@@ -285,22 +293,27 @@ def _geodesic_field(walls, bounds, goal, res: float = 0.25, inflate: float = 0.3
 
 
 def maze_scenario(cfg, *, rng=None, name: str = "maze") -> Scenario:
-    """Maze navigation. Level 1: a serpentine corridor of thin iron walls.
+    """Maze navigation: fixed serpentine level 1 or random perfect level 3.
 
     The reward distance comes from the geodesic field (distance THROUGH the
     corridor), not the straight line — see :meth:`Scenario.nav_distance`.
     """
+    rng = rng if rng is not None else np.random.default_rng()
     mz = getattr(cfg.scenario, "maze", None)
     level = int(getattr(mz, "level", 1)) if mz else 1
     cell = float(getattr(mz, "cell", 1.5)) if mz else 1.5
     cols = int(getattr(mz, "cols", 5)) if mz else 5
     rows = int(getattr(mz, "rows", 4)) if mz else 4
-    if level != 1:
-        raise NotImplementedError("maze levels 2/3 not built yet")
+    if level not in (1, 3):
+        raise NotImplementedError("maze level 2 is not built yet")
 
     # arena bounds; cell (i, j) centre = (i*cell, j*cell)
     x0, y0 = -cell / 2, -cell / 2
     x1, y1 = (cols - 0.5) * cell, (rows - 0.5) * cell
+    if level == 3:
+        return _random_maze_scenario(cfg, rng, name, cell, cols, rows,
+                                     (x0, y0, x1, y1))
+
     walls = [(x0, y0, x1, y0), (x0, y1, x1, y1),
              (x0, y0, x0, y1), (x1, y0, x1, y1)]
     # serpentine shelves: each inner wall leaves one cell open at one end
@@ -330,6 +343,218 @@ def maze_scenario(cfg, *, rng=None, name: str = "maze") -> Scenario:
         kind="maze", name=name,
         spawn_xy=spawn, goal=goal,
         path_pts=pts, markers=markers, path_length=_arc_length(pts),
+        walls=np.asarray(walls, dtype=np.float32),
+        geo_field=field, geo_origin=origin, geo_res=res,
+    )
+
+
+def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
+    """Generate a perfect grid maze with a long start-to-goal route.
+
+    Every layout uses the same number of cell-length wall pieces.  This lets
+    the simulator move the existing fixed bodies at reset instead of rebuilding
+    the physics world.  The policy gets the raw goal direction and geodesic
+    distance, but not the solution route through ``path_pts``.
+    """
+    if cols < 2 or rows < 2:
+        raise ValueError("maze level 3 needs at least 2 rows and 2 columns")
+
+    mz = cfg.scenario.maze
+    min_route = float(getattr(mz, "min_route", 20.0))
+    max_route = float(getattr(mz, "max_route", 35.0))
+    attempts = int(getattr(mz, "generation_attempts", 100))
+    layout_seed = getattr(mz, "layout_seed", None)
+    random_endpoints = bool(getattr(mz, "random_endpoints", False))
+    random_start = bool(getattr(mz, "random_start", False))
+    random_goal = bool(getattr(mz, "random_goal", False))
+    endpoint_min_route = float(getattr(mz, "endpoint_min_route", 7.5))
+    endpoint_max_route = float(getattr(mz, "endpoint_max_route", max_route))
+    layout_rng = (np.random.default_rng(int(layout_seed))
+                  if layout_seed is not None else rng)
+    n_cells = cols * rows
+
+    def neighbours(k):
+        x, y = k % cols, k // cols
+        out = []
+        if x > 0:
+            out.append(k - 1)
+        if x + 1 < cols:
+            out.append(k + 1)
+        if y > 0:
+            out.append(k - cols)
+        if y + 1 < rows:
+            out.append(k + cols)
+        return out
+
+    def carve():
+        """Randomised depth-first spanning tree (twisty, with dead ends)."""
+        adjacency = [[] for _ in range(n_cells)]
+        start = int(layout_rng.integers(n_cells))
+        seen, stack = {start}, [start]
+        while stack:
+            a = stack[-1]
+            choices = [b for b in neighbours(a) if b not in seen]
+            if not choices:
+                stack.pop()
+                continue
+            b = int(layout_rng.choice(choices))
+            adjacency[a].append(b)
+            adjacency[b].append(a)
+            seen.add(b)
+            stack.append(b)
+        return adjacency
+
+    def farthest(adjacency, source):
+        parent = {source: None}
+        distance = {source: 0}
+        queue = deque([source])
+        while queue:
+            a = queue.popleft()
+            for b in adjacency[a]:
+                if b not in distance:
+                    parent[b] = a
+                    distance[b] = distance[a] + 1
+                    queue.append(b)
+        end = max(distance, key=distance.get)
+        return end, distance[end], parent
+
+    def tree_distance(adjacency, source, target):
+        distance = {source: 0}
+        queue = deque([source])
+        while queue:
+            a = queue.popleft()
+            if a == target:
+                return distance[a]
+            for b in adjacency[a]:
+                if b not in distance:
+                    distance[b] = distance[a] + 1
+                    queue.append(b)
+        raise RuntimeError("generated maze is disconnected")
+
+    # The tree diameter gives the most useful episode available in a layout.
+    # Prefer the proposal's 20–35 m range; retain the closest generated maze if
+    # a very small custom grid cannot meet it.
+    best = None
+    best_error = np.inf
+    for _ in range(max(attempts, 1)):
+        adjacency = carve()
+        a, _, _ = farthest(adjacency, 0)
+        b, edges, parent = farthest(adjacency, a)
+        route_length = edges * cell
+        error = max(min_route - route_length, 0.0, route_length - max_route)
+        if error < best_error:
+            best = adjacency, a, b, edges, parent
+            best_error = error
+        if error == 0:
+            break
+
+    adjacency, start, goal_cell, route_edges, _ = best
+    if sum((random_start, random_goal, random_endpoints)) > 1:
+        raise ValueError(
+            "random_start, random_goal, and random_endpoints are mutually exclusive")
+    if random_start:
+        candidates = []
+        for candidate in range(n_cells):
+            if candidate == goal_cell:
+                continue
+            edges = tree_distance(adjacency, candidate, goal_cell)
+            metres = edges * cell
+            if endpoint_min_route <= metres <= endpoint_max_route:
+                candidates.append((candidate, edges))
+        if not candidates:
+            raise ValueError(
+                "no random starts satisfy the configured endpoint route range")
+        start, route_edges = candidates[int(rng.integers(len(candidates)))]
+    if random_goal:
+        candidates = []
+        for candidate in range(n_cells):
+            if candidate == start:
+                continue
+            edges = tree_distance(adjacency, start, candidate)
+            metres = edges * cell
+            if endpoint_min_route <= metres <= endpoint_max_route:
+                candidates.append((candidate, edges))
+        if not candidates:
+            raise ValueError(
+                "no random goals satisfy the configured endpoint route range")
+        goal_cell, route_edges = candidates[int(rng.integers(len(candidates)))]
+    if random_endpoints:
+        candidates = []
+        for a in range(n_cells):
+            for b in range(a + 1, n_cells):
+                edges = tree_distance(adjacency, a, b)
+                metres = edges * cell
+                if endpoint_min_route <= metres <= endpoint_max_route:
+                    candidates.append((a, b, edges))
+        if not candidates:
+            raise ValueError("no start/goal pairs satisfy the configured "
+                             "endpoint route range")
+        start, goal_cell, route_edges = candidates[int(rng.integers(len(candidates)))]
+    if not (random_start or random_goal) and rng.random() < 0.5:
+        start, goal_cell = goal_cell, start
+
+    # Open edges are passages. Every other grid edge is one wall piece.
+    passages = {frozenset((a, b)) for a, ns in enumerate(adjacency) for b in ns}
+    x0, y0, x1, y1 = bounds
+    walls = []
+    for x in range(cols):
+        xa, xb = (x - 0.5) * cell, (x + 0.5) * cell
+        walls.extend(((xa, y0, xb, y0), (xa, y1, xb, y1)))
+    for y in range(rows):
+        ya, yb = (y - 0.5) * cell, (y + 0.5) * cell
+        walls.extend(((x0, ya, x0, yb), (x1, ya, x1, yb)))
+    for y in range(rows):
+        for x in range(cols - 1):
+            a, b = y * cols + x, y * cols + x + 1
+            if frozenset((a, b)) not in passages:
+                wx = (x + 0.5) * cell
+                walls.append((wx, (y - 0.5) * cell, wx, (y + 0.5) * cell))
+    for y in range(rows - 1):
+        for x in range(cols):
+            a, b = y * cols + x, (y + 1) * cols + x
+            if frozenset((a, b)) not in passages:
+                wy = (y + 0.5) * cell
+                walls.append(((x - 0.5) * cell, wy, (x + 0.5) * cell, wy))
+
+    def centre(k):
+        return np.array([(k % cols) * cell, (k // cols) * cell], dtype=np.float32)
+
+    spawn, goal = centre(start), centre(goal_cell)
+
+    # Reconstruct true corridor shortest path connecting start to goal around walls
+    parent_map = {start: None}
+    queue = deque([start])
+    while queue:
+        curr = queue.popleft()
+        if curr == goal_cell:
+            break
+        for nbr in adjacency[curr]:
+            if nbr not in parent_map:
+                parent_map[nbr] = curr
+                queue.append(nbr)
+
+    curr = goal_cell
+    cell_path = []
+    while curr is not None:
+        cell_path.append(curr)
+        curr = parent_map.get(curr)
+    cell_path.reverse()
+
+    waypoint_centres = np.array([centre(k) for k in cell_path], dtype=np.float32)
+    dense_pts = []
+    for i in range(len(waypoint_centres) - 1):
+        p0, p1 = waypoint_centres[i], waypoint_centres[i + 1]
+        n_seg = max(int(np.linalg.norm(p1 - p0) / 0.04), 2)
+        seg = np.linspace(p0, p1, n_seg, endpoint=(i == len(waypoint_centres) - 2))
+        dense_pts.append(seg)
+    pts = np.concatenate(dense_pts, axis=0).astype(np.float32)
+
+    field, origin, res = _geodesic_field(walls, bounds, goal)
+    return Scenario(
+        kind="maze", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(route_edges * cell),
         walls=np.asarray(walls, dtype=np.float32),
         geo_field=field, geo_origin=origin, geo_res=res,
     )

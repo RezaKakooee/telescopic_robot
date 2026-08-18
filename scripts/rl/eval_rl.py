@@ -27,7 +27,7 @@ rootutils.setup_root(__file__, pythonpath=True)
 
 from stable_baselines3 import PPO  # noqa: E402
 
-from radial_sphere import (Scenario, SteeringEnv, VideoRecorder, build_run_id,  # noqa: E402
+from radial_sphere import (MultiVideoRecorder, Scenario, SteeringEnv, VideoRecorder, build_run_id,  # noqa: E402
                            generate_scenario, load_config_cli, make_run_dir,
                            save_code, setup_logging)
 
@@ -54,15 +54,33 @@ def main():
     p.add_argument("--seed", type=int, default=100)
     p.add_argument("--config", default=None)
     p.add_argument("--no-video", dest="video", action="store_false")
+    p.add_argument("--output-dir", default=None,
+                   help="explicit output dir (default: creates new timestamped dir)")
     p.add_argument("--config-name", "-cn", dest="config_name", default=None,
                    help="config variant name under configs/rl/")
     p.add_argument("overrides", nargs="*",
                    help="config overrides as key=value (Hydra dotlist)")
     args = p.parse_args()
 
-    train_dir = Path(args.run)
-    model = PPO.load(train_dir / "checkpoints" / "final", device="cpu")
-    stats_path = train_dir / "vecnormalize.pkl"
+    train_path = Path(args.run)
+    if train_path.is_file():
+        model_path = train_path
+        stats_path = train_path.parent / train_path.name.replace("ppo_", "ppo_vecnormalize_").replace(".zip", ".pkl")
+        if not stats_path.exists():
+            stats_path = train_path.parent.parent / "vecnormalize.pkl"
+    else:
+        model_path = train_path / "checkpoints" / "final.zip"
+        stats_path = train_path / "vecnormalize.pkl"
+        if not model_path.exists():
+            ckpts = sorted((train_path / "checkpoints").glob("ppo_*_steps.zip"),
+                           key=lambda p: int(p.stem.split("_")[1]) if p.stem.split("_")[1].isdigit() else 0)
+            if ckpts:
+                model_path = ckpts[-1]
+                stats_path = model_path.parent / model_path.name.replace("ppo_", "ppo_vecnormalize_").replace(".zip", ".pkl")
+
+    log.info(f"Loading checkpoint: {model_path}")
+    log.info(f"Loading stats     : {stats_path}")
+    model = PPO.load(str(model_path), device="cpu")
 
     cfg = load_config_cli(path=args.config, name=args.config_name,
                           overrides=args.overrides)
@@ -70,7 +88,11 @@ def main():
     frame_every = int(getattr(video_cfg, "frame_every", 3))
     fps = int(getattr(video_cfg, "fps", 24))
 
-    run_dir = make_run_dir(build_run_id("eval_rl", tag=args.kind))
+    if args.output_dir:
+        run_dir = Path(args.output_dir)
+        run_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        run_dir = make_run_dir(build_run_id("eval_rl", tag=args.kind))
     setup_logging(run_dir)
     save_code(run_dir, __file__, cfg=cfg)
     log.info(f"Run dir : {run_dir}")
@@ -80,7 +102,9 @@ def main():
         randomize = False
     else:
         scenario = generate_scenario(args.kind, cfg, seed=args.seed)
-        randomize = args.kind in ("goal", "obstacle")
+        maze_level = int(getattr(getattr(cfg.scenario, "maze", None), "level", 1))
+        randomize = (args.kind in ("goal", "obstacle") or
+                     (args.kind == "maze" and maze_level == 3))
 
     env = SteeringEnv(cfg, scenario=scenario, randomize=randomize,
                       output_dir=run_dir, seed=args.seed)
@@ -91,11 +115,11 @@ def main():
 
     returns, steps, successes = [], [], []
     for ep in range(args.episodes):
-        recorder = VideoRecorder(run_dir / "renders" / f"ep_{ep + 1:03d}.mp4",
-                                 fps=fps) if args.video else None
+        recorder = MultiVideoRecorder(run_dir / "renders", ep=ep + 1,
+                                      fps=fps) if args.video else None
         obs, info = env.reset(seed=args.seed + ep)
         if recorder is not None:
-            recorder.add(env.render())
+            recorder.add(env.render_all())
         total_r, hl_step = 0.0, 0
         terminated = truncated = False
         while not (terminated or truncated):
@@ -105,15 +129,17 @@ def main():
             total_r += r
             hl_step += 1
             if recorder is not None and hl_step % max(frame_every // env.k, 1) == 0:
-                recorder.add(env.render())
+                recorder.add(env.render_all())
         returns.append(total_r)
         steps.append(info["step"])
-        successes.append(terminated)
+        success = bool(info.get("success", False))
+        successes.append(success)
         log.info(f"ep {ep + 1:3d}  return={total_r:+.3f}  env_steps={info['step']}  "
-                 f"reached={terminated}  goal={np.round(env.env.scenario.goal, 2).tolist()}")
+                 f"contact={success}  goal={np.round(env.env.scenario.goal, 2).tolist()}")
         if recorder is not None:
             recorder.close()
-            log.info(f"video: {recorder.n_frames} frames → {recorder.path}")
+            for pth in recorder.paths:
+                log.info(f"video: {recorder.n_frames} frames → {pth}")
 
     log.info(f"mean return : {np.mean(returns):+.3f} ± {np.std(returns):.3f}")
     log.info(f"mean steps  : {np.mean(steps):.0f}")

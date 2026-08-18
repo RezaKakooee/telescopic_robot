@@ -29,8 +29,11 @@ desired direction, the sphere rolls that way.
 | `roundtrip` | sine out, semicircle turn, return lane back — ball returns toward the camera |
 | `goal` | reach a random goal point |
 | `obstacle` | reach a random goal; heavy pillars block the straight line (2 always on it) |
+| `maze` | level 1 fixed corridor or level 3 random perfect maze with dead ends |
 
-`goal`/`obstacle` re-randomise every reset when `randomize` is on.
+`goal`/`obstacle` and maze level 3 re-randomise every reset when `randomize`
+is on. Level 3 uses constant-count fixed wall pieces, 16-ray lidar, and a
+geodesic reward; it does not expose its solution route through `path_pts`.
 Scenarios serialise to JSON via `scenario_generator.py`.
 
 ## Low-level env (`RadialSphereEnv`, `RadialSphere-v0`)
@@ -38,8 +41,9 @@ Scenarios serialise to JSON via `scenario_generator.py`.
 - **Action** (60): normalised extension target per bar, [-1, 1].
 - **Observation** (73): quat (4) + lin vel (3) + ang vel (3) + bar
   extensions (60) + goal direction (2) + goal distance (1).
-- **Reward**: `progress_coef * (prev_dist - dist)` + `success` bonus within
-  `goal_eps` of the goal. Termination on success; truncation at `max_steps`.
+- **Reward**: `progress_coef * (prev_dist - dist)` + `success` bonus only on
+  physical MuJoCo contact between the goal and the robot core/feet. Geodesic
+  distance is shaping only. Termination on contact; truncation at `max_steps`.
 - The chase camera is optional (`camera.enabled` / `enable_camera=False`);
   rendering dominates step time (~3 steps/s with, ~176 steps/s without).
 
@@ -57,6 +61,21 @@ Trained with SB3 PPO (`scripts/rl/train_rl.py`): VecNormalize obs, camera
 off, task re-randomised per episode; wandb (project `telescopic_robot`) +
 tensorboard logging. Evaluation (`scripts/rl/eval_rl.py`) loads the
 checkpoint + `vecnormalize.pkl` and records videos.
+
+Level 3 preset:
+
+```bash
+python scripts/rl/train_rl.py -cn maze_level3 --kind maze
+python scripts/heuristic/heuristic_agent.py -cn maze_level3 --kind maze
+```
+
+Fixed-layout curriculum with random start/goal points, resumed from a prior
+checkpoint:
+
+```bash
+python scripts/rl/train_rl.py -cn maze_level3_fixed --kind maze \
+  --resume storage_local/<prior-train-run>
+```
 
 ## Baseline results (2026-08)
 
