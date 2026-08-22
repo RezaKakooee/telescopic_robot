@@ -1,0 +1,25 @@
+defaults:
+  - maze_level3_large_fixed
+  - _self_
+
+# Multi-Axis CPG with Lateral Spin & 60D Residual Trims on Large 7x6 Maze
+rl:
+  mode: lowlevel
+  cpg_residual: true
+  progress_weight: 10.0       # High forward directional velocity reward
+  energy_cost: 0.001          # Lightweight energy cost
+  action_smoothness_cost: 0.01
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  max_steps: 4000
+  checkpoint_every: 50000
+  smooth_alpha: 0.30
+  lr: 0.0003
+  gamma: 0.995
+  ent_coef: 0.005
+
+reward:
+  collision_cost: 0.08

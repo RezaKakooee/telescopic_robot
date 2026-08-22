@@ -1,0 +1,12 @@
+defaults:
+  - maze_level3_large_active_braking
+  - _self_
+
+# Hazard Gauntlet Maze (7x6 Large Maze with Floor Gaps, Sand, Stones & Step Curbs)
+scenario:
+  hazards:
+    enabled: true
+    n_gaps: 3        # Floor trenches/cracks (شکاف)
+    n_sand: 3        # High-friction sand pools
+    n_stones: 4      # Scattered stone / pebble fields
+    n_steps: 2       # 3.5cm step curbs

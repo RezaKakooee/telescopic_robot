@@ -1,0 +1,18 @@
+defaults:
+  - lowlevel_60d_exp3_cpg_residual
+  - _self_
+
+# Method 3: CPG + 60D Residual Trims with High Directional Movement Reward
+rl:
+  mode: lowlevel
+  cpg_residual: true
+  progress_weight: 10.0       # High forward directional velocity reward
+  energy_cost: 0.001          # Low energy penalty for maximum propulsion
+  action_smoothness_cost: 0.01
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  lr: 0.0003
+  gamma: 0.99

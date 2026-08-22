@@ -3,6 +3,7 @@ storage_local
 wandb
 output
 roboverse_data
+datasets
 
 
 # Byte-compiled / optimized / DLL files

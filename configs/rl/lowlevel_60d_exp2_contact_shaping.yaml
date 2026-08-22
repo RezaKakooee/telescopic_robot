@@ -1,0 +1,17 @@
+defaults:
+  - lowlevel_60d_goal
+  - _self_
+
+# Method 2: Contact-Hemisphere Physical Force Shaping
+rl:
+  mode: lowlevel
+  contact_shaping: true
+  rear_contact_reward: 0.25
+  front_contact_penalty: 0.25
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  lr: 0.0003
+  gamma: 0.99

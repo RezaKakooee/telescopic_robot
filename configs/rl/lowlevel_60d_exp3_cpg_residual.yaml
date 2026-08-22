@@ -1,0 +1,15 @@
+defaults:
+  - lowlevel_60d_goal
+  - _self_
+
+# Method 3: CPG + 60D Continuous Residual Trims
+rl:
+  mode: lowlevel
+  cpg_residual: true
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  lr: 0.0003
+  gamma: 0.99

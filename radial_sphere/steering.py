@@ -193,8 +193,8 @@ class SteeringEnv(gym.Env):
             targets = bar_targets(
                 info["quat"], self.env.dirs_body, self.env.max_extend,
                 d_world, drive,
+                min_offset=0.025,
                 back_gain=float(self.ctrl.back_gain),
-                down_gain=float(self.ctrl.down_gain),
             )
             _obs, r, terminated, truncated, info = self.env.step(
                 self.env.action_model.encode(targets))

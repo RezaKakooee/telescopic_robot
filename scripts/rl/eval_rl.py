@@ -91,6 +91,8 @@ def main():
     if args.output_dir:
         run_dir = Path(args.output_dir)
         run_dir.mkdir(parents=True, exist_ok=True)
+    elif train_path.is_dir():
+        run_dir = train_path
     else:
         run_dir = make_run_dir(build_run_id("eval_rl", tag=args.kind))
     setup_logging(run_dir)

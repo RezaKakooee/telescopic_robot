@@ -47,6 +47,10 @@ class Scenario:
     path_length: float       # arc length, for normalising goal-distance in obs
     obstacles: np.ndarray = None   # (K, 3) pillars as (x, y, radius); may be empty
     walls: np.ndarray = None       # (M, 4) thin wall segments (x1, y1, x2, y2)
+    gaps: list | np.ndarray = None # Floor trenches/cracks (x, y, hx, hy, depth)
+    sand_patches: list | np.ndarray = None # Sand zones (x, y, hx, hy)
+    stones: list | np.ndarray = None # Pebble clusters (x, y, hx, hy, n, max_sz)
+    steps: list | np.ndarray = None # Ground step curbs (x, y, hx, hy, height)
     geo_field: np.ndarray = None   # (H, W) geodesic distance to goal; -1 = blocked
     geo_origin: np.ndarray = None  # (2,) world xy of field cell (0, 0) centre
     geo_res: float = 0.0           # field cell size (m); 0 = no field
@@ -304,15 +308,15 @@ def maze_scenario(cfg, *, rng=None, name: str = "maze") -> Scenario:
     cell = float(getattr(mz, "cell", 1.5)) if mz else 1.5
     cols = int(getattr(mz, "cols", 5)) if mz else 5
     rows = int(getattr(mz, "rows", 4)) if mz else 4
-    if level not in (1, 3):
-        raise NotImplementedError("maze level 2 is not built yet")
+    if level not in (1, 2, 3):
+        raise ValueError(f"unknown maze level {level}; expected 1, 2, or 3")
 
     # arena bounds; cell (i, j) centre = (i*cell, j*cell)
     x0, y0 = -cell / 2, -cell / 2
     x1, y1 = (cols - 0.5) * cell, (rows - 0.5) * cell
-    if level == 3:
+    if level in (2, 3):
         return _random_maze_scenario(cfg, rng, name, cell, cols, rows,
-                                     (x0, y0, x1, y1))
+                                     (x0, y0, x1, y1), level=level)
 
     walls = [(x0, y0, x1, y0), (x0, y1, x1, y1),
              (x0, y0, x0, y1), (x1, y0, x1, y1)]
@@ -348,8 +352,8 @@ def maze_scenario(cfg, *, rng=None, name: str = "maze") -> Scenario:
     )
 
 
-def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
-    """Generate a perfect grid maze with a long start-to-goal route.
+def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds, level: int = 3) -> Scenario:
+    """Generate a maze (level 2 multi-loop braid maze or level 3 perfect tree maze).
 
     Every layout uses the same number of cell-length wall pieces.  This lets
     the simulator move the existing fixed bodies at reset instead of rebuilding
@@ -357,7 +361,7 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
     distance, but not the solution route through ``path_pts``.
     """
     if cols < 2 or rows < 2:
-        raise ValueError("maze level 3 needs at least 2 rows and 2 columns")
+        raise ValueError("maze level needs at least 2 rows and 2 columns")
 
     mz = cfg.scenario.maze
     min_route = float(getattr(mz, "min_route", 20.0))
@@ -369,6 +373,7 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
     random_goal = bool(getattr(mz, "random_goal", False))
     endpoint_min_route = float(getattr(mz, "endpoint_min_route", 7.5))
     endpoint_max_route = float(getattr(mz, "endpoint_max_route", max_route))
+    loop_fraction = float(getattr(mz, "loop_fraction", 0.35))
     layout_rng = (np.random.default_rng(int(layout_seed))
                   if layout_seed is not None else rng)
     n_cells = cols * rows
@@ -387,7 +392,7 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
         return out
 
     def carve():
-        """Randomised depth-first spanning tree (twisty, with dead ends)."""
+        """Randomised depth-first spanning tree, plus extra loops if level == 2."""
         adjacency = [[] for _ in range(n_cells)]
         start = int(layout_rng.integers(n_cells))
         seen, stack = {start}, [start]
@@ -402,6 +407,21 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
             adjacency[b].append(a)
             seen.add(b)
             stack.append(b)
+
+        if level == 2:
+            # Multi-loop braid maze: open extra passages between adjacent cells
+            candidates = []
+            for u in range(n_cells):
+                for v in neighbours(u):
+                    if v > u and v not in adjacency[u]:
+                        candidates.append((u, v))
+            if candidates:
+                layout_rng.shuffle(candidates)
+                n_extra = max(1, int(len(candidates) * loop_fraction))
+                for u, v in candidates[:n_extra]:
+                    adjacency[u].append(v)
+                    adjacency[v].append(u)
+
         return adjacency
 
     def farthest(adjacency, source):
@@ -549,6 +569,56 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
         dense_pts.append(seg)
     pts = np.concatenate(dense_pts, axis=0).astype(np.float32)
 
+    # ------------------------------------------------------------------
+    # Ground Hazards in Corridor Cells (if enabled)
+    # ------------------------------------------------------------------
+    gaps, sand_patches, stones, steps = [], [], [], []
+    hazards_cfg = getattr(cfg.scenario, "hazards", None)
+    if hazards_cfg is not None and getattr(hazards_cfg, "enabled", False):
+        n_gaps = int(getattr(hazards_cfg, "n_gaps", 3))
+        n_sand = int(getattr(hazards_cfg, "n_sand", 3))
+        n_stones = int(getattr(hazards_cfg, "n_stones", 4))
+        n_steps = int(getattr(hazards_cfg, "n_steps", 2))
+
+        # Choose intermediate corridor cells along the cell path
+        path_cells = cell_path[2:-2] if len(cell_path) > 6 else cell_path[1:-1]
+        if path_cells:
+            shuffled_cells = list(path_cells)
+            rng.shuffle(shuffled_cells)
+
+            ptr = 0
+            # Place gaps
+            for _ in range(n_gaps):
+                if ptr >= len(shuffled_cells):
+                    break
+                c = centre(shuffled_cells[ptr])
+                gaps.append([c[0], c[1], 0.12, 0.45, 0.06])
+                ptr += 1
+
+            # Place sand patches
+            for _ in range(n_sand):
+                if ptr >= len(shuffled_cells):
+                    break
+                c = centre(shuffled_cells[ptr])
+                sand_patches.append([c[0], c[1], 0.50, 0.50])
+                ptr += 1
+
+            # Place stone zones
+            for _ in range(n_stones):
+                if ptr >= len(shuffled_cells):
+                    break
+                c = centre(shuffled_cells[ptr])
+                stones.append([c[0], c[1], 0.45, 0.45, 18, 0.025])
+                ptr += 1
+
+            # Place step curbs
+            for _ in range(n_steps):
+                if ptr >= len(shuffled_cells):
+                    break
+                c = centre(shuffled_cells[ptr])
+                steps.append([c[0], c[1], 0.10, 0.55, 0.035])
+                ptr += 1
+
     field, origin, res = _geodesic_field(walls, bounds, goal)
     return Scenario(
         kind="maze", name=name,
@@ -556,6 +626,10 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds) -> Scenario:
         path_pts=pts, markers=np.empty((0, 2), dtype=np.float32),
         path_length=float(route_edges * cell),
         walls=np.asarray(walls, dtype=np.float32),
+        gaps=gaps,
+        sand_patches=sand_patches,
+        stones=stones,
+        steps=steps,
         geo_field=field, geo_origin=origin, geo_res=res,
     )
 

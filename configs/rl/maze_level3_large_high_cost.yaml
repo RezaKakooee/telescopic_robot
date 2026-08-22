@@ -1,0 +1,7 @@
+defaults:
+  - maze_level3_large_fixed
+  - _self_
+
+# Experiment 1: High Wall Collision Cost Penalty
+reward:
+  collision_cost: 0.035   # Heavy penalty (~ -0.35 per decision step in wall contact)

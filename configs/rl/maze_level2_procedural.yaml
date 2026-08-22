@@ -1,0 +1,19 @@
+defaults:
+  - maze_level3_large_active_braking
+  - _self_
+
+# Procedural Maze Level 2 (Multi-Loop Braid Maze with Interconnected Corridors)
+scenario:
+  kind: maze
+  randomize: true
+  maze:
+    level: 2
+    cell: 1.5
+    cols: 7
+    rows: 6
+    min_route: 20.0
+    max_route: 40.0
+    loop_fraction: 0.35
+    random_endpoints: true
+    endpoint_min_route: 15.0
+    endpoint_max_route: 40.0

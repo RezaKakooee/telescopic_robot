@@ -1,0 +1,16 @@
+defaults:
+  - lowlevel_60d_goal
+  - _self_
+
+# Method 1: Teacher / Cam Wave Imitation Warm-Start Curriculum
+rl:
+  mode: lowlevel
+  imitation_weight: 1.5
+  imitation_decay_steps: 400000
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  lr: 0.0003
+  gamma: 0.99

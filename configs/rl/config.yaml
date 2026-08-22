@@ -12,14 +12,13 @@
 robot:                    # the telescoping sphere
   n_bars: 60              # number of prismatic bars (Fibonacci-distributed)
   sphere_radius: 0.15     # core sphere radius (m)
-  max_extend: 0.12        # max bar extension (m); action maps to [0, this]
+  max_extend: 0.16        # max bar extension (m); action maps to [0, this]
   kp: 900.0               # actuator stiffness (position PD gain)
   kv: 22.0                # actuator damping
 
-controller:               # scripted expert policy (used by heuristic_agent.py)
-  back_gain: 0.3          # push weight on back-facing bars (higher = faster
-                          # rolling = faster bar cycling on screen)
-  down_gain: 0.4          # stance weight on downward-pointing bars
+controller:               # physical peristaltic cam locomotion
+  back_gain: 1.6          # push wave amplitude in rear-downward quadrant
+  base: 0.025             # baseline offset standoff when compressed (m)
   lookahead: 0.9          # path look-ahead arc length (m)
 
 path:                     # sinusoidal target path on the floor (path/roundtrip)

@@ -1,0 +1,24 @@
+defaults:
+  - maze_level3_large_fixed
+  - _self_
+
+# Active Braking & Wall Avoidance on Large 7x6 Maze
+rl:
+  include_drive: true          # Active 3D action: [steering_x, steering_y, throttle]
+  lidar_clearance_cost: 0.06   # Smooth corridor centering repulsion
+  lidar_min_margin: 0.38       # Buffer margin of 38 cm around walls
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [256, 256]
+  max_steps: 8000
+  checkpoint_every: 50000
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02
+  lr: 0.0003
+  gamma: 0.995
+  ent_coef: 0.01
+
+reward:
+  collision_cost: 0.08         # Strict wall collision penalty (~ -0.80 per decision step in contact)

@@ -1,0 +1,28 @@
+defaults:
+  - config
+  - _self_
+
+# Pure 60D Low-Level RL with High Directional Movement & Alignment Reward
+scenario:
+  kind: goal
+  randomize: true
+  goal:
+    x_range: [4.0, 10.0]
+    y_range: [-3.0, 3.0]
+
+rl:
+  mode: lowlevel              # 60D direct actuator continuous control
+  progress_weight: 10.0       # High forward directional velocity reward (e.g. +10 to +30 per step)
+  energy_cost: 0.001          # Low energy penalty so rolling is overwhelmingly rewarded
+  action_smoothness_cost: 0.01
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [512, 256, 256]
+  max_steps: 2000
+  checkpoint_every: 50000
+  smooth_alpha: 0.30
+  lr: 0.0003
+  gamma: 0.99
+  ent_coef: 0.005

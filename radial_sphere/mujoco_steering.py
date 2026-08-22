@@ -53,6 +53,8 @@ class MujocoSteeringEnv(gym.Env):
         self.obs_endpoints = bool(getattr(rl, "obs_endpoints", True))
         self.smooth_alpha = float(getattr(rl, "smooth_alpha", 0.35))
         self.action_smoothness_cost = float(getattr(rl, "action_smoothness_cost", 0.02))
+        self.lidar_clearance_cost = float(getattr(rl, "lidar_clearance_cost", 0.0))
+        self.lidar_min_margin = float(getattr(rl, "lidar_min_margin", 0.35))
 
         n_act = 3 if self.include_drive else 2
         obs_dim = (N_BASE_OBS + 3 * self.k_obstacles + self.n_lidar +
@@ -156,15 +158,21 @@ class MujocoSteeringEnv(gym.Env):
                 max_extend=self.env.max_extend,
                 d_hat=d_world,
                 drive=drive,
+                min_offset=float(getattr(self.ctrl, "base", 0.025)),
                 back_gain=float(self.ctrl.back_gain),
-                down_gain=float(self.ctrl.down_gain),
-                base=float(getattr(self.ctrl, "base", 0.04)),
             )
             _sub_obs, sub_r, sub_term, _sub_trunc, info = self.env.step(targets)
             total_r += float(sub_r)
             if sub_term:
                 term = True
                 break
+
+        if self.lidar_clearance_cost > 0.0:
+            lidar_dists = self.env.raycast_lidar(self.n_lidar, self.lidar_range, g=g)
+            min_d = float(np.min(lidar_dists)) * self.lidar_range
+            if min_d < self.lidar_min_margin:
+                clearance_pen = self.lidar_clearance_cost * ((self.lidar_min_margin - min_d) / self.lidar_min_margin)
+                total_r -= float(clearance_pen)
 
         self.rl_step_count += 1
         if self.rl_step_count >= self.max_steps:

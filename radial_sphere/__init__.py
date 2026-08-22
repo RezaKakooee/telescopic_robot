@@ -50,11 +50,12 @@ from .steering import SteeringEnv
 from .mujoco_mjcf import build_mujoco_scene_mjcf
 from .mujoco_env import MujocoRadialSphereEnv
 from .mujoco_steering import MujocoSteeringEnv
+from .mujoco_lowlevel_env import MujocoLowLevelEnv
 from ._gym import gym
 
 __all__ = [
     "RadialSphereEnv", "GymCompatWrapper", "make_compat_env", "SteeringEnv",
-    "MujocoRadialSphereEnv", "MujocoSteeringEnv", "build_mujoco_scene_mjcf",
+    "MujocoRadialSphereEnv", "MujocoSteeringEnv", "MujocoLowLevelEnv", "build_mujoco_scene_mjcf",
     "load_config", "load_config_cli", "load_config_dict",
     "setup_logging", "build_run_id", "normalize_name",
     "Scenario", "generate_scenario", "path_scenario", "goal_scenario",

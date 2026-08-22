@@ -1,0 +1,8 @@
+defaults:
+  - maze_level3_large_fixed
+  - _self_
+
+# Experiment 2: Lidar Corridor Centering Clearance Penalty
+rl:
+  lidar_clearance_cost: 0.08   # Penalty when approaching walls closer than margin
+  lidar_min_margin: 0.35       # 35 cm buffer margin around walls

@@ -1,0 +1,46 @@
+defaults:
+  - maze_level3
+  - _self_
+
+# Large fixed maze: 7 cols × 6 rows, ~40m route, single hard challenge
+scenario:
+  randomize: false
+  maze:
+    level: 3
+    cols: 7
+    rows: 6
+    cell: 1.5
+    layout_seed: 7
+    min_route: 35.0
+    max_route: 55.0
+    generation_attempts: 200
+    random_endpoints: false
+    random_start: false
+    random_goal: false
+
+robot:
+  max_extend: 0.16
+
+controller:
+  back_gain: 1.6
+  lookahead: 0.90
+  base: 0.025
+
+rl:
+  include_drive: false
+  obs_endpoints: true
+  obs_lidar: 24
+  lidar_range: 3.5
+  total_steps: 1000000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [256, 256]
+  max_steps: 8000
+  checkpoint_every: 50000
+  collision_cost: 0.003
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02
+  lr: 0.0003
+  gamma: 0.995
+  ent_coef: 0.01
