@@ -15,11 +15,89 @@ robot:                    # the telescoping sphere
   max_extend: 0.16        # max bar extension (m); action maps to [0, this]
   kp: 900.0               # actuator stiffness (position PD gain)
   kv: 22.0                # actuator damping
+  appearance_theme: rainbow # "rainbow" (prototyping debug) | "realistic" (carbon gunmetal) | "aerospace_white"
 
 controller:               # physical peristaltic cam locomotion
   back_gain: 1.6          # push wave amplitude in rear-downward quadrant
   base: 0.025             # baseline offset standoff when compressed (m)
   lookahead: 0.9          # path look-ahead arc length (m)
+
+  # --- 5 Optional Low-Level Control Enhancements (Adjustable via Config) ---
+  # 1. Asymmetric Power-Cosine Wave (concentrated impulse)
+  enable_power_wave: false
+  wave_power_exponent: 1.4
+
+  # 2. Active Flank Retraction (dynamic wall clearance)
+  enable_flank_retraction: false
+  flank_retract_dist: 0.45
+  flank_min_offset: 0.005
+
+  # 3. Dynamic Camber Banking (centrifugal drift cancellation)
+  enable_camber_banking: false
+  camber_bank_gain: 0.035
+
+  # 4. Contact Force Compliance (multi-point load sharing)
+  enable_contact_compliance: false
+  compliance_gain: 0.0005
+  max_contact_force: 40.0
+
+  # 5. Anti-Stall Reflex (stiction breaker)
+  enable_anti_stall_reflex: false
+  anti_stall_speed_threshold: 0.15
+  anti_stall_pulse_freq: 10.0
+  anti_stall_pulse_amp: 0.02
+
+  # --- 5 Optional Smooth Maneuver Enhancements (Graceful Motion Quality) ---
+  # 1. Continuous Spline Heading (eliminates waypoint corner snapping)
+  enable_spline_heading: false
+  spline_smoothing_weight: 0.8
+
+  # 2. Curvature-Adaptive Deceleration Glide (seamless corner deceleration)
+  enable_curvature_deceleration: false
+  curvature_lookahead_dist: 1.2
+  curvature_brake_gain: 1.8
+
+  # 3. Actuator Slew-Rate Limiter (2nd-order S-curve filtering)
+  enable_actuator_slew_rate: false
+  actuator_max_vel: 0.35
+
+  # 4. Gaussian Stance Handoff (whisper-quiet ground load transfer)
+  enable_gaussian_stance: false
+  gaussian_stance_sigma: 0.38
+
+  # 5. Gyroscopic Precession Damping (anti-wobble yaw stabilization)
+  enable_gyroscopic_damping: false
+  gyroscopic_damping_gain: 0.025
+
+  # 6. Adaptive Spatial Rod Grouping (Unified Footpad Clusters)
+  enable_adaptive_grouping: false
+  group_size: 10
+
+# --- Modular 100% Sim-to-Real Hardware Modeling (Default: false) ---
+sim2real:
+  enabled: false                       # Master Sim-to-Real switch
+  # 1. Actuator Hardware Limits
+  enable_actuator_limits: true
+  actuator_v_max: 0.28                 # m/s max linear velocity
+  actuator_a_max: 3.5                  # m/s^2 max linear acceleration
+  actuator_force_limit: 50.0           # N stall force limit per motor
+  battery_p_max: 200.0                 # W total simultaneous LiPo power budget
+  # 2. Contact Mechanics & Footpads
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  rubber_friction_torsional: 0.015
+  rubber_friction_rolling: 0.005
+  # 3. Sensor Perception Noise
+  enable_sensor_noise: true
+  imu_accel_noise_std: 0.05            # m/s^2 Gaussian accelerometer noise
+  imu_gyro_noise_std: 0.015            # rad/s Gaussian gyroscope noise
+  lidar_noise_std: 0.015               # m Gaussian ToF LiDAR range noise
+  lidar_dropout_prob: 0.02             # Specular beam dropout probability
+  # 4. Hardware Transport Latency
+  enable_latency: true
+  action_delay_ms: 25.0                # ms transport latency (CAN/SPI bus + inference)
 
 path:                     # sinusoidal target path on the floor (path/roundtrip)
   length: 6.0             # x-extent (m)

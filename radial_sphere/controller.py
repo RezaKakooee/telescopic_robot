@@ -16,6 +16,12 @@ def desired_direction(
     path_pts: np.ndarray,
     lookahead: float = 0.9,
     goal_eps: float = 1e-3,
+    # --- Optional Smooth Maneuver Enhancements ---
+    enable_spline_heading: bool = False,
+    spline_smoothing_weight: float = 0.8,
+    enable_curvature_deceleration: bool = False,
+    curvature_lookahead_dist: float = 1.2,
+    curvature_brake_gain: float = 1.8,
 ) -> tuple[np.ndarray, float]:
     """Pick a look-ahead point on the path and return a unit xy direction.
 
@@ -36,12 +42,36 @@ def desired_direction(
         if accum >= lookahead:
             target_idx = j + 1
             break
-    target = path_pts[target_idx]
+
+    if enable_spline_heading and target_idx > closest + 1:
+        # Smooth interpolation between adjacent waypoints to prevent angular snapping
+        p_prev = path_pts[target_idx - 1]
+        p_curr = path_pts[target_idx]
+        p_smooth = (1.0 - spline_smoothing_weight) * p_prev + spline_smoothing_weight * p_curr
+        target = p_smooth
+    else:
+        target = path_pts[target_idx]
+
     d = target - ball_xy
     n = np.linalg.norm(d)
     if n < 1e-6:
         return np.array([1.0, 0.0]), 0.0
-    return d / n, 1.0
+
+    d_hat = d / n
+
+    # Curvature-Adaptive Exponential Deceleration (Glide into Turns)
+    drive_val = 1.0
+    if enable_curvature_deceleration and target_idx < len(path_pts) - 1:
+        v1 = path_pts[target_idx] - path_pts[max(0, target_idx - 1)]
+        v2 = path_pts[min(len(path_pts) - 1, target_idx + 1)] - path_pts[target_idx]
+        n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
+        if n1 > 1e-4 and n2 > 1e-4:
+            cos_turn = np.clip(np.dot(v1, v2) / (n1 * n2), -1.0, 1.0)
+            turn_angle = np.arccos(cos_turn)  # radians of corner turn
+            curvature = turn_angle / (0.5 * (n1 + n2))
+            drive_val = float(1.0 / (1.0 + curvature_brake_gain * (curvature ** 2)))
+
+    return d_hat, drive_val
 
 
 def bar_targets(
@@ -52,41 +82,142 @@ def bar_targets(
     drive: float = 1.0,
     min_offset: float = 0.025,
     back_gain: float = 1.6,
+    # --- 5 Optional Low-Level Control Enhancements ---
+    enable_power_wave: bool = False,
+    wave_power_exponent: float = 1.4,
+    enable_flank_retraction: bool = False,
+    lidar_ranges: np.ndarray | None = None,
+    lidar_max_range: float = 3.0,
+    flank_retract_dist: float = 0.45,
+    flank_min_offset: float = 0.005,
+    enable_camber_banking: bool = False,
+    yaw_rate: float = 0.0,
+    camber_bank_gain: float = 0.035,
+    enable_contact_compliance: bool = False,
+    contact_forces: np.ndarray | None = None,
+    compliance_gain: float = 0.0005,
+    max_contact_force: float = 40.0,
+    enable_anti_stall_reflex: bool = False,
+    forward_vel: float = 1.0,
+    sim_time: float = 0.0,
+    anti_stall_speed_threshold: float = 0.15,
+    anti_stall_pulse_freq: float = 10.0,
+    anti_stall_pulse_amp: float = 0.02,
+    # --- 5 Optional Smooth Maneuver Enhancements ---
+    enable_gaussian_stance: bool = False,
+    gaussian_stance_sigma: float = 0.38,
+    enable_gyroscopic_damping: bool = False,
+    ang_vel: np.ndarray | None = None,
+    gyroscopic_damping_gain: float = 0.025,
+    enable_actuator_slew_rate: bool = False,
+    last_targets: np.ndarray | None = None,
+    actuator_max_vel: float = 0.35,
+    actuator_dt: float = 0.05,
+    # --- Adaptive Grouping Enhancement ---
+    enable_adaptive_grouping: bool = False,
+    group_size: int = 10,
 ) -> np.ndarray:
-    """Compute per-bar extension targets based on physical peristaltic cam mechanics.
-
-    Physical Locomotion Principle:
-    - Retracted / Neutral state: Maintains a baseline offset standoff (min_offset ≈ 2.5 cm)
-      so rods never fully submerge, providing continuous rolling clearance and structured aesthetics.
-    - Rear-downward quadrant (trailing side): Expands smoothly from min_offset -> max_extend
-      into an eccentric wave that drives the sphere forward.
-    - Front & Top: Held at baseline offset (min_offset).
-
-    Args:
-        quat: wxyz quaternion of the sphere's orientation.
-        dirs_body: (n_bars, 3) bar directions in the body frame.
-        max_extend: maximum bar extension (metres).
-        d_hat: unit xy direction to drive toward.
-        drive: 0.0 freezes bars at ``min_offset`` extension (goal reached).
-        min_offset: minimum baseline rod extension when compressed (metres).
-        back_gain: gain scaling the eccentric pushing wave amplitude.
-
-    Returns:
-        targets: (n_bars,) extension values in [min_offset, max_extend].
-    """
+    """Compute per-bar extension targets based on physical peristaltic cam mechanics."""
     R = quat_to_rotmat(quat)
     dirs_world = dirs_body @ R.T
 
     # Longitudinal coordinate along travel direction (-1 rear, +1 front)
     u_long = dirs_world[:, 0] * d_hat[0] + dirs_world[:, 1] * d_hat[1]
+    # Lateral coordinate perpendicular to travel direction
+    u_lat = dirs_world[:, 0] * (-d_hat[1]) + dirs_world[:, 1] * d_hat[0]
     # Vertical coordinate (-1 down, +1 up)
     u_z = dirs_world[:, 2]
 
-    # Rear factor: non-zero only for trailing bars (u_long < 0)
+    # Rear factor: strictly non-zero only for trailing bars (u_long < 0)
     rear = np.clip(-u_long, 0.0, 1.0)
-    # Downward factor: non-zero only for lower hemisphere (u_z < 0)
-    down = np.clip(-u_z + 0.1, 0.0, 1.0)
+    # Downward stance factor: boosts ground-contacting push in lower hemisphere
+    down_bias = 0.35 + 0.65 * np.clip(-u_z, 0.0, 1.0)
+    # Lateral tuck factor: suppress side flank rods from flaring out laterally
+    lat_tuck = np.clip(1.0 - 1.2 * (u_lat ** 2), 0.0, 1.0)
 
-    # Smooth eccentric pushing wave in the rear-downward quadrant
-    wave = np.clip((rear ** 1.1) * (down ** 0.9) * back_gain, 0.0, 1.0)
-    return min_offset + drive * (max_extend - min_offset) * wave
+    # 1. Base Push Wave (Adaptive Grouping, Standard, Power-Cosine, or Gaussian Stance)
+    if enable_adaptive_grouping:
+        # Select top `group_size` (e.g. 10) rods aligned with ideal rear-downward push vector
+        ideal_push_dir = -0.707 * np.array([d_hat[0], d_hat[1], 0.0]) + np.array([0.0, 0.0, -0.707])
+        ideal_push_dir /= np.linalg.norm(ideal_push_dir)
+        scores = dirs_world @ ideal_push_dir
+        invalid_mask = (u_long >= -0.05) | (u_z >= 0.15)
+        scores[invalid_mask] = -999.0
+
+        wave = np.zeros(len(dirs_body), dtype=np.float32)
+        sorted_indices = np.argsort(scores)[::-1]
+        rear_group = sorted_indices[:group_size]
+        rear_group = rear_group[scores[rear_group] > 0.0]
+        if len(rear_group) > 0:
+            wave[rear_group] = 1.0
+    elif enable_gaussian_stance:
+        # Smooth C-infinity Gaussian stance window for whisper-quiet ground handoffs
+        cos_align = -u_long * 0.707 - u_z * 0.707
+        theta = np.arccos(np.clip(cos_align, -1.0, 1.0))
+        wave = np.clip(np.exp(-(theta ** 2) / (2.0 * (gaussian_stance_sigma ** 2))) * lat_tuck * back_gain, 0.0, 1.0)
+    elif enable_power_wave:
+        rear_factor = rear ** wave_power_exponent
+        wave = np.clip((rear_factor) * down_bias * lat_tuck * back_gain, 0.0, 1.0)
+    else:
+        wave = np.clip((rear ** 1.3) * down_bias * lat_tuck * back_gain, 0.0, 1.0)
+
+    # Strict spatial tucking: front (u_long >= 0) and top (u_z >= 0.15) rods are strictly locked to min_offset
+    wave[u_long >= 0.0] = 0.0
+    wave[u_z >= 0.15] = 0.0
+
+    targets = min_offset + drive * (max_extend - min_offset) * wave
+
+    # 2. Dynamic Camber Banking for Centrifugal Drift Cancellation
+    if enable_camber_banking and abs(yaw_rate) > 0.01:
+        turn_normal = np.array([-d_hat[1], d_hat[0]])
+        lateral_proj = dirs_world[:, 0] * turn_normal[0] + dirs_world[:, 1] * turn_normal[1]
+        bank_offset = camber_bank_gain * lateral_proj * np.clip(yaw_rate, -2.0, 2.0)
+        targets = np.clip(targets + bank_offset, min_offset, max_extend)
+
+    # 3. Gyroscopic Precession Damping (Anti-Wobble during Turns)
+    if enable_gyroscopic_damping and ang_vel is not None:
+        # tau_gyro = omega_yaw x L_roll -> Counteract lateral precession roll
+        w_yaw = float(ang_vel[2])
+        w_roll = float(ang_vel[0] * d_hat[0] + ang_vel[1] * d_hat[1])
+        gyro_precession = w_yaw * w_roll
+        if abs(gyro_precession) > 0.05:
+            roll_normal = np.array([-d_hat[1], d_hat[0]])
+            roll_proj = dirs_world[:, 0] * roll_normal[0] + dirs_world[:, 1] * roll_normal[1]
+            gyro_offset = gyroscopic_damping_gain * roll_proj * np.clip(gyro_precession, -4.0, 4.0)
+            targets = np.clip(targets + gyro_offset, min_offset, max_extend)
+
+    # 4. Active Flank Retraction (Narrow envelope on wall side)
+    if enable_flank_retraction and lidar_ranges is not None and len(lidar_ranges) > 0:
+        n_rays = len(lidar_ranges)
+        angles_rel = np.linspace(0, 2 * np.pi, n_rays, endpoint=False)
+        d_angle = np.arctan2(d_hat[1], d_hat[0])
+        angles_world = (d_angle + angles_rel) % (2 * np.pi)
+
+        for k in range(len(targets)):
+            ux, uy, uz = dirs_world[k]
+            if abs(uz) < 0.70:  # Sideways / flank rod
+                rod_angle = np.arctan2(uy, ux) % (2 * np.pi)
+                diffs = np.abs((angles_world - rod_angle + np.pi) % (2 * np.pi) - np.pi)
+                closest_ray = int(np.argmin(diffs))
+                d_wall = float(lidar_ranges[closest_ray]) * lidar_max_range
+                if d_wall < flank_retract_dist:
+                    targets[k] = min(targets[k], flank_min_offset)
+
+    # 5. Contact Force Compliance (Admittance load relief)
+    if enable_contact_compliance and contact_forces is not None:
+        excess_force = np.maximum(0.0, contact_forces - max_contact_force)
+        force_relief = compliance_gain * excess_force
+        targets = np.clip(targets - force_relief, min_offset, max_extend)
+
+    # 6. Anti-Stall Reflex (High-frequency stiction breaker)
+    if enable_anti_stall_reflex and forward_vel < anti_stall_speed_threshold and abs(drive) > 0.4:
+        pulse = anti_stall_pulse_amp * np.sin(2 * np.pi * anti_stall_pulse_freq * sim_time)
+        is_pushing = (rear > 0.3) & (down_bias > 0.4)
+        targets[is_pushing] = np.clip(targets[is_pushing] + pulse, min_offset, max_extend)
+
+    # 7. Actuator Slew-Rate Limiter (Jerk-Free S-Smoothing)
+    if enable_actuator_slew_rate and last_targets is not None:
+        max_delta = actuator_max_vel * actuator_dt
+        targets = np.clip(targets, last_targets - max_delta, last_targets + max_delta)
+
+    return targets

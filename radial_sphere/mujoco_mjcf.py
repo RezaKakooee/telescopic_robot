@@ -26,6 +26,8 @@ def build_mujoco_scene_mjcf(
     inner_radius: float = 0.008,
     bar_length: float | None = None,
     timestep: float = 0.002,
+    sim2real_cfg: dict | None = None,
+    appearance_theme: str = "rainbow",  # "realistic", "aerospace_white", "rainbow"
 ) -> tuple[str, np.ndarray]:
     """Build a complete MuJoCo XML containing arena, walls, goal, and robot.
 
@@ -41,6 +43,8 @@ def build_mujoco_scene_mjcf(
         inner_radius: Inner sliding rod radius.
         bar_length: Rod length inside sleeve.
         timestep: Physics integration step (seconds).
+        enable_sim2real: If True, activates physical hardware damping, frictionloss, solref, and force caps.
+        appearance_theme: Visual material theme ("realistic", "aerospace_white", "rainbow").
 
     Returns:
         xml_str: Complete MJCF XML string ready for mujoco.MjModel.from_xml_string().
@@ -55,10 +59,50 @@ def build_mujoco_scene_mjcf(
     # 1. Build Robot Bars and Actuators
     bars_xml: list[str] = []
     actuators_xml: list[str] = []
+
+    # Theme colors
+    is_realistic = appearance_theme in ["realistic", "carbon_gunmetal"]
+    is_white = appearance_theme == "aerospace_white"
+
+    # Physics parameters (Modular Sim-to-Real vs. Baseline)
+    s2r = sim2real_cfg or {}
+    enable_sim2real = bool(s2r.get("enabled", False))
+    
+    joint_damping = "0.5" if enable_sim2real else "0"
+    joint_frictionloss = "0.8" if enable_sim2real else "0"
+    
+    f_sl = float(s2r.get("rubber_friction_sliding", 0.85)) if enable_sim2real else 4.0
+    f_t = float(s2r.get("rubber_friction_torsional", 0.015)) if enable_sim2real else 0.05
+    f_r = float(s2r.get("rubber_friction_rolling", 0.005)) if enable_sim2real else 0.002
+    foot_friction = f"{f_sl} {f_t} {f_r}"
+    
+    sr_time = float(s2r.get("rubber_solref_timeconst", 0.020)) if enable_sim2real else 0.005
+    sr_damp = float(s2r.get("rubber_solref_dampratio", 1.20)) if enable_sim2real else 1.0
+    foot_solref = f"{sr_time} {sr_damp}"
+    
+    foot_solimp = "0.90 0.95 0.005" if enable_sim2real else "0.95 0.99 0.001"
+    
+    max_f = float(s2r.get("actuator_force_limit", 50.0)) if enable_sim2real else 80.0
+    actuator_forcerange = f"{-max_f} {max_f}"
+
     for k, (ux, uy, uz) in enumerate(dirs):
         u = np.array([ux, uy, uz], dtype=float)
-        rr, gg, bb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 1.00)
-        fr, fg, fb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 0.65)
+
+        if is_realistic:
+            sleeve_rgba = "0.38 0.42 0.48 1"
+            rod_rgba = "0.88 0.90 0.94 1"
+            foot_rgba = "0.10 0.10 0.12 1"  # Molded Black Vulcanized Rubber
+        elif is_white:
+            sleeve_rgba = "0.20 0.45 0.75 1"
+            rod_rgba = "0.90 0.92 0.95 1"
+            foot_rgba = "0.12 0.12 0.14 1"
+        else:
+            rr, gg, bb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 1.00)
+            fr, fg, fb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 0.65)
+            sleeve_rgba = "1.0 0.82 0.15 1"
+            rod_rgba = f"{rr:.3f} {gg:.3f} {bb:.3f} 1"
+            foot_rgba = f"{fr:.3f} {fg:.3f} {fb:.3f} 1"
+
         sleeve_from = (0.55 * sphere_radius) * u
         sleeve_to = sleeve_mouth * u
         rod_to = tip0 * u
@@ -70,29 +114,29 @@ def build_mujoco_scene_mjcf(
             <geom name="sleeve_{k}" type="capsule"
                   fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
                           {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
-                  size="{sleeve_radius}" rgba="1.0 0.82 0.15 1" mass="0.005"
+                  size="{sleeve_radius}" rgba="{sleeve_rgba}" mass="0.005"
                   contype="0" conaffinity="0"/>
             <body name="inner_{k}" pos="0 0 0">
                 <joint name="slide_{k}" type="slide"
                        axis="{ux:.5f} {uy:.5f} {uz:.5f}"
-                       range="0 {max_extend}" armature="0.02"/>
+                       range="0 {max_extend}" armature="0.02" damping="{joint_damping}" frictionloss="{joint_frictionloss}"/>
                 <geom name="inner_geom_{k}" type="capsule"
                       fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
                               {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
-                      size="{inner_radius}" rgba="{rr:.3f} {gg:.3f} {bb:.3f} 1" mass="0.008"
+                      size="{inner_radius}" rgba="{rod_rgba}" mass="0.008"
                       contype="0" conaffinity="0"/>
                 <geom name="foot_{k}" type="sphere"
                       pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
-                      size="{FOOT_RADIUS}" rgba="{fr:.3f} {fg:.3f} {fb:.3f} 1" mass="0.004"
-                      friction="4.0 0.05 0.002" condim="4" priority="1"
-                      solref="0.005 1" solimp="0.95 0.99 0.001"/>
+                      size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                      friction="{foot_friction}" condim="4" priority="1"
+                      solref="{foot_solref}" solimp="{foot_solimp}"/>
             </body>
             """
         )
         actuators_xml.append(
             f'<general name="slide_{k}" joint="slide_{k}" '
             f'gainprm="900 0 0" biasprm="0 -900 -22" biastype="affine" gaintype="fixed" '
-            f'ctrlrange="0 {max_extend}" forcerange="-80 80"/>'
+            f'ctrlrange="0 {max_extend}" forcerange="{actuator_forcerange}"/>'
         )
 
     # 2. Spawn Position
@@ -264,36 +308,44 @@ def build_mujoco_scene_mjcf(
     chase_cam_y = spawn_xy[1] - d_hat[1] * 1.3
     chase_cam_z = 0.55
 
+    if is_realistic:
+        core_rgba = "0.22 0.24 0.28 1"
+    elif is_white:
+        core_rgba = "0.92 0.94 0.96 1"
+    else:
+        core_rgba = "1.0 0.82 0.15 1"
+
     xml_str = f"""<mujoco model="radial_sphere_arena">
     <compiler angle="degree" coordinate="local"/>
     <option timestep="{timestep:.5f}" gravity="0 0 -9.81" integrator="implicitfast"/>
 
     <visual>
-        <headlight ambient="0.45 0.45 0.45" diffuse="0.8 0.8 0.8" specular="0.1 0.1 0.1"/>
-        <rgba haze="0.15 0.25 0.35 1"/>
+        <headlight ambient="0.45 0.45 0.45" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2"/>
+        <rgba haze="0.12 0.20 0.30 1"/>
         <global azimuth="140" elevation="-30"/>
     </visual>
 
     <asset>
         <texture name="grid" type="2d" builtin="checker" width="512" height="512"
-                 rgb1="0.92 0.92 0.92" rgb2="0.82 0.82 0.82"/>
+                 rgb1="0.94 0.94 0.95" rgb2="0.86 0.86 0.88"/>
         <texture name="skybox" type="skybox" builtin="gradient"
-                 rgb1="0.30 0.50 0.70" rgb2="0.05 0.10 0.20" width="512" height="512"/>
-        <material name="grid" texture="grid" texrepeat="30 30" reflectance="0.1" texuniform="true"/>
-        <material name="wall_mat" rgba="0.32 0.36 0.42 1" reflectance="0.05"/>
+                 rgb1="0.20 0.35 0.55" rgb2="0.04 0.07 0.12" width="512" height="512"/>
+        <material name="grid" texture="grid" texrepeat="35 35" reflectance="0.08" texuniform="true"/>
+        <material name="wall_mat" rgba="0.28 0.32 0.38 1" reflectance="0.05"/>
         <material name="goal_mat" rgba="0.0 0.85 0.90 0.60" reflectance="0.1"/>
         <material name="goal_pad_mat" rgba="0.0 0.85 0.90 0.35" reflectance="0.05"/>
+        <material name="core_mat" rgba="{core_rgba}" specular="0.6" shininess="0.8" reflectance="0.12"/>
     </asset>
 
     <worldbody>
         <light pos="{cx_arena:.2f} {cy_arena:.2f} 12" dir="0 0 -1" directional="true"
-               diffuse="0.85 0.85 0.85" specular="0.2 0.2 0.2"/>
+               diffuse="0.90 0.90 0.90" specular="0.3 0.3 0.3"/>
         <light pos="0 0 8" dir="0 0 -1" directional="false"
-               diffuse="0.3 0.3 0.3" specular="0.1 0.1 0.1"/>
+               diffuse="0.40 0.40 0.40" specular="0.2 0.2 0.2"/>
 
         <!-- Floor Plane -->
         <geom name="floor" type="plane" size="50 50 0.1" material="grid"
-              friction="1.0 0.005 0.0001" condim="3"/>
+              friction="0.85 0.015 0.005" condim="4"/>
 
         <!-- Maze Walls -->
         {''.join(walls_xml)}
@@ -311,8 +363,8 @@ def build_mujoco_scene_mjcf(
         <body name="core" pos="{spawn_xy[0]:.4f} {spawn_xy[1]:.4f} {spawn_z:.4f}">
             <freejoint name="root"/>
             <geom name="core_geom" type="sphere" size="{sphere_radius}"
-                  rgba="1.0 0.82 0.15 1" mass="{core_mass}"
-                  friction="1.0 0.005 0.0001" condim="3"/>
+                  material="core_mat" mass="{core_mass}"
+                  friction="0.85 0.015 0.005" condim="4"/>
             {''.join(bars_xml)}
         </body>
     </worldbody>

@@ -85,6 +85,10 @@ class MujocoRadialSphereEnv(gym.Env):
         """Compile MJCF XML and initialize MuJoCo Model, Data, and Geom IDs."""
         wall_h = getattr(self.cfg.scenario, "maze", self.cfg.scenario)
         wall_height = float(getattr(wall_h, "wall_height", getattr(self.cfg.scenario, "wall_height", 0.22)))
+        sim2real_cfg = getattr(self.cfg, "sim2real", None)
+        s2r_dict = dict(sim2real_cfg) if sim2real_cfg is not None else {}
+        enable_sim2real = bool(s2r_dict.get("enabled", False))
+        appearance_theme = str(getattr(self.cfg.robot, "appearance_theme", "realistic" if enable_sim2real else "rainbow"))
         xml_str, dirs = build_mujoco_scene_mjcf(
             scenario=scenario,
             n_bars=self.n_bars,
@@ -92,6 +96,8 @@ class MujocoRadialSphereEnv(gym.Env):
             max_extend=self.max_extend,
             core_mass=float(getattr(self.cfg.robot, "core_mass", 0.5)),
             wall_height=wall_height,
+            sim2real_cfg=s2r_dict,
+            appearance_theme=appearance_theme,
         )
         self.dirs_body = dirs
         self.model = mujoco.MjModel.from_xml_string(xml_str)
@@ -106,13 +112,16 @@ class MujocoRadialSphereEnv(gym.Env):
         # Foot geom IDs & sleeve geom IDs
         self.foot_geom_ids = set()
         self.sleeve_geom_ids = set()
+        self.rod_geom_map = {}
         for k in range(self.n_bars):
             fid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"foot_{k}")
             if fid >= 0:
                 self.foot_geom_ids.add(fid)
+                self.rod_geom_map[fid] = k
             sid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"sleeve_{k}")
             if sid >= 0:
                 self.sleeve_geom_ids.add(sid)
+                self.rod_geom_map[sid] = k
 
         # Wall geom IDs
         self.wall_geom_ids = set()
@@ -127,6 +136,7 @@ class MujocoRadialSphereEnv(gym.Env):
             gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"inner_geom_{k}")
             if gid >= 0:
                 self.robot_geom_ids.add(gid)
+                self.rod_geom_map[gid] = k
 
         # Precompute sector base hues (3 lat lines x 3 lon lines = 16 sectors)
         n_lat_bins, n_lon_bins = 4, 4
@@ -275,6 +285,20 @@ class MujocoRadialSphereEnv(gym.Env):
 
         return wall_contact, goal_contact
 
+    def get_rod_contact_forces(self) -> np.ndarray:
+        """Extract normal contact force magnitudes for each of the 60 telescopic rods."""
+        forces = np.zeros(self.n_bars, dtype=np.float32)
+        c_force = np.zeros(6, dtype=np.float64)
+        for i in range(self.data.ncon):
+            con = self.data.contact[i]
+            g1, g2 = con.geom1, con.geom2
+            for g_id in (g1, g2):
+                if g_id in self.rod_geom_map:
+                    rod_idx = self.rod_geom_map[g_id]
+                    mujoco.mj_contactForce(self.model, self.data, i, c_force)
+                    forces[rod_idx] += float(np.abs(c_force[0]))
+        return forces
+
     # ------------------------------------------------------------------
     # Distance Metric
     # ------------------------------------------------------------------
@@ -350,25 +374,53 @@ class MujocoRadialSphereEnv(gym.Env):
         return distances
 
     def _update_dynamic_colors(self) -> None:
-        """Update bar geom colors based on sector base hue and instantaneous extension."""
-        extensions = self.data.qpos[7:7 + self.n_bars]
-        for k in range(self.n_bars):
-            ext_frac = float(np.clip(extensions[k] / self.max_extend, 0.0, 1.0))
-            hue = self._bar_hues[k]
-            val = 0.28 + 0.72 * ext_frac
-            sat = 0.65 + 0.35 * ext_frac
-            r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
-            fid, iid = self._bar_geom_ids[k]
-            if fid >= 0:
-                self.model.geom_rgba[fid] = [r, g, b, 1.0]
-            if iid >= 0:
-                self.model.geom_rgba[iid] = [r, g, b, 1.0]
+        """Update bar geom colors based on theme and instantaneous extension."""
+        theme = getattr(self.cfg.robot, "appearance_theme", "realistic")
+        if theme in ["realistic", "carbon_gunmetal", "titanium"]:
+            # Real physical materials: Polished Stainless Steel shafts and Black Vulcanized Rubber feet
+            extensions = self.data.qpos[7:7 + self.n_bars]
+            for k in range(self.n_bars):
+                ext_frac = float(np.clip(extensions[k] / self.max_extend, 0.0, 1.0))
+                fid, iid = self._bar_geom_ids[k]
+                # Stainless steel rod: polished chrome with slight extension sheen
+                rod_r = 0.85 + 0.08 * ext_frac
+                rod_g = 0.88 + 0.06 * ext_frac
+                rod_b = 0.92 + 0.05 * ext_frac
+                if iid >= 0:
+                    self.model.geom_rgba[iid] = [rod_r, rod_g, rod_b, 1.0]
+                # Molded Black Rubber Foot: matte dark graphite/black rubber
+                foot_val = 0.09 + 0.04 * ext_frac
+                if fid >= 0:
+                    self.model.geom_rgba[fid] = [foot_val, foot_val, foot_val + 0.01, 1.0]
+        elif theme == "aerospace_white":
+            extensions = self.data.qpos[7:7 + self.n_bars]
+            for k in range(self.n_bars):
+                ext_frac = float(np.clip(extensions[k] / self.max_extend, 0.0, 1.0))
+                fid, iid = self._bar_geom_ids[k]
+                if iid >= 0:
+                    self.model.geom_rgba[iid] = [0.90, 0.92, 0.95, 1.0]
+                if fid >= 0:
+                    self.model.geom_rgba[fid] = [0.12, 0.12, 0.14, 1.0]
+        else:
+            # Legacy rainbow prototyping debug mode
+            extensions = self.data.qpos[7:7 + self.n_bars]
+            for k in range(self.n_bars):
+                ext_frac = float(np.clip(extensions[k] / self.max_extend, 0.0, 1.0))
+                hue = self._bar_hues[k]
+                val = 0.28 + 0.72 * ext_frac
+                sat = 0.65 + 0.35 * ext_frac
+                r, g, b = colorsys.hsv_to_rgb(hue, sat, val)
+                fid, iid = self._bar_geom_ids[k]
+                if fid >= 0:
+                    self.model.geom_rgba[fid] = [r, g, b, 1.0]
+                if iid >= 0:
+                    self.model.geom_rgba[iid] = [r, g, b, 1.0]
 
     # ------------------------------------------------------------------
     # Rendering
     # ------------------------------------------------------------------
     def render(self, mode: str = "chase", camera_name: str | None = None) -> np.ndarray:
-        """Render RGB image from 'chase', 'bird_fixed', or 'dual' view."""
+        """Render RGB image from 'chase', 'bird_fixed', 'dual', 4 side 30-deg views, or 'quad' grid."""
         self._update_dynamic_colors()
 
         if camera_name is None:
@@ -379,20 +431,116 @@ class MujocoRadialSphereEnv(gym.Env):
             img_chase = self.render(camera_name="chase")
             return np.concatenate([img_bird, img_chase], axis=1)
 
-        if camera_name == "chase":
+        if camera_name == "quad":
+            # 2x2 Grid of 4 Side 30-degree Tracking Cameras
+            img_fr = self.render(camera_name="side_front_right_30deg")
+            img_fl = self.render(camera_name="side_front_left_30deg")
+            img_rr = self.render(camera_name="side_rear_right_30deg")
+            img_rl = self.render(camera_name="side_rear_left_30deg")
+            top_row = np.concatenate([img_fl, img_fr], axis=1)
+            bot_row = np.concatenate([img_rl, img_rr], axis=1)
+            return np.concatenate([top_row, bot_row], axis=0)
+
+        if camera_name == "fixed_quad":
+            # 2x2 Grid of 4 Fixed Cameras stationed outside the 4 edges of the maze (at 30 degrees)
+            img_n = self.render(camera_name="fixed_edge_north_30deg")
+            img_e = self.render(camera_name="fixed_edge_east_30deg")
+            img_w = self.render(camera_name="fixed_edge_west_30deg")
+            img_s = self.render(camera_name="fixed_edge_south_30deg")
+            top_row = np.concatenate([img_nw if 'img_nw' in locals() else img_w, img_n], axis=1)
+        if camera_name in ["bird_chase", "chase_bird", "topdown_tracking"]:
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             cam.trackbodyid = self.core_body_id
-            cam.distance = 1.35
-            cam.elevation = -32.0
-            # Track azimuth in travel direction or goal direction
+            cam.distance = 2.20  # Overhead tracking distance
+            cam.elevation = -89.0  # Directly overhead bird's-eye view looking straight down
+            cam.azimuth = 90.0
+            self.renderer.update_scene(self.data, camera=cam)
+            rgb = self.renderer.render()
+            return rgb
+
+        if camera_name == "dual_bird_chase":
+            img_bird_fixed = self.render(camera_name="bird_fixed")
+            img_bird_chase = self.render(camera_name="bird_chase")
+            return np.concatenate([img_bird_fixed, img_bird_chase], axis=1)
+
+        # 4 Fixed Cameras outside the 4 edges / corners of the maze (at 30 degrees)
+        fixed_edge_azimuths = {
+            "fixed_edge_west_30deg": 0.0,      # Stationed outside West edge, looking East (+x)
+            "fixed_edge_south_30deg": 90.0,    # Stationed outside South edge, looking North (+y)
+            "fixed_edge_east_30deg": 180.0,    # Stationed outside East edge, looking West (-x)
+            "fixed_edge_north_30deg": 270.0,   # Stationed outside North edge, looking South (-y)
+            "fixed_corner_sw_30deg": 45.0,     # Outside SW corner, looking NE
+            "fixed_corner_se_30deg": 135.0,    # Outside SE corner, looking NW
+            "fixed_corner_ne_30deg": 225.0,    # Outside NE corner, looking SW
+            "fixed_corner_nw_30deg": 315.0,    # Outside NW corner, looking SE
+        }
+
+        if camera_name in fixed_edge_azimuths:
+            # Determine arena center and span from walls or scenario
+            walls = getattr(self.scenario, "walls", np.zeros((0, 4)))
+            if len(walls) > 0:
+                all_x = np.concatenate([walls[:, 0], walls[:, 2]])
+                all_y = np.concatenate([walls[:, 1], walls[:, 3]])
+                cx = float(np.mean(all_x))
+                cy = float(np.mean(all_y))
+                span = max(float(all_x.max() - all_x.min()), float(all_y.max() - all_y.min()))
+            else:
+                cx = float((self.scenario.spawn_xy[0] + self.scenario.goal[0]) / 2.0)
+                cy = float((self.scenario.spawn_xy[1] + self.scenario.goal[1]) / 2.0)
+                span = float(np.hypot(self.scenario.goal[0] - self.scenario.spawn_xy[0], self.scenario.goal[1] - self.scenario.spawn_xy[1]))
+
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+            cam.lookat = np.array([cx, cy, 0.20], dtype=np.float64)
+            cam.distance = max(span * 0.68, 3.8)  # Placed right on the outer perimeter edge wall
+            cam.elevation = -30.0  # 30-degree downward angle into the maze
+            cam.azimuth = fixed_edge_azimuths[camera_name]
+            self.renderer.update_scene(self.data, camera=cam)
+            rgb = self.renderer.render()
+            return rgb
+
+        # 4 Side 30-degree tracking cameras + standard chase camera
+        side_camera_offsets = {
+            "chase": -90.0,
+            "side_rear": -90.0,
+            "side_front": 90.0,
+            "side_right": 0.0,
+            "side_left": 180.0,
+            "side_front_right_30deg": 45.0,
+            "side_front_left_30deg": 135.0,
+            "side_rear_right_30deg": -45.0,
+            "side_rear_left_30deg": -135.0,
+            "side_right_30deg": 0.0,
+            "side_left_30deg": 180.0,
+            "side_front_30deg": 90.0,
+            "side_rear_30deg": -90.0,
+        }
+
+        if camera_name in side_camera_offsets:
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            cam.trackbodyid = self.core_body_id
+            cam.distance = 1.45
+            cam.elevation = -30.0  # 30-degree downward angle
+
+            # Compute target yaw from travel or path direction
             v = self.data.qvel[0:2]
-            if np.linalg.norm(v) > 0.05:
-                yaw = float(np.degrees(np.arctan2(v[1], v[0])))
+            if np.linalg.norm(v) > 0.08:
+                target_yaw = float(np.degrees(np.arctan2(v[1], v[0])))
             else:
                 g = self.scenario.goal[:2] - self.data.qpos[:2]
-                yaw = float(np.degrees(np.arctan2(g[1], g[0])))
-            cam.azimuth = yaw - 90.0
+                target_yaw = float(np.degrees(np.arctan2(g[1], g[0])))
+
+            # Steadicam angular filter for smooth gimbal tracking
+            if not hasattr(self, "_cam_azimuth_smooth") or self._cam_azimuth_smooth is None:
+                self._cam_azimuth_smooth = target_yaw
+            else:
+                delta = (target_yaw - self._cam_azimuth_smooth + 180.0) % 360.0 - 180.0
+                self._cam_azimuth_smooth += 0.15 * delta
+
+            offset_angle = side_camera_offsets[camera_name]
+            cam.azimuth = self._cam_azimuth_smooth + offset_angle
             self.renderer.update_scene(self.data, camera=cam)
         else:
             cam_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name)
