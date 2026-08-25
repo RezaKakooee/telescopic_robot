@@ -124,11 +124,11 @@ def build_mujoco_scene_mjcf(
                       fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
                               {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
                       size="{inner_radius}" rgba="{rod_rgba}" mass="0.008"
-                      contype="0" conaffinity="0"/>
+                      contype="1" conaffinity="2" condim="3" friction="0.8 0.005 0.0001" priority="1"/>
                 <geom name="foot_{k}" type="sphere"
                       pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
                       size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
-                      friction="{foot_friction}" condim="4" priority="1"
+                      contype="1" conaffinity="2" friction="{foot_friction}" condim="4" priority="1"
                       solref="{foot_solref}" solimp="{foot_solimp}"/>
             </body>
             """
@@ -424,6 +424,10 @@ def build_mujoco_scene_mjcf(
     <compiler angle="degree" coordinate="local"/>
     <option timestep="{timestep:.5f}" gravity="0 0 -9.81" integrator="implicitfast"/>
 
+    <default>
+        <geom contype="2" conaffinity="1"/>
+    </default>
+
     <visual>
         <headlight ambient="0.45 0.45 0.45" diffuse="0.8 0.8 0.8" specular="0.2 0.2 0.2"/>
         <rgba haze="0.12 0.20 0.30 1"/>
@@ -483,7 +487,8 @@ def build_mujoco_scene_mjcf(
             <freejoint name="root"/>
             <geom name="core_geom" type="sphere" size="{sphere_radius}"
                   material="core_mat" mass="{core_mass}"
-                  friction="0.85 0.015 0.005" condim="4"/>
+                  friction="0.85 0.015 0.005" condim="4"
+                  contype="1" conaffinity="2"/>
             {''.join(bars_xml)}
         </body>
     </worldbody>

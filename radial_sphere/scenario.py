@@ -632,54 +632,60 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds, level: int =
         n_steps = int(getattr(hazards_cfg, "n_steps", 2))
         n_blockers = int(getattr(hazards_cfg, "n_blockers", 0))
 
-        # Choose intermediate corridor cells along the cell path
+        rocky_corridors = bool(getattr(hazards_cfg, "rocky_corridors", True))
+        n_rocks_per_cell = int(getattr(hazards_cfg, "n_rocks_per_cell", 18))
+        max_rock_sz = float(getattr(hazards_cfg, "max_rock_size", 0.055))
+
+        # 1. Fill entire maze corridor network with dense mountainous stone boulders
+        if rocky_corridors:
+            for k in range(n_cells):
+                # Don't put massive rocks directly on spawn cell center
+                if k == start:
+                    c = centre(k)
+                    stones.append([c[0], c[1], cell * 0.46, cell * 0.46, 8, max_rock_sz * 0.65])
+                else:
+                    c = centre(k)
+                    stones.append([c[0], c[1], cell * 0.48, cell * 0.48, n_rocks_per_cell, max_rock_sz])
+
+        # 2. Choose intermediate corridor cells for blockers, gaps, steps, and sand
         path_cells = cell_path[2:-2] if len(cell_path) > 6 else cell_path[1:-1]
-        if path_cells:
-            shuffled_cells = list(path_cells)
-            rng.shuffle(shuffled_cells)
+        all_cells = list(range(n_cells))
+        rng.shuffle(all_cells)
 
-            ptr = 0
-            # Place gaps
-            for _ in range(n_gaps):
-                if ptr >= len(shuffled_cells):
-                    break
-                c = centre(shuffled_cells[ptr])
-                gaps.append([c[0], c[1], 0.12, 0.45, 0.06])
-                ptr += 1
+        ptr = 0
+        # Place gaps
+        for _ in range(n_gaps):
+            if ptr >= len(all_cells):
+                break
+            c = centre(all_cells[ptr])
+            gaps.append([c[0], c[1], 0.12, 0.45, 0.06])
+            ptr += 1
 
-            # Place sand patches
-            for _ in range(n_sand):
-                if ptr >= len(shuffled_cells):
-                    break
-                c = centre(shuffled_cells[ptr])
-                sand_patches.append([c[0], c[1], 0.50, 0.50])
-                ptr += 1
+        # Place sand patches
+        for _ in range(n_sand):
+            if ptr >= len(all_cells):
+                break
+            c = centre(all_cells[ptr])
+            sand_patches.append([c[0], c[1], 0.50, 0.50])
+            ptr += 1
 
-            # Place stone zones
-            for _ in range(n_stones):
-                if ptr >= len(shuffled_cells):
-                    break
-                c = centre(shuffled_cells[ptr])
-                stones.append([c[0], c[1], 0.45, 0.45, 18, 0.025])
-                ptr += 1
+        # Place step curbs
+        for _ in range(n_steps):
+            if ptr >= len(all_cells):
+                break
+            c = centre(all_cells[ptr])
+            steps.append([c[0], c[1], 0.10, 0.55, 0.035])
+            ptr += 1
 
-            # Place step curbs
-            for _ in range(n_steps):
-                if ptr >= len(shuffled_cells):
-                    break
-                c = centre(shuffled_cells[ptr])
-                steps.append([c[0], c[1], 0.10, 0.55, 0.035])
-                ptr += 1
-
-            # Place corridor bollards / blockers (offset from cell centre)
-            for _ in range(n_blockers):
-                if ptr >= len(shuffled_cells):
-                    break
-                c = centre(shuffled_cells[ptr])
-                off_x = float(rng.choice([-0.28, 0.28]))
-                off_y = float(rng.choice([-0.28, 0.28]))
-                blockers.append([c[0] + off_x, c[1] + off_y, 0.18])
-                ptr += 1
+        # Place corridor bollards / blockers (offset from cell centre)
+        for _ in range(n_blockers):
+            if ptr >= len(all_cells):
+                break
+            c = centre(all_cells[ptr])
+            off_x = float(rng.choice([-0.25, 0.25]))
+            off_y = float(rng.choice([-0.25, 0.25]))
+            blockers.append([c[0] + off_x, c[1] + off_y, 0.18])
+            ptr += 1
 
     field, origin, res = _geodesic_field(walls, bounds, goal)
     return Scenario(

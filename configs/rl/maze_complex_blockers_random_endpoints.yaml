@@ -1,0 +1,70 @@
+defaults:
+  - maze_level3_large_blockers
+  - _self_
+
+# =====================================================================
+# Complex 7x6 Maze with Industrial Safety Bollards & Randomized Endpoints
+# Features:
+# 1. 7x6 Complex Multi-Loop Labyrinth Layout (42 cells, 45m maximum path)
+# 2. 4 Heavy Cast-Steel Safety Bollards inside corridor intersections
+# 3. Randomized Start and Randomized Goal (random_endpoints: true)
+# 4. Active-Braking 3D Steering RL Policy with Underbelly Ground Stance & Suspension
+# =====================================================================
+
+robot:
+  appearance_theme: realistic
+  core_mass: 3.5
+
+scenario:
+  maze:
+    layout_seed: 42             # Fixed complex layout geometry
+    random_endpoints: true      # 👈 Random start and random goal sampled each episode
+    random_start: false
+    random_goal: false
+    endpoint_min_route: 8.0     # Minimum route distance (m)
+    endpoint_max_route: 45.0    # Maximum corridor route (m)
+  hazards:
+    enabled: true
+    rocky_corridors: true       # 👈 Populates ALL maze corridors with dense boulders & stone crags!
+    n_rocks_per_cell: 18        # 18 procedural rocks per corridor cell (over 700 rocks across the maze)
+    max_rock_size: 0.055        # Up to 5.5 cm stone crags
+    n_blockers: 4               # 4 cast-steel industrial safety bollards in corridor junctions
+    n_gaps: 2
+    n_steps: 1
+    n_stones: 0
+    n_sand: 2
+
+controller:
+  back_gain: 1.8
+  base: 0.025
+  lookahead: 0.9
+  enable_underbelly_contact: true
+  underbelly_stance_gain: 0.42
+  underbelly_threshold_z: -0.20
+  enable_active_suspension: true
+  target_ride_height: 0.28
+  suspension_kp: 0.75
+  suspension_kd: 0.15
+  enable_curb_vaulting: true
+  curb_boost_gain: 2.6
+
+rl:
+  include_drive: true           # 3D continuous action: [dx, dy, drive/throttle]
+  obs_endpoints: true           # Observes current ball, goal, and relative goal vector
+  lidar_clearance_cost: 0.05    # Smooth corridor centering repulsion
+  lidar_min_margin: 0.35        # Buffer margin of 35 cm around walls
+  total_steps: 500000
+  n_envs: 8
+  n_steps: 256
+  batch_size: 512
+  net: [256, 256]
+  max_steps: 4000
+  checkpoint_every: 25000
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02
+  lr: 0.0003
+  gamma: 0.995
+  ent_coef: 0.01
+
+reward:
+  collision_cost: 0.08

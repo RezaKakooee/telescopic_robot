@@ -164,10 +164,13 @@ class MujocoRadialSphereEnv(gym.Env):
             iid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"inner_geom_{k}")
             self._bar_geom_ids.append((fid, iid))
 
-        # Renderer
+        # Renderer (lazy initialized on first render() call)
         if self.renderer is not None:
-            self.renderer.close()
-        self.renderer = mujoco.Renderer(self.model, height=self.render_size[0], width=self.render_size[1])
+            try:
+                self.renderer.close()
+            except Exception:
+                pass
+            self.renderer = None
 
     # ------------------------------------------------------------------
     # Reset
@@ -437,6 +440,9 @@ class MujocoRadialSphereEnv(gym.Env):
     # ------------------------------------------------------------------
     def render(self, mode: str = "chase", camera_name: str | None = None) -> np.ndarray:
         """Render RGB image from 'chase', 'bird_fixed', 'dual', 4 side 30-deg views, or 'quad' grid."""
+        if self.renderer is None:
+            self.renderer = mujoco.Renderer(self.model, height=self.render_size[0], width=self.render_size[1])
+
         self._update_dynamic_colors()
 
         if camera_name is None:
@@ -457,8 +463,52 @@ class MujocoRadialSphereEnv(gym.Env):
             bot_row = np.concatenate([img_rl, img_rr], axis=1)
             return np.concatenate([top_row, bot_row], axis=0)
 
-        if camera_name == "fixed_quad":
-            # 2x2 Grid of 4 Fixed Cameras stationed outside the 4 edges of the maze (at 30 degrees)
+        if camera_name == "fixed_close_dual":
+            # Dual Close-Up Views with 100% Constant Fixed Angles (Zero Rotation / Zero Jitter)
+            img_iso = self.render(camera_name="fixed_angle_close_3d")
+            img_side = self.render(camera_name="fixed_angle_side_close")
+            return np.concatenate([img_iso, img_side], axis=1)
+
+        if camera_name == "fixed_angle_close_3d":
+            # Close-Up to the Ball with 100% Constant Fixed Orientation (Pure Translation Only, Zero Rotation Jitter)
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            cam.trackbodyid = self.core_body_id
+            cam.distance = 1.30      # Close macro view of the ball & rods
+            cam.elevation = -32.0    # 32-degree fixed downward angle (shows ball and ground rods clearly)
+            cam.azimuth = 45.0       # 100% Constant Fixed Azimuth: NEVER rotates or turns when robot turns!
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "fixed_angle_side_close":
+            # Pure Low-Angle Close View with 100% Constant Fixed Orientation (Zero Jitter)
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            cam.trackbodyid = self.core_body_id
+            cam.distance = 1.18      # Close-up to the ball
+            cam.elevation = -12.0    # Low angle: clearly reveals bottom rods touching the floor & rocks
+            cam.azimuth = 0.0        # Constant Fixed 0.0° angle (pure translation, zero rotation)
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "fixed_dual_iso":
+            # 2 Completely Static 3D Isometric Cameras (Zero Motion / Zero Jitter)
+            img_sw = self.render(camera_name="fixed_corner_sw_30deg")
+            img_ne = self.render(camera_name="fixed_corner_ne_30deg")
+            return np.concatenate([img_sw, img_ne], axis=1)
+
+        if camera_name in ["fixed_quad", "fixed_quad_corners"]:
+            # 2x2 Grid of 4 Completely Stationary Outer Corner Cameras (Zero Jitter)
+            img_nw = self.render(camera_name="fixed_corner_nw_30deg")
+            img_ne = self.render(camera_name="fixed_corner_ne_30deg")
+            img_sw = self.render(camera_name="fixed_corner_sw_30deg")
+            img_se = self.render(camera_name="fixed_corner_se_30deg")
+            top_row = np.concatenate([img_nw, img_ne], axis=1)
+            bot_row = np.concatenate([img_sw, img_se], axis=1)
+            return np.concatenate([top_row, bot_row], axis=0)
+
+        if camera_name == "fixed_quad_edges":
+            # 2x2 Grid of 4 Stationary Edge Cameras outside the perimeter walls
             img_n = self.render(camera_name="fixed_edge_north_30deg")
             img_e = self.render(camera_name="fixed_edge_east_30deg")
             img_w = self.render(camera_name="fixed_edge_west_30deg")
@@ -477,12 +527,33 @@ class MujocoRadialSphereEnv(gym.Env):
             rgb = self.renderer.render()
             return rgb
 
-        if camera_name == "dual_bird_chase":
-            img_bird_fixed = self.render(camera_name="bird_fixed")
-            img_bird_chase = self.render(camera_name="bird_chase")
-            return np.concatenate([img_bird_fixed, img_bird_chase], axis=1)
+        if camera_name == "cinematic_dual":
+            img_iso = self.render(camera_name="iso_3d_overview")
+            img_chase = self.render(camera_name="cinematic_chase_3d")
+            return np.concatenate([img_iso, img_chase], axis=1)
 
+        if camera_name == "iso_3d_overview":
+            # 3D Isometric View of the entire maze with depth and shadows (elevation -45 deg)
+            walls = getattr(self.scenario, "walls", np.zeros((0, 4)))
+            if len(walls) > 0:
+                all_x = np.concatenate([walls[:, 0], walls[:, 2]])
+                all_y = np.concatenate([walls[:, 1], walls[:, 3]])
+                cx = float(np.mean(all_x))
+                cy = float(np.mean(all_y))
+                span = max(float(all_x.max() - all_x.min()), float(all_y.max() - all_y.min()))
+            else:
+                cx = float((self.scenario.spawn_xy[0] + self.scenario.goal[0]) / 2.0)
+                cy = float((self.scenario.spawn_xy[1] + self.scenario.goal[1]) / 2.0)
+                span = float(np.hypot(self.scenario.goal[0] - self.scenario.spawn_xy[0], self.scenario.goal[1] - self.scenario.spawn_xy[1]))
 
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+            cam.lookat = np.array([cx, cy, 0.10], dtype=np.float64)
+            cam.distance = max(span * 1.05, 5.5)
+            cam.elevation = -48.0   # 48-degree isometric angle for rich 3D corridor depth
+            cam.azimuth = 45.0      # SW to NE diagonal
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
 
         # 4 Fixed Cameras outside the 4 edges / corners of the maze (at 30 degrees)
         fixed_edge_azimuths = {
@@ -512,9 +583,13 @@ class MujocoRadialSphereEnv(gym.Env):
 
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_FREE
-            cam.lookat = np.array([cx, cy, 0.20], dtype=np.float64)
-            cam.distance = max(span * 0.68, 3.8)  # Placed right on the outer perimeter edge wall
-            cam.elevation = -30.0  # 30-degree downward angle into the maze
+            cam.lookat = np.array([cx, cy, 0.15], dtype=np.float64)
+            if "corner" in camera_name:
+                cam.distance = max(span * 0.96, 4.8)  # Full isometric view of entire maze
+                cam.elevation = -42.0                 # 42-degree isometric angle for depth
+            else:
+                cam.distance = max(span * 0.72, 3.8)  # Placed right on the outer perimeter edge wall
+                cam.elevation = -32.0                 # 32-degree downward angle into the maze
             cam.azimuth = fixed_edge_azimuths[camera_name]
             self.renderer.update_scene(self.data, camera=cam)
             rgb = self.renderer.render()
@@ -525,9 +600,11 @@ class MujocoRadialSphereEnv(gym.Env):
             img_rear = self.render(camera_name="underbelly_rear_low")
             return np.concatenate([img_side, img_rear], axis=1)
 
-        # 4 Side 30-degree tracking cameras + Ground-Level Underbelly Cameras
+        # Tracking cameras
         side_camera_offsets = {
             "chase": -90.0,
+            "cinematic_chase_3d": -90.0,        # 👈 Elevated rear chase looking down into hallway
+            "cinematic_diagonal_3d": -45.0,     # 👈 Rear-quarter angled corridor chase
             "side_rear": -90.0,
             "side_front": 90.0,
             "side_right": 0.0,
@@ -552,8 +629,10 @@ class MujocoRadialSphereEnv(gym.Env):
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             cam.trackbodyid = self.core_body_id
             
-            # Ground-level low angle vs standard 30-deg angle
-            if "underbelly" in camera_name:
+            if "cinematic" in camera_name:
+                cam.distance = 2.10     # Placed higher and further back to see down the whole corridor
+                cam.elevation = -42.0   # 42-degree downward tilt: completely clears corridor walls!
+            elif "underbelly" in camera_name:
                 cam.distance = 1.15     # Close macro view of the ground contact patch
                 cam.elevation = -4.0    # Near-horizontal angle: reveals the full underside forest of rods
             else:

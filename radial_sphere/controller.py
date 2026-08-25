@@ -197,7 +197,9 @@ def bar_targets(
         depth_fraction = np.clip((-u_z - abs(underbelly_threshold_z)) / (1.0 - abs(underbelly_threshold_z)), 0.0, 1.0)
         # Forward rolling gradient: center/rear underbelly rods provide support & drive, leading rods gently conform
         roll_gradient = np.clip(1.0 - 0.75 * np.maximum(u_long, 0.0), 0.30, 1.0)
-        stance_wave = depth_fraction * underbelly_stance_gain * roll_gradient
+        # Lateral flank tucking: prevent side rods from extending into adjacent walls
+        lat_tuck_underbelly = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
+        stance_wave = depth_fraction * underbelly_stance_gain * roll_gradient * lat_tuck_underbelly
         wave = np.where(is_underbelly, np.maximum(wave, stance_wave), wave)
 
     targets = min_offset + drive * (max_extend - min_offset) * wave

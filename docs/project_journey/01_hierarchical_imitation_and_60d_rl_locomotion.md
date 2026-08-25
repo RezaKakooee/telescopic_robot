@@ -848,5 +848,73 @@ All developed capabilities are fully modular and independently toggleable in [co
 | **Gyro Damping** | `controller.enable_gyroscopic_damping` | `false` | Counteracts gyroscopic roll precession during high-speed turns |
 | **Obstacle Bollards** | `scenario.obstacles.enabled` | `true` | Spawns industrial safety bollards inside arenas/corridors |
 | **Hazards Gauntlet** | `scenario.hazards.enabled` | `false` | Spawns floor pit holes, wooden curbs, stones, and sand pools |
+| **Rocky Corridors** | `scenario.hazards.rocky_corridors` | `true` | Populates all maze corridors with dense procedural boulders |
 | **Sim-to-Real** | `sim2real.enabled` | `false` | Enables 50:1 actuator limits, rubber viscoelasticity, noise & latency |
+
+---
+
+## 29. Dense Mountain Rocky Labyrinth ($746$ Boulders & 4 Safety Bollards)
+
+To combine complex labyrinth navigation with rugged off-road terrain, we developed the **Dense Mountain Rocky Labyrinth**:
+
+<p align="center">
+  <img src="assets/fixed_sw_rocky_maze_preview.png" width="75%" />
+</p>
+
+- **Arena Span**: $7 \times 6$ Grid ($42$ cells, $45.0\text{m}$ max corridor path length).
+- **Corridor Boulder Density**: **$746$ procedural stone boulders and crags** distributed across all corridor floors ($18$ rocks per cell, up to $5.5\text{ cm}$ heights).
+- **Industrial Hazards**: $4$ heavy cast-steel safety bollards stationed inside corridor intersections with yellow reflective collars, floor pit chasms, and timber curbs.
+- **Randomized Endpoints**: Random start cell and random goal cylinder sampled on every episode reset.
+
+---
+
+## 30. Full Rigid-Body Contact Architecture & Corridor Flank Clearance
+
+### A. Collision Bitmask Architecture (Robot vs. World)
+To guarantee that all 60 telescoping rods and rubber footpads behave as **100% solid, non-penetrating rigid bodies** without internal self-collision artifacts, we implemented a dual-group bitmask scheme in MuJoCo:
+
+```xml
+<!-- Environment Defaults: Group 2 (Collides with Group 1) -->
+<default>
+    <geom contype="2" conaffinity="1"/>
+</default>
+
+<!-- Robot Cylindrical Shaft: Group 1 (Collides with Group 2, Ignores Robot Geoms) -->
+<geom name="inner_geom_k" type="capsule" contype="1" conaffinity="2" condim="3" priority="1"/>
+<geom name="foot_k" type="sphere" contype="1" conaffinity="2" condim="4" priority="1"/>
+<geom name="core_geom" type="sphere" contype="1" conaffinity="2" condim="4"/>
+```
+
+- **Robot vs. Robot**: `(1 & 2) == 0` $\implies$ Zero internal self-collision glitch between adjacent rods.
+- **Robot vs. Environment**: `(1 & 1) != 0` and `(2 & 2) != 0` $\implies$ Full physical contact against walls, boulders, bollards, and the floor.
+
+### B. Lateral Flank Wall Clearance Equation
+To prevent lateral rods from extending into adjacent corridor walls during underbelly ground support, we apply a lateral sector attenuation factor:
+
+$$\text{tuck}_{\text{lat}} = \max\left(0.0,\, 1.0 - 1.8 \cdot u_{\text{lat}}^2\right)$$
+$$A_{\text{stance}, i} = \text{depth\_frac}_i \cdot k_{\text{stance}} \cdot \text{roll\_grad}_i \cdot \text{tuck}_{\text{lat}, i}$$
+
+- For bottom rods ($|u_{\text{lat}}| \le 0.35$): $\text{tuck}_{\text{lat}} = 1.0 \implies$ full downward ground contact and active suspension.
+- For flank rods facing walls ($|u_{\text{lat}}| > 0.45$): $\text{tuck}_{\text{lat}} = 0.0 \implies$ completely retracted inside the ball diameter, preventing wall intersection.
+
+---
+
+## 31. Fixed-Angle Zero-Jitter Macro Camera Suite
+
+To provide clear visibility of the ball mechanics without tracking rotation jitter:
+
+<p align="center">
+  <img src="assets/fixed_close_dual_rocky_maze_preview.png" width="80%" />
+</p>
+
+1. **`fixed_angle_close_3d`** ($\text{Distance} = 1.30\text{m}$, $\text{Elevation} = -32^\circ$, $\text{Azimuth} = 45^\circ$ fixed):
+   Translates with the ball's center of mass with **$100\%$ locked orientation** (zero rotation / zero angular jitter).
+2. **`fixed_angle_side_close`** ($\text{Distance} = 1.18\text{m}$, $\text{Elevation} = -12^\circ$, $\text{Azimuth} = 0^\circ$ fixed):
+   Close-up low-angle lateral view showing underbelly rods conforming over rocks on the ground.
+3. **`fixed_quad_corners`**:
+   Synchronized $2\times 2$ grid of all 4 stationary outer corner cameras (NW, NE, SW, SE) at $-42^\circ$ isometric pitch.
+
+- **Full Evaluation Video ($35.0\text{s}$, Goal reached at Step 840)**:
+  [`storage_local/20260825_1452__close_fixed_rocky_maze_eval/fixed_close_dual_composite.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_1452__close_fixed_rocky_maze_eval/fixed_close_dual_composite.mp4)
+
 
