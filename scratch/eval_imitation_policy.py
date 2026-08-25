@@ -18,7 +18,7 @@ from radial_sphere import (
 )
 from scripts.imitation.train_bc import HierarchicalImitationPolicy
 
-ckpt_path = Path("/home/azureuser/telescopic_robot/storage_local/imitation_models/bc_hierarchical_best.pt")
+ckpt_path = Path("/home/azureuser/telescopic_robot/storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt")
 assert ckpt_path.exists(), f"BC Checkpoint not found at {ckpt_path}"
 
 ckpt = torch.load(str(ckpt_path), map_location="cpu")
@@ -29,7 +29,7 @@ model.load_state_dict(ckpt["model_state_dict"])
 model.eval()
 
 scratch_dir = Path("/home/azureuser/.gemini/antigravity-ide/brain/6c6c10ba-f20d-4055-aff1-c75d2495e95b/scratch")
-renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/imitation_models/renders")
+renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260822_1617__imitation_models/renders")
 renders_dir.mkdir(parents=True, exist_ok=True)
 
 test_scenarios = [

@@ -7,7 +7,7 @@ RADIAL_SPHERE_RUN_ID; Python generates one only when the environment
 variable is absent (e.g. local runs).
 
 Format (when generated here):
-    radial__<YYYYMMDD_HHMM>__<slurm job id | local>__<script>[__<tag>][__<config tag>]
+    <YYYYMMDD_HHMM>__<slurm job id | local>__<script>[__<tag>][__<config tag>]
 """
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ def build_run_id(script_name: str = "run", tag: str | None = None) -> str:
 
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     job_id = os.environ.get("SLURM_JOB_ID", "local")
-    parts = ["radial", ts, job_id, normalize_name(script_name)]
+    parts = [ts, job_id, normalize_name(script_name)]
     if tag:
         parts.append(normalize_name(tag))
     cfg_tag = Path(os.environ.get("RADIAL_SPHERE_CONFIG", "")).stem

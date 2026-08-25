@@ -48,7 +48,7 @@ This report documents the end-to-end multi-stage pipeline developed for the **Ra
 
 ## 5. Artifact & Checkpoint Directory
 
-- **IL Model Checkpoint**: `storage_local/imitation_models/bc_hierarchical_best.pt`
-- **RL Model Checkpoint**: `storage_local/radial__20260822_1619__local__finetune_rl_from_bc__ppo__lowlevel__maze_level3_large_active_braking_multiaxis/checkpoints/ppo_final.zip`
-- **Diverse Maze Video Renders**: `storage_local/diverse_maze_suite/`
-- **Joint 63D Video Renders**: `storage_local/joint_63d_il_rl_suite/`
+- **IL Model Checkpoint**: `storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt`
+- **RL Model Checkpoint**: `storage_local/20260822_1619__local__finetune_rl_from_bc__ppo__lowlevel__maze_level3_large_active_braking_multiaxis/checkpoints/ppo_final.zip`
+- **Diverse Maze Video Renders**: `storage_local/20260823_0102__diverse_maze_suite/`
+- **Joint 63D Video Renders**: `storage_local/20260823_0104__joint_63d_il_rl_suite/`

@@ -15,7 +15,7 @@ from radial_sphere import (
     load_config_cli,
 )
 
-model_dir = Path("/home/azureuser/telescopic_robot/storage_local/radial__20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
+model_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
 model_path = model_dir / "checkpoints" / "ppo_final.zip"
 norm_path = model_dir / "checkpoints" / "vecnormalize_final.pkl"
 

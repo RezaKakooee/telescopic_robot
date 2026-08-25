@@ -165,10 +165,60 @@ def goal_scenario(cfg, *, rng=None, name: str = "goal") -> Scenario:
     pts = np.linspace(spawn, goal, 60).astype(np.float32)
     # No breadcrumbs for goal finding — only the goal marker is shown.
     markers = np.empty((0, 2), dtype=np.float32)
+
+    # Optional traversable wooden timber plank across the path
+    wood_cfg = getattr(sc, "wood_plank", None) if sc is not None else None
+    hazards_cfg = getattr(sc, "hazards", None) if sc is not None else None
+    steps = []
+    gaps = []
+    stones = []
+    sand_patches = []
+
+    if wood_cfg is not None and getattr(wood_cfg, "enabled", False):
+        pos = getattr(wood_cfg, "pos", None)
+        if pos is None:
+            # Place at 55% along spawn -> goal
+            pos = 0.55 * spawn + 0.45 * goal
+        half_w = float(getattr(wood_cfg, "half_width", 0.11))
+        half_l = float(getattr(wood_cfg, "half_length", 0.75))
+        height = float(getattr(wood_cfg, "height", 0.075))
+        steps.append([float(pos[0]), float(pos[1]), half_w, half_l, height])
+
+    if hazards_cfg is not None and getattr(hazards_cfg, "enabled", False):
+        # Custom gaps/holes
+        custom_gaps = getattr(hazards_cfg, "gaps", None)
+        if custom_gaps is not None:
+            gaps.extend(custom_gaps)
+        elif int(getattr(hazards_cfg, "n_gaps", 0)) > 0:
+            # Place a floor hole/trench along the path
+            mid_gap = 0.30 * spawn + 0.70 * goal
+            gdepth = float(getattr(hazards_cfg, "gap_depth", 0.10))
+            gaps.append([float(mid_gap[0]), float(mid_gap[1]), 0.11, 0.70, gdepth])
+
+        # Custom stones / boulders
+        custom_stones = getattr(hazards_cfg, "stones", None)
+        if custom_stones is not None:
+            stones.extend(custom_stones)
+        elif int(getattr(hazards_cfg, "n_stones", 0)) > 0:
+            mid_st = 0.82 * spawn + 0.18 * goal
+            stones.append([float(mid_st[0]), float(mid_st[1]), 0.35, 0.50, 16, 0.032])
+
+        # Custom sand patches
+        custom_sand = getattr(hazards_cfg, "sand_patches", None)
+        if custom_sand is not None:
+            sand_patches.extend(custom_sand)
+        elif int(getattr(hazards_cfg, "n_sand", 0)) > 0:
+            mid_sand = 0.60 * spawn + 0.40 * goal
+            sand_patches.append([float(mid_sand[0]), float(mid_sand[1]), 0.45, 0.60])
+
     return Scenario(
         kind="goal", name=name,
         spawn_xy=spawn, goal=goal,
         path_pts=pts, markers=markers, path_length=float(np.linalg.norm(goal - spawn)),
+        steps=steps if steps else None,
+        gaps=gaps if gaps else None,
+        stones=stones if stones else None,
+        sand_patches=sand_patches if sand_patches else None,
     )
 
 
@@ -192,11 +242,12 @@ def obstacle_scenario(cfg, *, rng=None, name: str = "obstacle") -> Scenario:
     clearance = float(getattr(ob_cfg, "clearance", 0.9)) if ob_cfg else 0.9
     gap = float(getattr(ob_cfg, "min_gap", 0.7)) if ob_cfg else 0.7
 
-    n_blocking = int(getattr(ob_cfg, "n_blocking", 2)) if ob_cfg else 2
+    ob_enabled = bool(getattr(ob_cfg, "enabled", True)) if ob_cfg else True
+    n_blocking = int(getattr(ob_cfg, "n_blocking", 2)) if (ob_cfg and ob_enabled) else 0
 
     spawn = np.array([0.0, 0.0], dtype=np.float32)
     goal = np.array([rng.uniform(*x_range), rng.uniform(*y_range)], dtype=np.float32)
-    n = int(rng.integers(n_range[0], n_range[1] + 1))
+    n = int(rng.integers(n_range[0], n_range[1] + 1)) if ob_enabled else 0
     pillars: list[np.ndarray] = []
 
     def _fits(p: np.ndarray) -> bool:
@@ -570,15 +621,16 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds, level: int =
     pts = np.concatenate(dense_pts, axis=0).astype(np.float32)
 
     # ------------------------------------------------------------------
-    # Ground Hazards in Corridor Cells (if enabled)
+    # Ground Hazards & Obstacle Blockers in Corridor Cells (if enabled)
     # ------------------------------------------------------------------
-    gaps, sand_patches, stones, steps = [], [], [], []
+    gaps, sand_patches, stones, steps, blockers = [], [], [], [], []
     hazards_cfg = getattr(cfg.scenario, "hazards", None)
     if hazards_cfg is not None and getattr(hazards_cfg, "enabled", False):
         n_gaps = int(getattr(hazards_cfg, "n_gaps", 3))
         n_sand = int(getattr(hazards_cfg, "n_sand", 3))
         n_stones = int(getattr(hazards_cfg, "n_stones", 4))
         n_steps = int(getattr(hazards_cfg, "n_steps", 2))
+        n_blockers = int(getattr(hazards_cfg, "n_blockers", 0))
 
         # Choose intermediate corridor cells along the cell path
         path_cells = cell_path[2:-2] if len(cell_path) > 6 else cell_path[1:-1]
@@ -619,6 +671,16 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds, level: int =
                 steps.append([c[0], c[1], 0.10, 0.55, 0.035])
                 ptr += 1
 
+            # Place corridor bollards / blockers (offset from cell centre)
+            for _ in range(n_blockers):
+                if ptr >= len(shuffled_cells):
+                    break
+                c = centre(shuffled_cells[ptr])
+                off_x = float(rng.choice([-0.28, 0.28]))
+                off_y = float(rng.choice([-0.28, 0.28]))
+                blockers.append([c[0] + off_x, c[1] + off_y, 0.18])
+                ptr += 1
+
     field, origin, res = _geodesic_field(walls, bounds, goal)
     return Scenario(
         kind="maze", name=name,
@@ -626,6 +688,7 @@ def _random_maze_scenario(cfg, rng, name, cell, cols, rows, bounds, level: int =
         path_pts=pts, markers=np.empty((0, 2), dtype=np.float32),
         path_length=float(route_edges * cell),
         walls=np.asarray(walls, dtype=np.float32),
+        obstacles=np.asarray(blockers, dtype=np.float32).reshape(-1, 3) if blockers else None,
         gaps=gaps,
         sand_patches=sand_patches,
         stones=stones,
@@ -647,9 +710,44 @@ def roundtrip_scenario(cfg, *, rng=None, name: str = "roundtrip") -> Scenario:
     )
 
 
-_GENERATORS = {"path": path_scenario, "goal": goal_scenario,
-               "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
-               "maze": maze_scenario}
+def rocky_terrain_scenario(cfg, *, rng=None, name: str = "rocky_terrain") -> Scenario:
+    """Rugged Mountainous Rocky Floor with dense boulders, jagged stone slabs, and crags."""
+    rng = rng if rng is not None else np.random.default_rng()
+    sc = getattr(cfg, "scenario", None)
+    goal_cfg = getattr(sc, "goal", None) if sc is not None else None
+    x_range = tuple(getattr(goal_cfg, "x_range", (25.0, 25.0))) if goal_cfg else (25.0, 25.0)
+    y_range = tuple(getattr(goal_cfg, "y_range", (0.0, 0.0))) if goal_cfg else (0.0, 0.0)
+
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    goal = np.array([rng.uniform(*x_range), rng.uniform(*y_range)], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 200).astype(np.float32)
+    markers = np.empty((0, 2), dtype=np.float32)
+
+    rock_cfg = getattr(sc, "rocky_terrain", None) if sc is not None else None
+    n_rocks = int(getattr(rock_cfg, "n_rocks", 850)) if rock_cfg else 850
+    max_sz = float(getattr(rock_cfg, "max_rock_size", 0.065)) if rock_cfg else 0.065
+
+    # Dense rocky corridor spanning between spawn and goal
+    mid = 0.5 * (spawn + goal)
+    half_span_x = float(np.abs(goal[0] - spawn[0]) * 0.52)
+    stones = [
+        [float(mid[0]), float(mid[1]), half_span_x, 1.8, n_rocks, max_sz]
+    ]
+
+    return Scenario(
+        kind="rocky_terrain", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=float(np.linalg.norm(goal - spawn)),
+        stones=stones,
+    )
+
+
+_GENERATORS = {
+    "path": path_scenario, "goal": goal_scenario,
+    "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
+    "maze": maze_scenario, "rocky_terrain": rocky_terrain_scenario,
+    "rocky": rocky_terrain_scenario, "mountain": rocky_terrain_scenario,
+}
 
 
 def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> Scenario:

@@ -58,7 +58,7 @@ We compiled the first physical MJCF model using the DeepMind Control Suite (`dm_
 - **Vulcanized Foot Geometry**: Hemispherical foot caps ($r_{\text{foot}} = 0.03\text{ m}$) designated as the exclusive ground-contact geoms, colored with distinct per-bar hues for optical motion tracking.
 
 **The Open-Loop Baseline**:
-We implemented an initial scripted tracking controller (`scripts/heuristic/heuristic_agent.py`, run `radial__20260814_0003__local-813757__heuristic_agent`). While the heuristic controller successfully navigated open sinusoidal paths, it was completely open-loop with respect to obstacles.
+We implemented an initial scripted tracking controller (`scripts/heuristic/heuristic_agent.py`, run `20260814_0003__local-813757__heuristic_agent`). While the heuristic controller successfully navigated open sinusoidal paths, it was completely open-loop with respect to obstacles.
 
 **The Heavy Pillar Obstacle Course**:
 To test collision avoidance, we created an obstacle environment (`obstacle_scenario` in `radial_sphere/scenario.py`):
@@ -71,7 +71,7 @@ To test collision avoidance, we created an obstacle environment (`obstacle_scena
 ### 0.3 The Geodesic Reward Field & Dijkstra Pathfinding Breakthrough
 
 **The Bottleneck (The Euclidean Local-Minimum Trap)**:
-When we trained our first reinforcement learning steering agent (`SteeringEnv`, run `radial__20260814_0010__local-915530__train_rl`) on the Level 1 Serpentine Maze ($28.5\text{ m}$ corridor of $4\text{ cm}$ iron walls), the agent suffered catastrophic failure:
+When we trained our first reinforcement learning steering agent (`SteeringEnv`, run `20260814_0010__local-915530__train_rl`) on the Level 1 Serpentine Maze ($28.5\text{ m}$ corridor of $4\text{ cm}$ iron walls), the agent suffered catastrophic failure:
 - **What Broke**: The agent drove forward, hit the first interior dividing wall, and remained pinned against it indefinitely.
 - **Root Cause**: The standard RL reward formulation relied on straight-line Euclidean distance to the goal:
   $$R_{\text{dist}} = d_{\text{Euclidean}}(\mathbf{p}_{t-1}, \mathbf{g}) - d_{\text{Euclidean}}(\mathbf{p}_t, \mathbf{g})$$
@@ -201,7 +201,7 @@ We integrated a procedural maze compilation pipeline supporting 6 topological ca
 We believed that an unconstrained deep RL policy (PPO) initialized from scratch on the full 60-dimensional continuous action space ($\mathbf{a}_t \in \mathbb{R}^{60}$) could learn coordinated peristaltic rolling gaits purely through environmental reward.
 
 ### What We Did
-- **Run ID**: `radial__20260822_0941__local__train_mujoco_rl__goal__lowlevel_60d_goal__lowlevel__lowlevel_60d_goal`
+- **Run ID**: `20260822_0941__local__train_mujoco_rl__goal__lowlevel_60d_goal__lowlevel__lowlevel_60d_goal`
 - **Config**: `configs/rl/lowlevel_60d_goal.yaml`
 - **Setup**: PPO actor-critic network mapping 163D observation space directly to 60 independent continuous actuator targets with random Gaussian exploration ($\sigma = 1.0$).
 
@@ -229,18 +229,18 @@ We believed that providing structured priors would enable 60D end-to-end learnin
 
 ### What We Did
 - **Runs Tested**:
-  - Method 1: `radial__20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp1_teacher_warmstart`
-  - Method 2: `radial__20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp2_contact_shaping`
-  - Method 3: `radial__20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp3_cpg_residual`
+  - Method 1: `20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp1_teacher_warmstart`
+  - Method 2: `20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp2_contact_shaping`
+  - Method 3: `20260822_1002__local__train_mujoco_rl__goal__lowlevel_60d_exp3_cpg_residual`
 - **Evaluation Script**: `scratch/compare_60d_methods.py` (Fixed seed 777, Goal distance 8.0 m).
 
 ### Results (Measurements)
 
 | Method | Run ID | Success | Steps to Goal | Final Distance (m) | Peak Speed (m/s) |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Method 1: Teacher Warm-Start** | `radial__20260822_1002...exp1` | True | 312 | 0.38 | 0.82 |
-| **Method 2: Contact Shaping** | `radial__20260822_1002...exp2` | False | 1500 (Timeout) | 3.42 | 0.21 |
-| **Method 3: CPG + 60D Residuals** | `radial__20260822_1002...exp3` | **True** | **184** | **0.29** | **1.45** |
+| **Method 1: Teacher Warm-Start** | `20260822_1002...exp1` | True | 312 | 0.38 | 0.82 |
+| **Method 2: Contact Shaping** | `20260822_1002...exp2` | False | 1500 (Timeout) | 3.42 | 0.21 |
+| **Method 3: CPG + 60D Residuals** | `20260822_1002...exp3` | **True** | **184** | **0.29** | **1.45** |
 
 *Teacher Warm-Start vs Contact Shaping vs CPG Residual:*
 
@@ -261,18 +261,18 @@ We hypothesized that adding directional velocity rewards ($+10.0 \times v_{\text
 
 ### What We Did
 - **Runs Tested**:
-  - `radial__20260822_1138__local__train_mujoco_rl__goal__lowlevel_60d_high_directional_reward`
-  - `radial__20260822_1155__local__train_mujoco_rl__goal__lowlevel_60d_exp3_cpg_high_directional_reward`
-  - `radial__20260822_1311__local__train_mujoco_rl__goal__lowlevel_60d_multiaxis_cpg_spin`
+  - `20260822_1138__local__train_mujoco_rl__goal__lowlevel_60d_high_directional_reward`
+  - `20260822_1155__local__train_mujoco_rl__goal__lowlevel_60d_exp3_cpg_high_directional_reward`
+  - `20260822_1311__local__train_mujoco_rl__goal__lowlevel_60d_multiaxis_cpg_spin`
 - **Config**: `configs/rl/lowlevel_60d_multiaxis_cpg_spin.yaml`
 
 ### Results (Measurements)
-- Forward velocity increased from $0.85\text{ m/s}$ to $1.62\text{ m/s}$ (measurement in `radial__20260822_1155`).
-- Multi-axis angular yaw rate reached $12.75\text{ rad/s}$ ($730.5^\circ/\text{s}$) in spin-turn maneuvers (`radial__20260822_1311`).
+- Forward velocity increased from $0.85\text{ m/s}$ to $1.62\text{ m/s}$ (measurement in `20260822_1155`).
+- Multi-axis angular yaw rate reached $12.75\text{ rad/s}$ ($730.5^\circ/\text{s}$) in spin-turn maneuvers (`20260822_1311`).
 
 ### Failure Encountered in Mazes
 - **What broke**: In straight corridors, high velocity was beneficial. However, when entering 90° corridor turns at $> 1.5\text{ m/s}$, high rolling inertia caused the robot to slide outwards and impact walls.
-- **Cost**: Wall collision rate in 45m large maze reached 22.3% (`radial__20260822_1427...ppo`).
+- **Cost**: Wall collision rate in 45m large maze reached 22.3% (`20260822_1427...ppo`).
 - **Rule Produced**: Speed without active deceleration causes corridor wall collisions. The policy must possess active pre-braking before corners.
 
 ---
@@ -288,21 +288,21 @@ We hypothesized that extending the drive action range to $[-1.0, 1.0]$—where n
   - $u_{\text{drive}} = 0$: Neutral mechanical braking ($0.025\text{ m}$ base offset).
   - $u_{\text{drive}} < 0$: Active reverse wave thrust.
 - Reward bonus for corner deceleration: $+1.5 \times \max(0, 1.2 - v_{\text{norm}})$ when approaching sharp turns.
-- **Run ID**: `radial__20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking`
-- **Algorithm Comparison**: PPO vs SAC trained in parallel (`radial__20260822_1427...ppo` vs `radial__20260822_1427...sac`).
+- **Run ID**: `20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking`
+- **Algorithm Comparison**: PPO vs SAC trained in parallel (`20260822_1427...ppo` vs `20260822_1427...sac`).
 
 ### Results (Measurements)
 
 | Algorithm / Model | Run ID | Goal Distance (m) | Wall Contacts | Wall Contact Rate (%) | Episode Return |
 | :--- | :--- | :---: | :---: | :---: | :---: |
-| **Active-Braking RL Policy** | `radial__20260821_2243...` | **0.44** | **0** | **0.0%** | **+22.75** |
-| **PPO (Multi-Axis Resumed)** | `radial__20260822_1427...ppo` | 0.74 | 669 | 22.3% | +49,385.48 |
-| **SAC (Precision Centering)** | `radial__20260822_1427...sac` | 5.03 | 41 | 1.4% | +9,650.68 |
+| **Active-Braking RL Policy** | `20260821_2243...` | **0.44** | **0** | **0.0%** | **+22.75** |
+| **PPO (Multi-Axis Resumed)** | `20260822_1427...ppo` | 0.74 | 669 | 22.3% | +49,385.48 |
+| **SAC (Precision Centering)** | `20260822_1427...sac` | 5.03 | 41 | 1.4% | +9,650.68 |
 
 ![Active Braking Evaluation](assets/active_braking_eval_frame_mid.png)
 
 ### What Changed
-- The active-braking model `radial__20260821_2243` achieved **0 wall contacts (0.0%)** on maze navigation.
+- The active-braking model `20260821_2243` achieved **0 wall contacts (0.0%)** on maze navigation.
 - We selected this active-braking policy to serve as the ground-truth expert generator for demonstration dataset creation.
 
 ---
@@ -318,7 +318,7 @@ We initially believed that an open-loop lookahead path tracker (`desired_directi
 - **Why**: The geometric lookahead planner cut corners and dragged outer rods along wall edges during 90° turns. The behavioral cloning model accurately learned to imitate this wall-scraping behavior.
 
 ### What We Changed (Second Attempt)
-- We replaced the lookahead planner with the trained active-braking policy `radial__20260821_2243` in `scripts/data/generate_maze_demonstrations.py`.
+- We replaced the lookahead planner with the trained active-braking policy `20260821_2243` in `scripts/data/generate_maze_demonstrations.py`.
 - Regenerated all 1,000 demonstration episodes (`datasets/maze_demos/all_maze_demos.h5`, `dataset_index.json`).
 
 ### Verified Dataset Metrics (`datasets/maze_demos/dataset_index.json`)
@@ -338,7 +338,7 @@ We initially believed that an open-loop lookahead path tracker (`desired_directi
 - **Architecture**: `HierarchicalImitationPolicy` (163D input $\to$ shared 3-layer 256D SiLU backbone $\to$ 3D Tanh high-level head + 60D Sigmoid low-level head).
 - **Training**: 50 epochs on GPU (`cuda`), batch size 256, initial learning rate $1 \times 10^{-3}$ with cosine annealing.
 
-### Quantitative Training Metrics (`storage_local/imitation_models/training_history.json`)
+### Quantitative Training Metrics (`storage_local/20260822_1617__imitation_models/training_history.json`)
 
 | Epoch Metric | Initial (Epoch 1) | Best (Epoch 31) | Final (Epoch 50) |
 | :--- | :---: | :---: | :---: |
@@ -349,13 +349,13 @@ We initially believed that an open-loop lookahead path tracker (`desired_directi
 | **Total Validation Loss** | **0.09683** | **0.06275 (Best)** | **0.06518** |
 | **Learning Rate** | $9.99 \times 10^{-4}$ | $3.23 \times 10^{-4}$ | $1.00 \times 10^{-5}$ |
 
-- **Checkpoint Saved**: `storage_local/imitation_models/bc_hierarchical_best.pt`
+- **Checkpoint Saved**: `storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt`
 
 ---
 
 ## 7. Comprehensive Benchmark Across 6 Diverse Maze Topologies
 
-Both the **Pure Imitation Learning Policy** (`bc_hierarchical_best.pt`) and the **Joint 63D Low-Level + High-Level RL Policy** (`radial__20260822_1619...ppo_final.zip`) were evaluated across 6 distinct procedural maze topologies.
+Both the **Pure Imitation Learning Policy** (`bc_hierarchical_best.pt`) and the **Joint 63D Low-Level + High-Level RL Policy** (`20260822_1619...ppo_final.zip`) were evaluated across 6 distinct procedural maze topologies.
 
 - **Evaluator Scripts**: `scratch/evaluate_diverse_mazes_suite.py` and `scratch/evaluate_joint_63d_il_rl_maze_suite.py`.
 
@@ -637,12 +637,12 @@ controller:
 ```
 
 - **Saved Checkpoints**:
-  - `storage_local/imitation_models/bc_hierarchical_best.pt` (Zero-collision baseline).
-  - `storage_local/radial__20260821_2243.../checkpoints/ppo_final.zip` (Active-braking expert).
+  - `storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt` (Zero-collision baseline).
+  - `storage_local/20260821_2243.../checkpoints/ppo_final.zip` (Active-braking expert).
 - **Benchmark Video Directories**:
-  - `storage_local/smooth_cluster_suite/` (Soft-cluster real-time & slow-motion suite).
-  - `storage_local/bird_chase_suite/` (Chasing bird's-eye real-time & slow-motion suite).
-  - `storage_local/fixed_outside_cameras_suite/` (4 fixed edge perimeter videos).
+  - `storage_local/20260823_2316__smooth_cluster_suite/` (Soft-cluster real-time & slow-motion suite).
+  - `storage_local/20260823_2303__bird_chase_suite/` (Chasing bird's-eye real-time & slow-motion suite).
+  - `storage_local/20260823_2258__fixed_outside_cameras_suite/` (4 fixed edge perimeter videos).
 
 ---
 
@@ -728,3 +728,125 @@ Where $\gamma = 0.025$, meaning the front of the sphere sits $2.5\text{ cm}$ low
 2. **Perception Noise Models**:
    $$\mathbf{O}_{\text{lidar}} = \mathbf{O}_{\text{clean}} + \mathcal{N}(0, \sigma_{\text{lidar}}^2)$$
    where $\sigma_{\text{lidar}} = 1.5\text{ cm}$ modeling Time-of-Flight (ToF) range specular scattering.
+
+---
+
+## 22. Industrial Corridor Blockers & Multi-Hazard Obstacle Gauntlet
+
+### Problem & Motivation
+In real-world deployment (e.g. disaster zones, collapsed industrial plants), the robot must navigate past unexpected static obstacles (safety bollards, pillars, floor trenches, wooden planks, and sand pools) without colliding or becoming trapped.
+
+<p align="center">
+  <img src="assets/realistic_bollards_obstacle_arena_dual.png" width="48%" />
+  <img src="assets/classic_maze_side_dual_preview.png" width="48%" />
+</p>
+
+### Implementation Details
+- **Industrial Safety Bollards**: Cast-iron spherical-capped bollards ($R = 0.18\text{m}$, $H = 0.36\text{m}$) stationed inside corridor intersections and open arenas with high-visibility reflective safety banding.
+- **Floor Chasms / Pit Holes**: $20\text{ cm} \times 12\text{ cm}$ floor pits with steel boundary hazard curbs.
+- **Modular Toggle**: `scenario.obstacles.enabled: true/false` and `scenario.hazards.enabled: true/false`.
+
+---
+
+## 23. Traversable Wooden Timber Plank & Curb Vaulting / Passover Reflex
+
+### Kinematic Challenge
+When encountering low ground obstacles (e.g., $4.0\text{ cm} - 7.5\text{ cm}$ wooden timber curbs), naive forward rolling causes leading rods to press against the vertical curb face, stalling the robot.
+
+<p align="center">
+  <img src="assets/wood_plank_2_rear_boost.png" width="48%" />
+  <img src="assets/wood_plank_3_cleared.png" width="48%" />
+</p>
+
+### The Curb Vaulting Reflex (`enable_curb_vaulting: true`, `curb_boost_gain: 2.6`)
+1. **Trailing Push Boost**: Downward-rear rods extend to $2.6\times$ nominal stroke ($14-16\text{ cm}$), exerting high mechanical leverage against the floor and wood top surface.
+2. **Leading Face Clearance**: Leading rods remain strictly tucked to $0.025\text{ m}$ to clear the front vertical face.
+3. **Result**: Successfully vaulted a $7.5\text{ cm}$ timber blocker (half core radius) with peak $Z = 0.432\text{ m}$ ($+25.7\text{ cm}$ lift) and $100\%$ goal reach.
+
+---
+
+## 24. Explosive Radial Jumping Locomotion (Airborne Flight)
+
+### The Physics of Radial Jumping
+With 60 independent telescopic actuators ($F_{\text{max}} = 50\text{ N}$ each, stroke $= 16\text{ cm}$) and a $3.5\text{ kg}$ core, simultaneous explosive firing of 8-10 downward ground rods delivers $400-500\text{ N}$ net vertical thrust ($>6g$ acceleration).
+
+<p align="center">
+  <img src="assets/jump_2_apex_dual.png" width="70%" />
+</p>
+
+### The 4-Phase Jumping State Machine:
+1. **Phase 1: Pre-load / Crouch**: Bottom rods compress to `min_offset` ($0.025\text{ m}$), preloading full travel stroke.
+2. **Phase 2: Synchronized Explosive Thrust**: All downward ground rods simultaneously fire to full $16\text{ cm}$ stroke at peak velocity.
+3. **Phase 3: Airborne Flight / Apex**: Total airborne detachment from floor ($Z_{\text{peak}} = 0.432\text{ m}$, takeoff $v_z = +1.89\text{ m/s}$), tucking perimeter rods in mid-air.
+4. **Phase 4: Compliant Soft Landing**: Bottom rods extend soft landing cushions to dissipate impact kinetic energy upon touchdown.
+
+---
+
+## 25. Extra-Long $80$-Cell Mega-Labyrinth ($79.5\text{m}$ Route)
+
+We expanded the procedural labyrinth generation to an **Extra-Long $10 \times 8$ Grid (80 Cells)**:
+
+<p align="center">
+  <img src="assets/extra_long_maze_overview_dual.png" width="70%" />
+</p>
+
+- **Arena Span**: $15.0\text{ m} \times 12.0\text{ m}$
+- **Corridor Route Length**: **$79.50\text{ meters}$** ($>2.8\times$ longer than standard Level 1 mazes).
+- **Embedded Hazards**: 6 industrial bollards, 3 floor chasms, 3 wooden curbs, and stone pebble zones.
+
+---
+
+## 26. Rugged Mountainous / Rocky Floor Terrain ($25\text{m}$, $900$ Procedural Boulders)
+
+To simulate off-road planetary and disaster terrain, we built a **25-Meter Expansive Rocky Mountain Boulder Field**:
+
+<p align="center">
+  <img src="assets/epic_rocky_25m_quad_midpoint.png" width="70%" />
+</p>
+
+- **Rock Boulder Density**: **$900$ procedural boulders**, angled slate slabs, granite rocks, and crags ($1.5\text{ cm} - 6.5\text{ cm}$ heights).
+- **Geological Materials**: Granite (`#61636B`), Slate (`#3D4047`), Sandstone (`#A3805C`), and Basalt (`#2E3035`).
+- **Contact Mechanics**: Rigid non-penetrating contact (`condim="4"`, $\mu = 1.35$).
+
+---
+
+## 27. Ground-Contacting Underbelly Stance Strategy & Active Terrain-Filtering Suspension
+
+### A. Ground-Contacting Underbelly Stance (`enable_underbelly_contact: true`)
+Rather than tucking bottom rods when $u_{\text{long}} \ge 0$, downward-pointing rods directly beneath the core ($u_z < -0.20$) **actively extend downward to touch the ground and rocks at all times**, forming a continuous multi-legged support cradle beneath the core.
+
+<p align="center">
+  <img src="assets/underbelly_contact_comparison.png" width="70%" />
+</p>
+
+### B. Active Terrain-Filtering Suspension Mechanism (`enable_active_suspension: true`)
+To prevent the robot from jumping or bouncing over jagged rocks, we implemented an active skyhook heave damper and rock-bump absorption system:
+
+<p align="center">
+  <img src="assets/active_suspension_flat_glide_comparison.png" width="70%" />
+</p>
+
+$$\Delta L_{\text{skyhook}} = -k_p (z_{\text{core}} - h_{\text{target}}) - k_d \dot{z}_{\text{core}}$$
+$$\Delta L_{\text{bump}, i} = -k_f \cdot \max(0, F_{N, i} - F_{\text{nominal}})$$
+
+- **Skyhook Altitude & Heave Damping**: Downward rods dynamically retract when climbing over boulders and extend when passing over dips.
+- **Flat-Floor Gliding Result**: Core altitude standard deviation dropped by **$61.5\%$** (from $3.35\text{ cm} \to \mathbf{1.29\text{ cm}}$), enabling the ball to glide flat across 900 boulders as if rolling on a flat floor.
+
+---
+
+## 28. Comprehensive Modular Configuration Table
+
+All developed capabilities are fully modular and independently toggleable in [configs/rl/config.yaml](file:///home/azureuser/telescopic_robot/configs/rl/config.yaml):
+
+| Module | Feature Flag | Default | Description |
+| :--- | :--- | :---: | :--- |
+| **Underbelly Stance** | `controller.enable_underbelly_contact` | `false` | Always extends downward rods under core to touch ground/rocks |
+| **Active Suspension** | `controller.enable_active_suspension` | `false` | Skyhook heave damping & rock-bump absorption for flat gliding |
+| **Curb Vaulting** | `controller.enable_curb_vaulting` | `false` | Boosted rear rod extension ($2.6\times$) to vault over wooden planks |
+| **Adaptive Grouping** | `controller.enable_adaptive_grouping` | `false` | Clustered rear footpad group movement |
+| **Gaussian Stance** | `controller.enable_gaussian_stance` | `false` | Smooth Gaussian load transfer between ground-contacting rods |
+| **Gyro Damping** | `controller.enable_gyroscopic_damping` | `false` | Counteracts gyroscopic roll precession during high-speed turns |
+| **Obstacle Bollards** | `scenario.obstacles.enabled` | `true` | Spawns industrial safety bollards inside arenas/corridors |
+| **Hazards Gauntlet** | `scenario.hazards.enabled` | `false` | Spawns floor pit holes, wooden curbs, stones, and sand pools |
+| **Sim-to-Real** | `sim2real.enabled` | `false` | Enables 50:1 actuator limits, rubber viscoelasticity, noise & latency |
+

@@ -68,7 +68,7 @@ def load_bc_weights_into_sb3(sb3_model, bc_checkpoint_path: Path, device: str = 
 
 def main():
     p = argparse.ArgumentParser(description="Fine-tune RL starting from BC Pretrained Checkpoint")
-    p.add_argument("--bc-ckpt", default="storage_local/imitation_models/bc_hierarchical_best.pt",
+    p.add_argument("--bc-ckpt", default="storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt",
                    help="Path to pre-trained BC checkpoint")
     p.add_argument("--algo", choices=["ppo", "sac"], default="ppo")
     p.add_argument("--mode", choices=["steering", "lowlevel"], default="lowlevel")

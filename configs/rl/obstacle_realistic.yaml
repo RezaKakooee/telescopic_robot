@@ -1,0 +1,61 @@
+defaults:
+  - config
+  - _self_
+
+# =====================================================================
+# Realistic Obstacle Scenario: Photorealistic robot and industrial bollards
+# with physical Sim2Real dynamics and active-braking steering.
+# =====================================================================
+
+robot:
+  appearance_theme: realistic     # Carbon gunmetal, stainless steel, vulcanized rubber
+
+scenario:
+  kind: obstacle                  # Goal finding with heavy blocking industrial bollards
+  randomize: true
+  goal:
+    x_range: [2.5, 5.0]
+    y_range: [-1.5, 1.5]
+  obstacles:
+    n_range: [4, 6]               # 4-6 heavy industrial bollards
+    n_blocking: 2                 # Exactly 2 forced onto the spawn -> goal line
+    radius: 0.22                  # Bollard radius (m)
+    clearance: 0.85               # Keep-out clearance around spawn and goal
+    min_gap: 0.75                 # Passage gap between bollards
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  actuator_v_max: 0.28
+  actuator_a_max: 3.5
+  actuator_force_limit: 50.0
+  battery_p_max: 200.0
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  enable_sensor_noise: true
+  enable_latency: true
+  action_delay_ms: 25.0
+
+controller:
+  back_gain: 1.6
+  base: 0.025
+  lookahead: 0.9
+  enable_curvature_deceleration: true
+  enable_gaussian_stance: true
+  enable_gyroscopic_damping: true
+
+rl:
+  include_drive: true
+  obs_obstacles: 3
+  obs_lidar: 24
+  lidar_range: 3.5
+  obs_endpoints: true
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02
+
+reward:
+  progress_coef: 1.0
+  success: 10.0
+  collision_cost: 0.05

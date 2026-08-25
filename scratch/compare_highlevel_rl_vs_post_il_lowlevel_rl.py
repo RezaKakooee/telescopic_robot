@@ -19,16 +19,16 @@ from radial_sphere import (
 )
 
 scratch_dir = Path("/home/azureuser/.gemini/antigravity-ide/brain/6c6c10ba-f20d-4055-aff1-c75d2495e95b/scratch")
-renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/comparison_highlevel_vs_post_il_lowlevel")
+renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260823_1400__comparison_highlevel_vs_post_il_lowlevel")
 renders_dir.mkdir(parents=True, exist_ok=True)
 
 # 1. Candidate 1: High-Level RL Only (Active Braking Steering)
-highlevel_dir = Path("/home/azureuser/telescopic_robot/storage_local/radial__20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
+highlevel_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
 hl_model_path = highlevel_dir / "checkpoints" / "ppo_final.zip"
 hl_norm_path = highlevel_dir / "checkpoints" / "vecnormalize_final.pkl"
 
 # 2. Candidate 2: Post-IL Joint 60D Low-Level + High-Level RL Policy
-post_il_dir = Path("/home/azureuser/telescopic_robot/storage_local/radial__20260822_1619__local__finetune_rl_from_bc__ppo__lowlevel__maze_level3_large_active_braking_multiaxis")
+post_il_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260822_1619__local__finetune_rl_from_bc__ppo__lowlevel__maze_level3_large_active_braking_multiaxis")
 post_il_model_path = post_il_dir / "checkpoints" / "ppo_final.zip"
 post_il_norm_path = post_il_dir / "checkpoints" / "vecnormalize_final.pkl"
 

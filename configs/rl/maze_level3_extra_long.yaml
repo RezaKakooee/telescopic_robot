@@ -1,0 +1,66 @@
+defaults:
+  - config
+  - _self_
+
+# =====================================================================
+# Extra-Long Mega-Labyrinth Maze Configuration (60m - 100m+ Route)
+# Grid: 10 columns x 8 rows (80 cells total)
+# Full corridor length with industrial bollards, floor holes, & wood curbs
+# =====================================================================
+
+robot:
+  appearance_theme: realistic
+
+scenario:
+  kind: maze
+  randomize: false
+  maze:
+    level: 3                      # Random perfect labyrinth with DFS/Kruskal carving
+    cell: 1.5                     # 1.5m wide corridors
+    cols: 10                      # 10 columns across (15m wide labyrinth)
+    rows: 8                       # 8 rows high (12m deep labyrinth)
+    min_route: 60.0               # Minimum route distance: 60.0 meters
+    max_route: 110.0              # Maximum route distance: 110.0 meters
+    generation_attempts: 200
+    layout_seed: 42               # Fixed seed for reproducible long maze
+    wall_thickness: 0.08
+    wall_height: 0.22
+
+  hazards:
+    enabled: true
+    n_blockers: 6                 # 6 industrial safety bollards in corridor junctions
+    n_gaps: 3                     # 3 floor pit holes / chasms
+    n_steps: 3                    # 3 traversable wooden timber curbs
+    n_stones: 4                   # 4 stone pebble fields
+    n_sand: 3                     # 3 sand friction patches
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  actuator_v_max: 0.28
+  actuator_a_max: 3.5
+  actuator_force_limit: 50.0
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  enable_sensor_noise: true
+
+controller:
+  back_gain: 1.6
+  base: 0.025
+  lookahead: 0.9
+  enable_gaussian_stance: true
+  enable_gyroscopic_damping: true
+  enable_curb_vaulting: true
+  curb_boost_gain: 2.6
+
+env:
+  max_steps: 8000                 # Extended episode budget for 70m+ long trajectory
+
+rl:
+  include_drive: true
+  obs_obstacles: 3
+  obs_lidar: 24
+  lidar_range: 3.5
+  obs_endpoints: true

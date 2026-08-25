@@ -162,54 +162,141 @@ def build_mujoco_scene_mjcf(
             f'friction="0.8 0.005 0.0001" condim="3"/>'
         )
 
-    # 4. Obstacle Pillars (if any)
-    pillars = getattr(scenario, "pillars", None)
-    if pillars is not None and len(pillars) > 0:
-        pillars = np.asarray(pillars, dtype=float).reshape(-1, 3)  # x, y, radius
-        for p_idx, (px, py, pr) in enumerate(pillars):
+    # 4. Obstacle Pillars / Realistic Industrial Blockers (if any)
+    obs_raw = getattr(scenario, "obstacles", None)
+    if obs_raw is None or len(obs_raw) == 0:
+        obs_raw = getattr(scenario, "pillars", None)
+
+    if obs_raw is not None and len(obs_raw) > 0:
+        obs_items = np.asarray(obs_raw, dtype=float)
+        if obs_items.ndim == 1:
+            obs_items = obs_items.reshape(1, -1)
+        for p_idx, p_item in enumerate(obs_items):
+            if len(p_item) == 3:
+                # Cylindrical Industrial Safety Bollard with Hazard Reflective Collar
+                px, py, pr = float(p_item[0]), float(p_item[1]), float(p_item[2])
+                bh = max(wall_height * 1.15, 0.26)
+                base_h = 0.02
+                collar_h = 0.045
+                collar_z = bh * 0.65
+
+                # 4a. Base mounting flange ring
+                walls_xml.append(
+                    f'<geom name="bollard_base_{p_idx}" type="cylinder" pos="{px:.4f} {py:.4f} {base_h / 2:.4f}" '
+                    f'size="{pr * 1.16:.4f} {base_h / 2:.4f}" material="bollard_base_mat" '
+                    f'friction="0.9 0.01 0.001" condim="4"/>'
+                )
+                # 4b. Main structural cast-steel column (primary collision collider)
+                walls_xml.append(
+                    f'<geom name="pillar_{p_idx}" type="cylinder" pos="{px:.4f} {py:.4f} {bh / 2:.4f}" '
+                    f'size="{pr:.4f} {bh / 2:.4f}" material="bollard_mat" '
+                    f'friction="0.9 0.01 0.001" condim="4" priority="1" solref="0.005 1"/>'
+                )
+                # 4c. High-contrast reflective hazard yellow warning collar
+                walls_xml.append(
+                    f'<geom name="bollard_stripe_{p_idx}" type="cylinder" pos="{px:.4f} {py:.4f} {collar_z:.4f}" '
+                    f'size="{pr * 1.018:.4f} {collar_h / 2:.4f}" material="bollard_stripe_mat" '
+                    f'friction="0.9 0.01 0.001" condim="3"/>'
+                )
+                # 4d. Smooth hemispherical dome cap at the top
+                walls_xml.append(
+                    f'<geom name="bollard_cap_{p_idx}" type="sphere" pos="{px:.4f} {py:.4f} {bh - pr * 0.15:.4f}" '
+                    f'size="{pr * 0.98:.4f}" material="bollard_mat" '
+                    f'friction="0.9 0.01 0.001" condim="3"/>'
+                )
+            elif len(p_item) >= 4:
+                # Rectangular Reinforced Barrier Block
+                px, py, phx, phy = float(p_item[0]), float(p_item[1]), float(p_item[2]), float(p_item[3])
+                phz = float(p_item[4]) if len(p_item) > 4 else half_h
+                walls_xml.append(
+                    f'<geom name="barrier_{p_idx}" type="box" pos="{px:.4f} {py:.4f} {phz:.4f}" '
+                    f'size="{phx:.4f} {phy:.4f} {phz:.4f}" material="concrete_barrier_mat" '
+                    f'friction="0.9 0.01 0.001" condim="4" priority="1" solref="0.005 1"/>'
+                )
+
+    # 4b. Ground Step / Rectangular Wooden Planks (passover obstacles)
+    steps = getattr(scenario, "wood_planks", None)
+    if steps is None or len(steps) == 0:
+        steps = getattr(scenario, "steps", None)
+
+    if steps is not None and len(steps) > 0:
+        for s_idx, s_def in enumerate(steps):
+            sx, sy, shx, shy, sh = float(s_def[0]), float(s_def[1]), float(s_def[2]), float(s_def[3]), float(s_def[4])
+
+            # Main rectangular wooden timber body (primary contact surface)
             walls_xml.append(
-                f'<geom name="pillar_{p_idx}" type="cylinder" pos="{px:.4f} {py:.4f} {half_h:.4f}" '
-                f'size="{pr:.4f} {half_h:.4f}" rgba="0.85 0.25 0.25 1" '
+                f'<geom name="wood_plank_{s_idx}" type="box" pos="{sx:.4f} {sy:.4f} {sh / 2.0:.4f}" '
+                f'size="{shx:.4f} {shy:.4f} {sh / 2.0:.4f}" material="wood_plank_mat" '
+                f'friction="1.25 0.01 0.001" condim="4" priority="1" solref="0.008 1" solimp="0.92 0.96 0.002"/>'
+            )
+            # Dark end-grain caps on both lateral ends
+            cap_th = 0.012
+            walls_xml.append(
+                f'<geom name="wood_cap_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy + cap_th / 2:.4f} {sh / 2.0:.4f}" '
+                f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
+                f'friction="1.2 0.01 0.001" condim="3"/>'
+            )
+            walls_xml.append(
+                f'<geom name="wood_cap_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy - cap_th / 2:.4f} {sh / 2.0:.4f}" '
+                f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
+                f'friction="1.2 0.01 0.001" condim="3"/>'
+            )
+            # Heavy steel ground anchor brackets on outer sides
+            br_w = 0.025
+            walls_xml.append(
+                f'<geom name="wood_bracket_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy - br_w / 2:.4f} 0.008" '
+                f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
+                f'friction="0.8 0.005 0.0001" condim="3"/>'
+            )
+            walls_xml.append(
+                f'<geom name="wood_bracket_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy + br_w / 2:.4f} 0.008" '
+                f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
                 f'friction="0.8 0.005 0.0001" condim="3"/>'
             )
 
-    # 4b. Ground Step / Obstacle Blocks (if any)
-    steps = getattr(scenario, "steps", None)
-    if steps is not None and len(steps) > 0:
-        for s_idx, (sx, sy, shx, shy, sh) in enumerate(steps):
-            walls_xml.append(
-                f'<geom name="step_{s_idx}" type="box" pos="{sx:.4f} {sy:.4f} {sh / 2.0:.4f}" '
-                f'size="{shx:.4f} {shy:.4f} {sh / 2.0:.4f}" rgba="0.88 0.45 0.15 1" '
-                f'friction="1.2 0.005 0.0001" condim="3"/>'
-            )
-
-    # 4c. Floor Gaps / Cracks (شکاف) — recessed trench the ball must cross
+    # 4c. Floor Gaps / Holes / Pits in the ground
     # Each gap: (cx, cy, half_x, half_y, depth)
     gaps = getattr(scenario, "gaps", None)
     if gaps is not None and len(gaps) > 0:
-        for g_idx, (gx, gy, ghx, ghy, gdepth) in enumerate(gaps):
-            # Two raised floor platforms on either side with a trench between them
-            # The "gap" is simply a void below the floor plane, so we build raised
-            # edges that the ball can fall between.
-            edge_h = 0.008  # thin raised lip around the gap
+        for g_idx, g_def in enumerate(gaps):
+            gx, gy, ghx, ghy = float(g_def[0]), float(g_def[1]), float(g_def[2]), float(g_def[3])
+            gdepth = float(g_def[4]) if len(g_def) > 4 else 0.10
+
+            edge_w = 0.025
+            edge_h = 0.012
+
+            # Left and Right Steel Hazard Curbs with High-Visibility Edging
             walls_xml.append(
-                f'<geom name="gap_edge_a_{g_idx}" type="box" '
-                f'pos="{gx - ghx - 0.02:.4f} {gy:.4f} {edge_h / 2:.4f}" '
-                f'size="0.02 {ghy:.4f} {edge_h / 2:.4f}" rgba="0.25 0.22 0.20 1" '
-                f'friction="0.6 0.005 0.0001" condim="3"/>'
+                f'<geom name="gap_curb_left_{g_idx}" type="box" '
+                f'pos="{gx - ghx - edge_w / 2:.4f} {gy:.4f} {edge_h / 2:.4f}" '
+                f'size="{edge_w / 2:.4f} {ghy:.4f} {edge_h / 2:.4f}" rgba="0.96 0.78 0.08 1" '
+                f'friction="1.1 0.01 0.001" condim="4" priority="1"/>'
             )
             walls_xml.append(
-                f'<geom name="gap_edge_b_{g_idx}" type="box" '
-                f'pos="{gx + ghx + 0.02:.4f} {gy:.4f} {edge_h / 2:.4f}" '
-                f'size="0.02 {ghy:.4f} {edge_h / 2:.4f}" rgba="0.25 0.22 0.20 1" '
-                f'friction="0.6 0.005 0.0001" condim="3"/>'
+                f'<geom name="gap_curb_right_{g_idx}" type="box" '
+                f'pos="{gx + ghx + edge_w / 2:.4f} {gy:.4f} {edge_h / 2:.4f}" '
+                f'size="{edge_w / 2:.4f} {ghy:.4f} {edge_h / 2:.4f}" rgba="0.96 0.78 0.08 1" '
+                f'friction="1.1 0.01 0.001" condim="4" priority="1"/>'
             )
-            # The gap trench itself (a recessed box below floor level)
+            # Front and Back Steel Boundary Plates
             walls_xml.append(
-                f'<geom name="gap_trench_{g_idx}" type="box" '
-                f'pos="{gx:.4f} {gy:.4f} {-gdepth / 2:.4f}" '
-                f'size="{ghx:.4f} {ghy:.4f} {gdepth / 2:.4f}" rgba="0.12 0.10 0.08 1" '
-                f'friction="0.3 0.005 0.0001" condim="3"/>'
+                f'<geom name="gap_end_a_{g_idx}" type="box" '
+                f'pos="{gx:.4f} {gy - ghy - edge_w / 2:.4f} {edge_h / 2:.4f}" '
+                f'size="{ghx + edge_w:.4f} {edge_w / 2:.4f} {edge_h / 2:.4f}" rgba="0.22 0.24 0.26 1" '
+                f'friction="0.9 0.01 0.001" condim="3"/>'
+            )
+            walls_xml.append(
+                f'<geom name="gap_end_b_{g_idx}" type="box" '
+                f'pos="{gx:.4f} {gy + ghy + edge_w / 2:.4f} {edge_h / 2:.4f}" '
+                f'size="{ghx + edge_w:.4f} {edge_w / 2:.4f} {edge_h / 2:.4f}" rgba="0.22 0.24 0.26 1" '
+                f'friction="0.9 0.01 0.001" condim="3"/>'
+            )
+            # The Deep Dark Chasm Pit Void Floor
+            walls_xml.append(
+                f'<geom name="gap_pit_floor_{g_idx}" type="box" '
+                f'pos="{gx:.4f} {gy:.4f} {-gdepth:.4f}" '
+                f'size="{ghx:.4f} {ghy:.4f} 0.008" rgba="0.05 0.06 0.08 1" '
+                f'friction="0.4 0.005 0.0001" condim="3"/>'
             )
 
     # 4d. Sand Patches — high-friction rough terrain that slows the ball
@@ -239,39 +326,57 @@ def build_mujoco_scene_mjcf(
                     f'friction="2.5 0.2 0.005" condim="3" mass="0.001"/>'
                 )
 
-    # 4e. Scattered Stones / Pebbles on the floor
+    # 4e. Scattered Mountainous Rocks, Boulders, and Stone Slabs on the floor
     # Each stone_zone: (cx, cy, half_x, half_y, n_stones, max_stone_size)
     stones = getattr(scenario, "stones", None)
     if stones is not None and len(stones) > 0:
         for st_idx, stone_def in enumerate(stones):
-            stx, sty, sthx, sthy = stone_def[:4]
+            stx, sty, sthx, sthy = float(stone_def[0]), float(stone_def[1]), float(stone_def[2]), float(stone_def[3])
             n_stones = int(stone_def[4]) if len(stone_def) > 4 else 20
-            max_sz = float(stone_def[5]) if len(stone_def) > 5 else 0.025
-            rng = np.random.RandomState(1337 + st_idx)
+            max_sz = float(stone_def[5]) if len(stone_def) > 5 else 0.045
+            rng = np.random.RandomState(2026 + st_idx)
+            
+            rock_materials = ["granite_rock_mat", "slate_rock_mat", "sandstone_rock_mat", "basalt_rock_mat"]
+
             for si in range(n_stones):
-                ox = stx + rng.uniform(-sthx * 0.9, sthx * 0.9)
-                oy = sty + rng.uniform(-sthy * 0.9, sthy * 0.9)
-                sr = rng.uniform(max_sz * 0.3, max_sz)
-                # Irregular shape: randomly choose box or sphere
-                shape = rng.choice(["sphere", "box"])
-                grey = rng.uniform(0.35, 0.70)
-                if shape == "sphere":
+                ox = stx + rng.uniform(-sthx * 0.95, sthx * 0.95)
+                oy = sty + rng.uniform(-sthy * 0.95, sthy * 0.95)
+                sr = rng.uniform(max_sz * 0.25, max_sz)
+                mat = rock_materials[si % len(rock_materials)]
+
+                # Irregular rock geometry: boxes with 3D tilt, ellipsoids, spheres
+                geom_choice = rng.choice(["tilted_box", "ellipsoid", "sphere"])
+
+                if geom_choice == "tilted_box":
+                    sx2 = rng.uniform(sr * 0.7, sr * 1.4)
+                    sy2 = rng.uniform(sr * 0.7, sr * 1.4)
+                    sz2 = rng.uniform(sr * 0.4, sr * 0.9)
+                    # Random rock angular faceting
+                    roll = rng.uniform(-25.0, 25.0)
+                    pitch = rng.uniform(-25.0, 25.0)
+                    yaw = rng.uniform(0.0, 360.0)
                     walls_xml.append(
-                        f'<geom name="stone_{st_idx}_{si}" type="sphere" '
-                        f'pos="{ox:.4f} {oy:.4f} {sr:.4f}" size="{sr:.4f}" '
-                        f'rgba="{grey:.2f} {grey * 0.95:.2f} {grey * 0.90:.2f} 1" '
-                        f'friction="1.5 0.05 0.002" condim="3" mass="0.005"/>'
+                        f'<geom name="rock_{st_idx}_{si}" type="box" '
+                        f'pos="{ox:.4f} {oy:.4f} {sz2 * 0.85:.4f}" '
+                        f'size="{sx2:.4f} {sy2:.4f} {sz2:.4f}" '
+                        f'euler="{roll:.1f} {pitch:.1f} {yaw:.1f}" material="{mat}" '
+                        f'friction="1.35 0.02 0.005" condim="4" priority="1" solref="0.008 1"/>'
+                    )
+                elif geom_choice == "ellipsoid":
+                    sx2 = rng.uniform(sr * 0.8, sr * 1.3)
+                    sy2 = rng.uniform(sr * 0.8, sr * 1.3)
+                    sz2 = rng.uniform(sr * 0.5, sr * 0.8)
+                    walls_xml.append(
+                        f'<geom name="rock_{st_idx}_{si}" type="ellipsoid" '
+                        f'pos="{ox:.4f} {oy:.4f} {sz2:.4f}" '
+                        f'size="{sx2:.4f} {sy2:.4f} {sz2:.4f}" material="{mat}" '
+                        f'friction="1.35 0.02 0.005" condim="4" priority="1" solref="0.008 1"/>'
                     )
                 else:
-                    sx2 = rng.uniform(sr * 0.6, sr * 1.2)
-                    sy2 = rng.uniform(sr * 0.6, sr * 1.2)
-                    sz2 = rng.uniform(sr * 0.4, sr * 0.8)
                     walls_xml.append(
-                        f'<geom name="stone_{st_idx}_{si}" type="box" '
-                        f'pos="{ox:.4f} {oy:.4f} {sz2:.4f}" '
-                        f'size="{sx2:.4f} {sy2:.4f} {sz2:.4f}" '
-                        f'rgba="{grey:.2f} {grey * 0.95:.2f} {grey * 0.90:.2f} 1" '
-                        f'friction="1.5 0.05 0.002" condim="3" mass="0.008"/>'
+                        f'<geom name="rock_{st_idx}_{si}" type="sphere" '
+                        f'pos="{ox:.4f} {oy:.4f} {sr * 0.8:.4f}" size="{sr:.4f}" material="{mat}" '
+                        f'friction="1.35 0.02 0.005" condim="4" priority="1" solref="0.008 1"/>'
                     )
 
 
@@ -335,6 +440,20 @@ def build_mujoco_scene_mjcf(
         <material name="goal_mat" rgba="0.0 0.85 0.90 0.60" reflectance="0.1"/>
         <material name="goal_pad_mat" rgba="0.0 0.85 0.90 0.35" reflectance="0.05"/>
         <material name="core_mat" rgba="{core_rgba}" specular="0.6" shininess="0.8" reflectance="0.12"/>
+        <!-- Realistic Industrial Blocker Materials -->
+        <material name="bollard_mat" rgba="0.20 0.22 0.25 1" specular="0.5" shininess="0.7" reflectance="0.12"/>
+        <material name="bollard_stripe_mat" rgba="0.96 0.78 0.08 1" specular="0.6" shininess="0.85" reflectance="0.22"/>
+        <material name="bollard_base_mat" rgba="0.14 0.15 0.17 1" specular="0.3" shininess="0.4"/>
+        <material name="concrete_barrier_mat" rgba="0.58 0.56 0.54 1" specular="0.1" shininess="0.1" reflectance="0.03"/>
+        <!-- Realistic Wooden Plank Materials -->
+        <material name="wood_plank_mat" rgba="0.56 0.36 0.20 1" specular="0.2" shininess="0.3" reflectance="0.04"/>
+        <material name="wood_dark_mat" rgba="0.40 0.24 0.12 1" specular="0.1" shininess="0.2"/>
+        <material name="wood_bracket_mat" rgba="0.18 0.19 0.22 1" specular="0.4" shininess="0.6"/>
+        <!-- Realistic Mountainous Rock Materials -->
+        <material name="granite_rock_mat" rgba="0.38 0.39 0.42 1" specular="0.3" shininess="0.4"/>
+        <material name="slate_rock_mat" rgba="0.24 0.25 0.28 1" specular="0.35" shininess="0.5"/>
+        <material name="sandstone_rock_mat" rgba="0.64 0.50 0.36 1" specular="0.15" shininess="0.2"/>
+        <material name="basalt_rock_mat" rgba="0.18 0.19 0.21 1" specular="0.25" shininess="0.3"/>
     </asset>
 
     <worldbody>

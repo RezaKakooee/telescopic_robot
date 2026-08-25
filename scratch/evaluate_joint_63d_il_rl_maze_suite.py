@@ -19,7 +19,7 @@ from radial_sphere import (
 
 # 1. Load the Fine-Tuned Joint IL + RL Model (60D Low-Level + High-Level)
 base_dir = Path("/home/azureuser/telescopic_robot/storage_local")
-matching = sorted(base_dir.glob("radial__*__finetune_rl_from_bc__ppo__lowlevel*"))
+matching = sorted(base_dir.glob("*__finetune_rl_from_bc__ppo__lowlevel*"))
 assert len(matching) > 0, "No fine-tuned BC->RL runs found"
 exp_dir = matching[-1]
 
@@ -29,7 +29,7 @@ norm_path = exp_dir / "checkpoints" / "vecnormalize_final.pkl"
 print(f"Loaded Joint 60D Low-Level + High-Level IL+RL Checkpoint from:\n  {exp_dir}")
 
 scratch_dir = Path("/home/azureuser/.gemini/antigravity-ide/brain/6c6c10ba-f20d-4055-aff1-c75d2495e95b/scratch")
-renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/joint_63d_il_rl_suite")
+renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260823_0104__joint_63d_il_rl_suite")
 renders_dir.mkdir(parents=True, exist_ok=True)
 
 # 6 Diverse Maze Topologies

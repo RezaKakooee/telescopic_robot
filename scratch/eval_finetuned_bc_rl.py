@@ -16,7 +16,7 @@ from radial_sphere import (
 )
 
 base_dir = Path("/home/azureuser/telescopic_robot/storage_local")
-matching = sorted(base_dir.glob("radial__*__finetune_rl_from_bc__ppo__lowlevel*"))
+matching = sorted(base_dir.glob("*__finetune_rl_from_bc__ppo__lowlevel*"))
 assert len(matching) > 0, "No fine-tuned BC RL runs found"
 exp_dir = matching[-1]
 

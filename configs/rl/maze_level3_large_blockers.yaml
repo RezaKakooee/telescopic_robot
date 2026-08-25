@@ -1,0 +1,23 @@
+defaults:
+  - maze_level3_large_active_braking
+  - _self_
+
+# Large 7x6 Maze with Corridor Industrial Bollards & Realistic Blockers
+robot:
+  appearance_theme: realistic
+
+scenario:
+  hazards:
+    enabled: true
+    n_gaps: 2
+    n_sand: 2
+    n_stones: 2
+    n_steps: 1
+    n_blockers: 3      # 3 industrial safety bollards inside corridor junctions
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  enable_viscoelastic_feet: true
+  enable_sensor_noise: true
+  enable_latency: true

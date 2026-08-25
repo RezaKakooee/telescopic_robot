@@ -1,0 +1,56 @@
+defaults:
+  - config
+  - _self_
+
+# =====================================================================
+# Rugged Mountainous / Rocky Floor Terrain (Crazy Rocky Surface)
+# Features:
+# 1. 240+ Scattered multi-faceted stone boulders, rock slabs, & crags
+# 2. Granite, slate, basalt, and sandstone mineral materials
+# 3. Viscoelastic rubber feet active suspension conformability
+# =====================================================================
+
+robot:
+  appearance_theme: realistic     # Carbon gunmetal, stainless steel rods, vulcanized rubber feet
+
+scenario:
+  kind: rocky_terrain             # Dedicated rocky floor scenario
+  randomize: false
+  goal:
+    x_range: [25.0, 25.0]         # 👈 25.0 meters long expansive mountain course!
+    y_range: [0.0, 0.0]
+  rocky_terrain:
+    n_rocks: 900                  # 👈 900 procedural stone boulders and jagged slabs
+    max_rock_size: 0.065          # Up to 6.5 cm boulder crags
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  actuator_v_max: 0.28
+  actuator_a_max: 3.5
+  actuator_force_limit: 50.0
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  enable_sensor_noise: true
+
+controller:
+  back_gain: 2.0
+  base: 0.025
+  lookahead: 0.9
+  enable_gaussian_stance: false   # Disabling pure rear grouping in favor of dedicated underbelly touching stance
+  enable_adaptive_grouping: false
+  enable_underbelly_contact: true  # 👈 Always extend downward rods directly underneath the core to touch the floor/rocks
+  underbelly_stance_gain: 0.42     # Solid ground-touching extension depth (42% stroke)
+  underbelly_threshold_z: -0.20    # Applies strictly to rods pointing into lower hemisphere (u_z < -0.20)
+  # --- Active Terrain-Filtering Suspension Mechanism ---
+  enable_active_suspension: true   # 👈 Active skyhook & rock-bump absorption to glide flat like a table
+  target_ride_height: 0.28         # Flat-plane target core height (m)
+  suspension_kp: 0.75              # Skyhook proportional altitude regulation
+  suspension_kd: 0.15              # Skyhook heave velocity damper (stops jumping/bouncing)
+  suspension_force_compliance: 0.0018 # Force compliance absorbing sharp rock impacts
+  nominal_support_force: 10.0      # Nominal rod support load (N)
+  enable_gyroscopic_damping: true
+  enable_curb_vaulting: true
+  curb_boost_gain: 2.6

@@ -18,10 +18,10 @@ from radial_sphere import (
 )
 
 scratch_dir = Path("/home/azureuser/.gemini/antigravity-ide/brain/6c6c10ba-f20d-4055-aff1-c75d2495e95b/scratch")
-renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/six_lowlevel_jobs_benchmark")
+renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260823_1540__six_lowlevel_jobs_benchmark")
 
 # Load model from 20260821_1154
-old_model_dir = Path("/home/azureuser/telescopic_robot/storage_local/radial__20260821_1154__local__train_mujoco_rl__maze__maze_level3_large_fixed__maze_level3_large_fixed")
+old_model_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260821_1154__local__train_mujoco_rl__maze__maze_level3_large_fixed__maze_level3_large_fixed")
 old_model_path = old_model_dir / "checkpoints" / "ppo_final.zip"
 old_norm_path = old_model_dir / "checkpoints" / "vecnormalize_final.pkl"
 

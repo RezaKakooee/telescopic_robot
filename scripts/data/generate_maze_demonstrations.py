@@ -51,7 +51,7 @@ def rollout_single_episode(args_tuple) -> dict:
     sc = generate_scenario("maze", cfg, seed=ep_seed)
 
     # Load expert active-braking policy
-    expert_dir = Path("/home/azureuser/telescopic_robot/storage_local/radial__20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
+    expert_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260821_2243__local__train_mujoco_rl__maze__maze_level3_large_active_braking__maze_level3_large_active_braking")
     expert_model_path = expert_dir / "checkpoints" / "ppo_final.zip"
     expert_norm_path = expert_dir / "checkpoints" / "vecnormalize_final.pkl"
     

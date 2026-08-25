@@ -45,10 +45,10 @@ controller moves the 60 bars. See `docs/ENV_OVERVIEW.md` for the env details.
 
 ## Where things are (key runs under storage_local/)
 
-- Maze RL model: `radial__20260813_1132__20431881__train_rl/`
+- Maze RL model: `20260813_1132__20431881__train_rl/`
   (`checkpoints/final.zip` + `vecnormalize.pkl` — both needed for eval)
-- Maze RL video: `radial__20260813_1351__local__eval_rl__maze/renders/`
-- Heuristic stuck-in-maze video: `radial__20260813_1129__local__heuristic_agent__maze/renders/`
+- Maze RL video: `20260813_1351__local__eval_rl__maze/renders/`
+- Heuristic stuck-in-maze video: `20260813_1129__local__heuristic_agent__maze/renders/`
 - Obstacle RL model: `radial_sphere__20260812_2305__20381975__rl_train__obstacle/`
 - SLURM job logs: `storage_local/sci_out/<run id>.out`
 - wandb project: `telescopic_robot` (run name = run id)

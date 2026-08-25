@@ -73,6 +73,23 @@ controller:               # physical peristaltic cam locomotion
   enable_adaptive_grouping: false
   group_size: 10
 
+  # 7. Obstacle Passover / High-Step Curb Vaulting (Deep rear rod extension)
+  enable_curb_vaulting: false          # When true, opens up rear rods even more to vault over ground obstacles
+  curb_boost_gain: 2.4                 # Multiplier for rear push stroke during passover
+
+  # 8. Ground-Contacting Underbelly Stance Strategy (Continuous ground-touching underneath the ball)
+  enable_underbelly_contact: false     # When true, downward rods directly beneath the core always extend to touch ground/rocks
+  underbelly_stance_gain: 0.42         # Extension stroke depth for underbelly contact rods (0.0 to 1.0)
+  underbelly_threshold_z: -0.20        # Spatial threshold: strictly applies to rods in lower hemisphere (u_z < -0.20)
+
+  # 9. Active Terrain-Filtering Suspension (Flat-floor gliding over rocks & bumps)
+  enable_active_suspension: false      # When true, underbelly rods actively absorb bumps & regulate ride height
+  target_ride_height: 0.28             # Desired constant core altitude (m)
+  suspension_kp: 0.75                  # Proportional altitude regulation gain
+  suspension_kd: 0.15                  # Derivative vertical heave damper (cancels bounce/jump)
+  suspension_force_compliance: 0.0018  # Rock-bump compliance for individual protruding boulders
+  nominal_support_force: 10.0          # Target load per supporting rod (N)
+
 # --- Modular 100% Sim-to-Real Hardware Modeling (Default: false) ---
 sim2real:
   enabled: false                       # Master Sim-to-Real switch
@@ -114,11 +131,19 @@ scenario:                 # what the agent is asked to do (see scenario_generato
     x_range: [2.0, 5.0]
     y_range: [-1.5, 1.5]
   obstacles:              # obstacle kind: random pillars between spawn and goal
+    enabled: true         # Set false to disable blockers/pillars (spawns 0 blockers)
     n_range: [3, 6]       # pillars per episode (max defines the sim objects)
     n_blocking: 2         # of those, this many sit ON the spawn→goal line
     radius: 0.25          # pillar radius (m); fixed — the sim world is built once
     clearance: 0.7        # keep-out distance around spawn and goal (m)
     min_gap: 0.7          # smallest surface gap between two pillars (m)
+  hazards:                # maze ground hazards & corridor blockers
+    enabled: false        # Set true to enable maze hazards and corridor blockers
+    n_blockers: 0         # Industrial safety bollards inside maze corridors (0 = disabled)
+    n_gaps: 0             # Floor trenches/cracks (0 = disabled)
+    n_sand: 0             # Sand pools (0 = disabled)
+    n_stones: 0           # Stone/pebble fields (0 = disabled)
+    n_steps: 0            # Step curbs (0 = disabled)
   maze:                   # maze kind: corridors of thin iron walls
     level: 1              # 1 = serpentine corridor | 3 = random perfect maze
     cell: 1.5             # corridor width (m); ball is ~0.5 m wide

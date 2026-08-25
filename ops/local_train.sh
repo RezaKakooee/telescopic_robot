@@ -52,7 +52,7 @@ run_job() {
 
 if [ "${RADIAL_LOCAL_WORKER:-0}" != 1 ]; then
     output_dir="$PROJECT_ROOT/storage_local/sci_out"
-    run_id="radial__$(date +%Y%m%d_%H%M)__local_$$__$(basename "$PY_SCRIPT")"
+    run_id="$(date +%Y%m%d_%H%M)__local_$$__$(basename "$PY_SCRIPT")"
     output_file="$output_dir/$run_id.out"
 
     mkdir -p "$output_dir"

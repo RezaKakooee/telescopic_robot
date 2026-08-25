@@ -116,6 +116,22 @@ def bar_targets(
     # --- Adaptive Grouping Enhancement ---
     enable_adaptive_grouping: bool = False,
     group_size: int = 10,
+    # --- Obstacle Passover / High-Step Curb Vaulting ---
+    enable_curb_vaulting: bool = False,
+    curb_boost_gain: float = 2.4,
+    # --- Ground-Contacting Underbelly Stance Strategy ---
+    enable_underbelly_contact: bool = False,
+    underbelly_stance_gain: float = 0.55,
+    underbelly_threshold_z: float = -0.20,
+    # --- Active Terrain-Filtering Suspension Mechanism (Skyhook & Bump Absorber) ---
+    enable_active_suspension: bool = False,
+    core_z: float = 0.28,
+    core_vz: float = 0.0,
+    target_ride_height: float = 0.28,
+    suspension_kp: float = 0.65,
+    suspension_kd: float = 0.12,
+    suspension_force_compliance: float = 0.0015,
+    nominal_support_force: float = 10.0,
 ) -> np.ndarray:
     """Compute per-bar extension targets based on physical peristaltic cam mechanics."""
     R = quat_to_rotmat(quat)
@@ -161,11 +177,50 @@ def bar_targets(
     else:
         wave = np.clip((rear ** 1.3) * down_bias * lat_tuck * back_gain, 0.0, 1.0)
 
-    # Strict spatial tucking: front (u_long >= 0) and top (u_z >= 0.15) rods are strictly locked to min_offset
+    # Strict spatial tucking for non-underbelly rods: front (u_long >= 0) and top (u_z >= 0.15)
     wave[u_long >= 0.0] = 0.0
     wave[u_z >= 0.15] = 0.0
 
+    # Obstacle Passover: boost rear trailing push rods to vault over ground obstacles
+    if enable_curb_vaulting:
+        is_rear_pusher = (u_long < -0.08) & (u_z < 0.08)
+        wave[is_rear_pusher] = np.clip(wave[is_rear_pusher] * curb_boost_gain, 0.0, 1.0)
+        # Keep leading rods cleanly tucked so they do not catch the front lip
+        wave[u_long > -0.05] = 0.0
+
+    # Ground-Contacting Underbelly Stance Strategy:
+    # Rods directly underneath the ball (u_z < threshold) actively extend downward
+    # to maintain continuous solid ground/rock contact support beneath the core,
+    # with a propulsion gradient so rear underbelly rods drive forward while bottom rods support weight.
+    if enable_underbelly_contact:
+        is_underbelly = u_z < underbelly_threshold_z
+        depth_fraction = np.clip((-u_z - abs(underbelly_threshold_z)) / (1.0 - abs(underbelly_threshold_z)), 0.0, 1.0)
+        # Forward rolling gradient: center/rear underbelly rods provide support & drive, leading rods gently conform
+        roll_gradient = np.clip(1.0 - 0.75 * np.maximum(u_long, 0.0), 0.30, 1.0)
+        stance_wave = depth_fraction * underbelly_stance_gain * roll_gradient
+        wave = np.where(is_underbelly, np.maximum(wave, stance_wave), wave)
+
     targets = min_offset + drive * (max_extend - min_offset) * wave
+
+    # Active Terrain-Filtering Suspension Mechanism:
+    # 1. Skyhook Core Heave Canceling: Regulates core vertical height to target_ride_height (e.g. 0.28m)
+    #    When climbing over boulders, downward rods actively yield/retract so the core stays flat.
+    # 2. Local Bump Absorber: Individual rods hitting protruding rock peaks absorb load without lifting core.
+    if enable_active_suspension:
+        is_downward = u_z < underbelly_threshold_z
+        z_err = float(core_z - target_ride_height)
+        # Skyhook stroke adjustment: retracts if core is pushed up, extends if core is falling
+        delta_skyhook = -float(suspension_kp * z_err + suspension_kd * core_vz)
+        
+        # Local bump absorption if contact forces are provided
+        if contact_forces is not None and len(contact_forces) == len(targets):
+            excess_force = np.maximum(0.0, contact_forces - nominal_support_force)
+            delta_bump = -suspension_force_compliance * excess_force
+        else:
+            delta_bump = 0.0
+
+        suspension_delta = np.where(is_downward, delta_skyhook + delta_bump, 0.0)
+        targets = np.clip(targets + suspension_delta, min_offset, max_extend)
 
     # 2. Dynamic Camber Banking for Centrifugal Drift Cancellation
     if enable_camber_banking and abs(yaw_rate) > 0.01:

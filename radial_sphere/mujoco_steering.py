@@ -148,6 +148,7 @@ class MujocoSteeringEnv(gym.Env):
         
         self.power_history = []
         self.max_vel_history = []
+        self._last_bar_targets = None
 
     # ------------------------------------------------------------------
     # Goal Frame Heading & Observation
@@ -186,9 +187,8 @@ class MujocoSteeringEnv(gym.Env):
             rel_goal = goal_xy - ball_xy
             parts.extend([ball_xy, goal_xy, start_xy, rel_goal])
 
-        # Obstacle slots (padding with FAR_PILLAR)
-        for _ in range(self.k_obstacles):
-            parts.append(np.array(FAR_PILLAR, dtype=np.float32))
+        if self.k_obstacles > 0:
+            parts.append(self._obstacle_obs(info["ball_xy"], g))
 
         # Raycast LiDAR (in goal frame)
         lidar_ranges = self.env.raycast_lidar(
@@ -199,6 +199,26 @@ class MujocoSteeringEnv(gym.Env):
         parts.append(lidar_ranges)
 
         return np.concatenate([np.asarray(p, dtype=np.float32).reshape(-1) for p in parts])
+
+    def _obstacle_obs(self, ball_xy: np.ndarray, g: np.ndarray) -> np.ndarray:
+        """K nearest pillars/blockers as (forward, lateral, surface gap) in the goal frame."""
+        slots = np.tile(np.asarray(FAR_PILLAR, dtype=np.float32), (self.k_obstacles, 1))
+        obstacles = getattr(self.env.scenario, "obstacles", None)
+        if obstacles is None or len(obstacles) == 0:
+            obstacles = getattr(self.env.scenario, "pillars", None)
+        if obstacles is not None and len(obstacles) > 0:
+            obs_arr = np.asarray(obstacles, dtype=np.float32)
+            if obs_arr.ndim == 1:
+                obs_arr = obs_arr.reshape(1, -1)
+            rel = obs_arr[:, :2] - ball_xy[None, :]
+            d = np.linalg.norm(rel, axis=1)
+            order = np.argsort(d)[: self.k_obstacles]
+            for s, j in enumerate(order):
+                fwd = float(rel[j, 0] * g[0] + rel[j, 1] * g[1])
+                lat = float(g[0] * rel[j, 1] - g[1] * rel[j, 0])
+                rad = float(obs_arr[j, 2]) if obs_arr.shape[1] > 2 else 0.25
+                slots[s] = (fwd, lat, d[j] - rad)
+        return slots.reshape(-1)
 
     # ------------------------------------------------------------------
     # Gym API
@@ -228,6 +248,7 @@ class MujocoSteeringEnv(gym.Env):
             for _ in range(self.delay_steps):
                 self.action_queue.append(np.array([1.0, 0.0], dtype=np.float32))
 
+        self._last_bar_targets = None
         return full_obs, info
 
     def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
@@ -327,6 +348,12 @@ class MujocoSteeringEnv(gym.Env):
 
             enable_adaptive_grouping = bool(getattr(self.ctrl, "enable_adaptive_grouping", False))
             group_size = int(getattr(self.ctrl, "group_size", 10))
+            enable_curb_vaulting = bool(getattr(self.ctrl, "enable_curb_vaulting", False))
+            curb_boost_gain = float(getattr(self.ctrl, "curb_boost_gain", 2.4))
+            enable_underbelly_contact = bool(getattr(self.ctrl, "enable_underbelly_contact", False))
+            underbelly_stance_gain = float(getattr(self.ctrl, "underbelly_stance_gain", 0.55))
+            underbelly_threshold_z = float(getattr(self.ctrl, "underbelly_threshold_z", -0.20))
+            enable_active_suspension = bool(getattr(self.ctrl, "enable_active_suspension", False))
 
             ideal_targets = bar_targets(
                 quat=info["quat"],
@@ -366,6 +393,19 @@ class MujocoSteeringEnv(gym.Env):
                 actuator_max_vel=actuator_max_vel,
                 enable_adaptive_grouping=enable_adaptive_grouping,
                 group_size=group_size,
+                enable_curb_vaulting=enable_curb_vaulting,
+                curb_boost_gain=curb_boost_gain,
+                enable_underbelly_contact=enable_underbelly_contact,
+                underbelly_stance_gain=underbelly_stance_gain,
+                underbelly_threshold_z=underbelly_threshold_z,
+                enable_active_suspension=enable_active_suspension,
+                core_z=float(self.env.data.qpos[2]),
+                core_vz=float(self.env.data.qvel[2]),
+                target_ride_height=float(getattr(self.ctrl, "target_ride_height", 0.28)),
+                suspension_kp=float(getattr(self.ctrl, "suspension_kp", 0.65)),
+                suspension_kd=float(getattr(self.ctrl, "suspension_kd", 0.12)),
+                suspension_force_compliance=float(getattr(self.ctrl, "suspension_force_compliance", 0.0015)),
+                nominal_support_force=float(getattr(self.ctrl, "nominal_support_force", 10.0)),
             )
             self._last_bar_targets = ideal_targets.copy()
 

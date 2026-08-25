@@ -1,0 +1,60 @@
+defaults:
+  - config
+  - _self_
+
+# =====================================================================
+# Multi-Hazard Physical Obstacle Gauntlet
+# Features:
+# 1. Tall Wooden Timber Curb (7.5 cm height - double height blocker)
+# 2. Floor Pit Chasm / Hole in the Ground (22 cm wide, 12 cm deep)
+# 3. Scattered Stone Boulders / Pebble Field
+# 4. Sand Granule Friction Patch
+# =====================================================================
+
+robot:
+  appearance_theme: realistic     # Carbon gunmetal, stainless steel, vulcanized rubber
+
+scenario:
+  kind: goal
+  randomize: false
+  goal:
+    x_range: [4.6, 4.6]
+    y_range: [0.0, 0.0]
+  wood_plank:
+    enabled: true                 # Tall Rectangular Wooden Blocker
+    pos: [2.0, 0.0]               # Stationed at x = 2.0 m
+    half_width: 0.11              # 22 cm wide timber
+    half_length: 0.85             # 1.7 m long beam
+    height: 0.075                 # 👈 7.5 cm high blocker (half robot core radius!)
+  hazards:
+    enabled: true                 # Master hazard switch
+    n_gaps: 1                     # Floor Hole / Pit Chasm
+    gaps:
+      - [1.10, 0.0, 0.10, 0.80, 0.12]  # 20 cm wide floor hole at x = 1.10 m, 12 cm deep
+    n_stones: 1                   # Stone Boulder Field
+    stones:
+      - [3.05, 0.0, 0.35, 0.55, 18, 0.035] # Rock field at x = 3.05 m (18 boulders)
+    n_sand: 1                     # Sand Patch
+    sand_patches:
+      - [3.85, 0.0, 0.30, 0.60]   # Sand patch at x = 3.85 m
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  actuator_v_max: 0.28
+  actuator_a_max: 3.5
+  actuator_force_limit: 50.0
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  enable_sensor_noise: true
+
+controller:
+  back_gain: 1.6
+  base: 0.025
+  lookahead: 0.9
+  enable_gaussian_stance: true
+  enable_gyroscopic_damping: true
+  enable_curb_vaulting: true      # 👈 High-step vaulting reflex
+  curb_boost_gain: 2.8            # 👈 2.8x rear push stroke boost for tall obstacles

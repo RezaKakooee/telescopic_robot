@@ -123,12 +123,17 @@ class MujocoRadialSphereEnv(gym.Env):
                 self.sleeve_geom_ids.add(sid)
                 self.rod_geom_map[sid] = k
 
-        # Wall geom IDs
+        # Wall & Obstacle geom IDs
         self.wall_geom_ids = set()
+        self.obstacle_geom_ids = set()
         for i in range(self.model.ngeom):
             gname = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, i)
-            if gname and (gname.startswith("wall_") or gname.startswith("pillar_")):
-                self.wall_geom_ids.add(i)
+            if gname:
+                if gname.startswith(("wall_", "step_")):
+                    self.wall_geom_ids.add(i)
+                elif gname.startswith(("pillar_", "bollard_", "obstacle_", "barrier_")):
+                    self.wall_geom_ids.add(i)
+                    self.obstacle_geom_ids.add(i)
 
         # Robot all geom IDs
         self.robot_geom_ids = {self.core_geom_id} | self.foot_geom_ids | self.sleeve_geom_ids
@@ -228,15 +233,17 @@ class MujocoRadialSphereEnv(gym.Env):
         # 2. Physics Simulation Loop (action_repeat sub-steps)
         wall_contact = False
         goal_contact = False
+        obstacle_contact = False
         total_substep_reward = 0.0
 
         for _ in range(self.action_repeat):
             mujoco.mj_step(self.model, self.data)
 
             # Check contacts
-            sub_wall, sub_goal = self._check_contacts()
+            sub_wall, sub_goal, sub_obs = self._check_contacts()
             wall_contact = wall_contact or sub_wall
             goal_contact = goal_contact or sub_goal
+            obstacle_contact = obstacle_contact or sub_obs
 
             # Compute dense reward
             curr_d = self._nav_distance(self.data.qpos[0:2])
@@ -257,7 +264,12 @@ class MujocoRadialSphereEnv(gym.Env):
         terminated = success
         truncated = bool(self.step_count >= self.max_steps)
 
-        self._info = self._get_info(wall_contact=wall_contact, goal_contact=goal_contact, success=success)
+        self._info = self._get_info(
+            wall_contact=wall_contact,
+            goal_contact=goal_contact,
+            obstacle_contact=obstacle_contact,
+            success=success,
+        )
         obs = self._get_obs()
 
         return obs, float(total_substep_reward), terminated, truncated, self._info
@@ -268,6 +280,7 @@ class MujocoRadialSphereEnv(gym.Env):
     def _check_contacts(self) -> tuple[bool, bool]:
         """Inspect MuJoCo contacts for robot-wall and robot-goal collisions."""
         wall_contact = False
+        obstacle_contact = False
         goal_contact = False
 
         for i in range(self.data.ncon):
@@ -280,10 +293,12 @@ class MujocoRadialSphereEnv(gym.Env):
             other = g2 if r1 else g1
             if other in self.wall_geom_ids:
                 wall_contact = True
+                if other in self.obstacle_geom_ids:
+                    obstacle_contact = True
             elif other == self.goal_geom_id:
                 goal_contact = True
 
-        return wall_contact, goal_contact
+        return wall_contact, goal_contact, obstacle_contact
 
     def get_rod_contact_forces(self) -> np.ndarray:
         """Extract normal contact force magnitudes for each of the 60 telescopic rods."""
@@ -322,7 +337,7 @@ class MujocoRadialSphereEnv(gym.Env):
         joint_pos = self.data.qpos[7:7 + self.n_bars].astype(np.float32)
         return self.obs_model.observe(root_state, joint_pos)
 
-    def _get_info(self, wall_contact: bool = False, goal_contact: bool = False, success: bool = False) -> dict[str, Any]:
+    def _get_info(self, wall_contact: bool = False, goal_contact: bool = False, obstacle_contact: bool = False, success: bool = False) -> dict[str, Any]:
         ball_xy = self.data.qpos[0:2].copy().astype(np.float32)
         quat = self.data.qpos[3:7].copy().astype(np.float32)
         lin_vel = self.data.qvel[0:3].copy().astype(np.float32)
@@ -339,6 +354,7 @@ class MujocoRadialSphereEnv(gym.Env):
             "distance": float(dist),
             "goal_contact": bool(goal_contact),
             "wall_contact": bool(wall_contact),
+            "obstacle_contact": bool(obstacle_contact),
             "success": bool(success),
             "step_count": int(self.step_count),
         }
@@ -447,7 +463,9 @@ class MujocoRadialSphereEnv(gym.Env):
             img_e = self.render(camera_name="fixed_edge_east_30deg")
             img_w = self.render(camera_name="fixed_edge_west_30deg")
             img_s = self.render(camera_name="fixed_edge_south_30deg")
-            top_row = np.concatenate([img_nw if 'img_nw' in locals() else img_w, img_n], axis=1)
+            top_row = np.concatenate([img_w, img_n], axis=1)
+            bot_row = np.concatenate([img_s, img_e], axis=1)
+            return np.concatenate([top_row, bot_row], axis=0)
         if camera_name in ["bird_chase", "chase_bird", "topdown_tracking"]:
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
@@ -463,6 +481,8 @@ class MujocoRadialSphereEnv(gym.Env):
             img_bird_fixed = self.render(camera_name="bird_fixed")
             img_bird_chase = self.render(camera_name="bird_chase")
             return np.concatenate([img_bird_fixed, img_bird_chase], axis=1)
+
+
 
         # 4 Fixed Cameras outside the 4 edges / corners of the maze (at 30 degrees)
         fixed_edge_azimuths = {
@@ -500,7 +520,12 @@ class MujocoRadialSphereEnv(gym.Env):
             rgb = self.renderer.render()
             return rgb
 
-        # 4 Side 30-degree tracking cameras + standard chase camera
+        if camera_name == "underbelly_dual":
+            img_side = self.render(camera_name="underbelly_side_low")
+            img_rear = self.render(camera_name="underbelly_rear_low")
+            return np.concatenate([img_side, img_rear], axis=1)
+
+        # 4 Side 30-degree tracking cameras + Ground-Level Underbelly Cameras
         side_camera_offsets = {
             "chase": -90.0,
             "side_rear": -90.0,
@@ -515,14 +540,25 @@ class MujocoRadialSphereEnv(gym.Env):
             "side_left_30deg": 180.0,
             "side_front_30deg": 90.0,
             "side_rear_30deg": -90.0,
+            # Ground-Level Underbelly Close-Up Cameras (Low horizontal angle to see ground contact)
+            "underbelly_side_low": 0.0,
+            "underbelly_rear_low": -90.0,
+            "underbelly_front_low": 90.0,
+            "underbelly_quarter_low": -45.0,
         }
 
         if camera_name in side_camera_offsets:
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             cam.trackbodyid = self.core_body_id
-            cam.distance = 1.45
-            cam.elevation = -30.0  # 30-degree downward angle
+            
+            # Ground-level low angle vs standard 30-deg angle
+            if "underbelly" in camera_name:
+                cam.distance = 1.15     # Close macro view of the ground contact patch
+                cam.elevation = -4.0    # Near-horizontal angle: reveals the full underside forest of rods
+            else:
+                cam.distance = 1.45
+                cam.elevation = -30.0  # 30-degree downward angle
 
             # Compute target yaw from travel or path direction
             v = self.data.qvel[0:2]

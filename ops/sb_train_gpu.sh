@@ -80,7 +80,7 @@ output_dir="${PROJECT_ROOT}/storage_local/sci_out"
 current_date=$(date +%Y%m%d_%H%M)
 job_id=${SLURM_JOB_ID}
 
-export RADIAL_SPHERE_RUN_ID="radial__${current_date}__${job_id}__$(basename "$PY_SCRIPT")${CFG_TAG}"
+export RADIAL_SPHERE_RUN_ID="${current_date}__${job_id}__$(basename "$PY_SCRIPT")${CFG_TAG}"
 output_file="${output_dir}/${RADIAL_SPHERE_RUN_ID}.out"
 
 mkdir -p ${output_dir}

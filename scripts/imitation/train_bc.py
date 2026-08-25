@@ -129,7 +129,7 @@ class HierarchicalImitationPolicy(nn.Module):
 
 def train_bc(
     data_dir: Path = Path("datasets/maze_demos"),
-    output_dir: Path = Path("storage_local/imitation_models"),
+    output_dir: Path = Path("storage_local/20260822_1617__imitation_models"),
     epochs: int = 50,
     batch_size: int = 512,
     lr: float = 1e-3,
@@ -248,7 +248,7 @@ def train_bc(
 def main():
     p = argparse.ArgumentParser(description="Imitation Learning BC Pre-training")
     p.add_argument("--data-dir", default="datasets/maze_demos", help="Demonstrations directory")
-    p.add_argument("--out-dir", default="storage_local/imitation_models", help="Model checkpoint directory")
+    p.add_argument("--out-dir", default="storage_local/20260822_1617__imitation_models", help="Model checkpoint directory")
     p.add_argument("--epochs", type=int, default=50, help="Training epochs")
     p.add_argument("--batch-size", type=int, default=512, help="Mini-batch size")
     p.add_argument("--lr", type=float, default=1e-3, help="Learning rate")

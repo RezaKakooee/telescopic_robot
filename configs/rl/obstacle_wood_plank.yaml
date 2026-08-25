@@ -1,0 +1,52 @@
+defaults:
+  - config
+  - _self_
+
+# =====================================================================
+# Traversable Rectangular Wooden Timber Plank on the Ground
+# Demonstrates the 60-bar active suspension passing over a wooden curb.
+# =====================================================================
+
+robot:
+  appearance_theme: realistic     # Carbon gunmetal, stainless steel, vulcanized rubber
+
+scenario:
+  kind: goal                      # Straight goal navigation across the wooden plank
+  randomize: false
+  goal:
+    x_range: [4.0, 4.0]
+    y_range: [0.0, 0.0]
+  wood_plank:
+    enabled: true                 # Small rectangular timber on the ground
+    pos: [1.8, 0.0]               # Placed directly across the trajectory
+    half_width: 0.09              # 18 cm wide plank (in x)
+    half_length: 0.80             # 1.6 m long beam (in y)
+    height: 0.040                 # 4.0 cm thick rectangular wood beam
+
+sim2real:
+  enabled: true
+  enable_actuator_limits: true
+  actuator_v_max: 0.28
+  actuator_a_max: 3.5
+  actuator_force_limit: 50.0
+  enable_viscoelastic_feet: true
+  rubber_solref_timeconst: 0.020
+  rubber_solref_dampratio: 1.20
+  rubber_friction_sliding: 0.85
+  enable_sensor_noise: true
+
+controller:
+  back_gain: 1.6
+  base: 0.025
+  lookahead: 0.9
+  enable_gaussian_stance: true
+  enable_gyroscopic_damping: true
+  enable_curb_vaulting: true      # 👈 High-step reflex: opens up rear bars deeply to vault over the wood
+  curb_boost_gain: 2.6            # 👈 2.6x rear push stroke boost during obstacle passover
+
+rl:
+  include_drive: true
+  obs_obstacles: 3
+  obs_lidar: 24
+  lidar_range: 3.5
+  obs_endpoints: true

@@ -19,7 +19,7 @@ from radial_sphere import (
 from scripts.imitation.train_bc import HierarchicalImitationPolicy
 
 # 1. Load Pretrained Clean IL Policy
-ckpt_path = Path("/home/azureuser/telescopic_robot/storage_local/imitation_models/bc_hierarchical_best.pt")
+ckpt_path = Path("/home/azureuser/telescopic_robot/storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt")
 ckpt = torch.load(str(ckpt_path), map_location="cpu")
 obs_dim = ckpt.get("obs_dim", 163)
 
@@ -28,7 +28,7 @@ model.load_state_dict(ckpt["model_state_dict"])
 model.eval()
 
 scratch_dir = Path("/home/azureuser/.gemini/antigravity-ide/brain/6c6c10ba-f20d-4055-aff1-c75d2495e95b/scratch")
-renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/diverse_maze_suite")
+renders_dir = Path("/home/azureuser/telescopic_robot/storage_local/20260823_0102__diverse_maze_suite")
 renders_dir.mkdir(parents=True, exist_ok=True)
 
 # Define 6 Diverse Maze Topologies

@@ -19,9 +19,9 @@ steering also continues toward the target instead of stopping at 0.45 m.
 ## Checkpoints
 
 - Fixed goal / random start:
-  `storage_local/radial__20260814_1238__local_1543734__train_rl/checkpoints/final.zip`
+  `storage_local/20260814_1238__local_1543734__train_rl/checkpoints/final.zip`
 - Fixed start / random goal:
-  `storage_local/radial__20260814_1242__local_1607268__train_rl/checkpoints/final.zip`
+  `storage_local/20260814_1242__local_1607268__train_rl/checkpoints/final.zip`
 
 Each run also has its required `vecnormalize.pkl` at the run root.
 
@@ -30,9 +30,9 @@ Each run also has its required `vecnormalize.pkl` at the run root.
 Three deterministic rendered episodes per checkpoint:
 
 - Fixed goal / random start: **2/3 contacts (66.7%)**
-  - `storage_local/radial__20260814_2142__local_4102116__eval_rl/renders/`
+  - `storage_local/20260814_2142__local_4102116__eval_rl/renders/`
 - Fixed start / random goal: **1/3 contact (33.3%)**
-  - `storage_local/radial__20260814_2142__local_4102527__eval_rl/renders/`
+  - `storage_local/20260814_2142__local_4102527__eval_rl/renders/`
 
 Earlier reported 100%/20% results are invalid for the user's definition: they
 measured proximity, not touch. The checkpoints have not yet been retrained
@@ -47,7 +47,7 @@ then evaluate at least 10 deterministic rendered episodes. Example:
 cd /home/azureuser/telescopic_robot
 ./ops/local_train.sh train_rl configs/rl/maze_level3_fixed_goal.yaml \
   --kind maze \
-  --resume storage_local/radial__20260814_1238__local_1543734__train_rl
+  --resume storage_local/20260814_1238__local_1543734__train_rl
 ```
 
 No radial train/eval jobs are currently running. The worktree is intentionally
