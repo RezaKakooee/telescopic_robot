@@ -144,6 +144,16 @@ scenario:                 # what the agent is asked to do (see scenario_generato
     n_sand: 0             # Sand pools (0 = disabled)
     n_stones: 0           # Stone/pebble fields (0 = disabled)
     n_steps: 0            # Step curbs (0 = disabled)
+  skill_course:           # sketched skill-demo circuit (kind: skill_course)
+    cell: 1.8             # corridor width (m)
+    hurdle_height: 0.15   # solid box blocking the bottom corridor (m);
+                          # sized to what skills/jump_planner.py can GUARANTEE
+    hurdle_depth: 0.20    # box depth along the direction of travel (m)
+    platform_height: 0.18 # platform on the start corridor to jump ONTO (m);
+                          # also planner-limited: above this the worst gait
+                          # phase cannot get the ball on top
+    platform_depth: 1.40  # the planner's minimum: the ball has to land AND
+                          # brake before the far edge (m)
   maze:                   # maze kind: corridors of thin iron walls
     level: 1              # 1 = serpentine corridor | 3 = random perfect maze
     cell: 1.5             # corridor width (m); ball is ~0.5 m wide
@@ -176,6 +186,12 @@ sim:
   simulator: mujoco       # only mujoco supported (custom MJCF, no USD/URDF)
   headless: true
   num_envs: 1             # gym env is single-environment
+
+floor:                    # arena floor grid (visual only, no physics effect)
+  half_extent_m: 200.0    # floor plane half-size (m); long runs need room to roll
+  square_m: 0.4           # size of one checker square (m); smaller = finer grid
+  rgb1: "0.42 0.45 0.51"  # light square
+  rgb2: "0.20 0.23 0.28"  # dark square; more contrast = motion easier to see
 
 camera:                   # follows the sphere; looks toward the goal.
   enabled: true           # build the chase camera; off = much faster stepping

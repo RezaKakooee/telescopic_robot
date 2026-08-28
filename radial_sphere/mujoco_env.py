@@ -89,6 +89,7 @@ class MujocoRadialSphereEnv(gym.Env):
         s2r_dict = dict(sim2real_cfg) if sim2real_cfg is not None else {}
         enable_sim2real = bool(s2r_dict.get("enabled", False))
         appearance_theme = str(getattr(self.cfg.robot, "appearance_theme", "realistic" if enable_sim2real else "rainbow"))
+        floor_cfg = getattr(self.cfg, "floor", None)
         xml_str, dirs = build_mujoco_scene_mjcf(
             scenario=scenario,
             n_bars=self.n_bars,
@@ -98,6 +99,10 @@ class MujocoRadialSphereEnv(gym.Env):
             wall_height=wall_height,
             sim2real_cfg=s2r_dict,
             appearance_theme=appearance_theme,
+            floor_half_extent=float(getattr(floor_cfg, "half_extent_m", 200.0)),
+            floor_square_m=float(getattr(floor_cfg, "square_m", 0.4)),
+            floor_rgb1=str(getattr(floor_cfg, "rgb1", "0.42 0.45 0.51")),
+            floor_rgb2=str(getattr(floor_cfg, "rgb2", "0.20 0.23 0.28")),
         )
         self.dirs_body = dirs
         self.model = mujoco.MjModel.from_xml_string(xml_str)
@@ -463,6 +468,27 @@ class MujocoRadialSphereEnv(gym.Env):
             bot_row = np.concatenate([img_rl, img_rr], axis=1)
             return np.concatenate([top_row, bot_row], axis=0)
 
+        if camera_name == "pillar_side":
+            # Pure side-on view, perpendicular to the direction of travel and
+            # a little above pad height. The pillars are centred on the travel
+            # line, so from the side nothing can stand between camera and ball.
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            cam.trackbodyid = self.core_body_id
+            # Close enough to stay INSIDE the corridor: at 3 m the camera sat
+            # in the 1.8 m wall and saw nothing but its face.
+            cam.distance = 1.3
+            cam.elevation = -12.0
+            cam.azimuth = 90.0
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "course_dual":
+            # Whole-course map on the left, locked close-up on the right.
+            img_map = self.render(camera_name="bird_fixed")
+            img_close = self.render(camera_name="fixed_angle_close_3d")
+            return np.concatenate([img_map, img_close], axis=1)
+
         if camera_name == "fixed_close_dual":
             # Dual Close-Up Views with 100% Constant Fixed Angles (Zero Rotation / Zero Jitter)
             img_iso = self.render(camera_name="fixed_angle_close_3d")
@@ -474,22 +500,58 @@ class MujocoRadialSphereEnv(gym.Env):
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             cam.trackbodyid = self.core_body_id
-            cam.distance = 1.30      # Close macro view of the ball & rods
-            cam.elevation = -32.0    # 32-degree fixed downward angle (shows ball and ground rods clearly)
+            cam.distance = 1.50      # Close macro view of the ball & rods
+            cam.elevation = -28.0    # 28-degree fixed downward angle
             cam.azimuth = 45.0       # 100% Constant Fixed Azimuth: NEVER rotates or turns when robot turns!
             self.renderer.update_scene(self.data, camera=cam)
             return self.renderer.render()
 
         if camera_name == "fixed_angle_side_close":
-            # Pure Low-Angle Close View with 100% Constant Fixed Orientation (Zero Jitter)
+            # Lateral Profile View with 100% Constant Fixed Orientation (Zero Jitter)
             cam = mujoco.MjvCamera()
             cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
             cam.trackbodyid = self.core_body_id
-            cam.distance = 1.18      # Close-up to the ball
-            cam.elevation = -12.0    # Low angle: clearly reveals bottom rods touching the floor & rocks
-            cam.azimuth = 0.0        # Constant Fixed 0.0° angle (pure translation, zero rotation)
+            cam.distance = 1.55      # Macro flank view
+            cam.elevation = -16.0    # Low angle: reveals ground rods, pipes, and obstacles
+            cam.azimuth = 135.0      # 135° Fixed Lateral Profile
             self.renderer.update_scene(self.data, camera=cam)
             return self.renderer.render()
+
+        if camera_name == "jump_front_view":
+            # Fixed front camera placed at end of runway: Ball jumps directly TOWARD the camera!
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+            cam.lookat = [1.20, 0.0, 0.25]
+            cam.distance = 2.40
+            cam.elevation = -10.0
+            cam.azimuth = 180.0     # Facing 180° directly back toward the oncoming ball!
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "jump_trackside_lateral":
+            # Static Lateral Trackside View: Fixed world camera showing full parabolic leap across yardlines & hurdle
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+            cam.lookat = [1.10, 0.0, 0.25]
+            cam.distance = 2.90
+            cam.elevation = -8.0
+            cam.azimuth = 90.0      # Perpendicular 90° view showing the entire jump trajectory
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "jump_triple_composite":
+            # 3-View Composite: Front (Jump Towards Camera) | Lateral (Parabolic Flight Arc) | 3D Close (Kinematics)
+            img_front = self.render(camera_name="jump_front_view")
+            img_side = self.render(camera_name="jump_trackside_lateral")
+            img_close = self.render(camera_name="fixed_angle_close_3d")
+            return np.concatenate([img_front, img_side, img_close], axis=1)
+
+        if camera_name == "jump_dual_fixed":
+            # Dual Fixed Cameras: Front (Jump Towards Camera) + Lateral Profile (Parabolic Arc)
+            img_front = self.render(camera_name="jump_front_view")
+            img_side = self.render(camera_name="jump_trackside_lateral")
+            return np.concatenate([img_front, img_side], axis=1)
+
 
         if camera_name == "fixed_dual_iso":
             # 2 Completely Static 3D Isometric Cameras (Zero Motion / Zero Jitter)

@@ -28,6 +28,10 @@ def build_mujoco_scene_mjcf(
     timestep: float = 0.002,
     sim2real_cfg: dict | None = None,
     appearance_theme: str = "rainbow",  # "realistic", "aerospace_white", "rainbow"
+    floor_half_extent: float = 200.0,
+    floor_square_m: float = 0.4,
+    floor_rgb1: str = "0.42 0.45 0.51",
+    floor_rgb2: str = "0.20 0.23 0.28",
 ) -> tuple[str, np.ndarray]:
     """Build a complete MuJoCo XML containing arena, walls, goal, and robot.
 
@@ -105,7 +109,7 @@ def build_mujoco_scene_mjcf(
 
         sleeve_from = (0.55 * sphere_radius) * u
         sleeve_to = sleeve_mouth * u
-        rod_to = tip0 * u
+        rod_to = (tip0 - FOOT_RADIUS * 0.9) * u
         rod_from = (tip0 - bar_length) * u
         foot = tip0 * u
 
@@ -124,7 +128,7 @@ def build_mujoco_scene_mjcf(
                       fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
                               {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
                       size="{inner_radius}" rgba="{rod_rgba}" mass="0.008"
-                      contype="1" conaffinity="2" condim="3" friction="0.8 0.005 0.0001" priority="1"/>
+                      contype="0" conaffinity="0"/>
                 <geom name="foot_{k}" type="sphere"
                       pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
                       size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
@@ -380,6 +384,153 @@ def build_mujoco_scene_mjcf(
                     )
 
 
+    # 4f. Incline Slopes / Ramps (Uphill & Downhill)
+    ramps = getattr(scenario, "ramps", None)
+    if ramps is not None and len(ramps) > 0:
+        for r_idx, r_def in enumerate(ramps):
+            rcx, rcy, rlen, rwid, r_h, r_pitch, r_yaw = float(r_def[0]), float(r_def[1]), float(r_def[2]), float(r_def[3]), float(r_def[4]), float(r_def[5]), float(r_def[6])
+            slab_th = 0.05
+            if abs(r_pitch) < 1e-3:
+                # Solid elevated plateau block from floor z=0 to top z=r_h
+                block_h = max(r_h, slab_th)
+                cz = block_h / 2.0
+                pitch_euler = 0.0
+                walls_xml.append(
+                    f'<geom name="ramp_slab_{r_idx}" type="box" '
+                    f'pos="{rcx:.4f} {rcy:.4f} {cz:.4f}" '
+                    f'size="{rlen / 2.0 * 1.02:.4f} {rwid / 2.0:.4f} {block_h / 2.0:.4f}" '
+                    f'euler="0 0 {r_yaw:.2f}" material="ramp_mat" '
+                    f'friction="1.5 0.02 0.005" condim="4" priority="1"/>'
+                )
+            else:
+                # Inclined ramp slab (uphill or downhill)
+                cz = abs(r_h) / 2.0
+                pitch_euler = -r_pitch
+                walls_xml.append(
+                    f'<geom name="ramp_slab_{r_idx}" type="box" '
+                    f'pos="{rcx:.4f} {rcy:.4f} {cz:.4f}" '
+                    f'size="{rlen / 2.0 * 1.02:.4f} {rwid / 2.0:.4f} {slab_th / 2.0:.4f}" '
+                    f'euler="0 {pitch_euler:.2f} {r_yaw:.2f}" material="ramp_mat" '
+                    f'friction="1.5 0.02 0.005" condim="4" priority="1"/>'
+                )
+            # High-visibility guide curbs on lateral edges
+            curb_h = 0.10
+            curb_w = 0.04
+            walls_xml.append(
+                f'<geom name="ramp_curb_l_{r_idx}" type="box" '
+                f'pos="{rcx:.4f} {rcy + rwid/2.0 + curb_w/2.0:.4f} {cz + curb_h/2.0:.4f}" '
+                f'size="{rlen / 2.0 * 1.02:.4f} {curb_w / 2.0:.4f} {curb_h / 2.0:.4f}" '
+                f'euler="0 {pitch_euler:.2f} {r_yaw:.2f}" rgba="0.96 0.78 0.08 1" '
+                f'friction="0.8 0.005 0.0001" condim="3"/>'
+            )
+            walls_xml.append(
+                f'<geom name="ramp_curb_r_{r_idx}" type="box" '
+                f'pos="{rcx:.4f} {rcy - rwid/2.0 - curb_w/2.0:.4f} {cz + curb_h/2.0:.4f}" '
+                f'size="{rlen / 2.0 * 1.02:.4f} {curb_w / 2.0:.4f} {curb_h / 2.0:.4f}" '
+                f'euler="0 {pitch_euler:.2f} {r_yaw:.2f}" rgba="0.96 0.78 0.08 1" '
+                f'friction="0.8 0.005 0.0001" condim="3"/>'
+            )
+
+    # 4g. Multi-Step Staircases
+    staircases = getattr(scenario, "staircases", None)
+    if staircases is not None and len(staircases) > 0:
+        for st_idx, sc_def in enumerate(staircases):
+            start_x, start_y = float(sc_def[0]), float(sc_def[1])
+            n_steps = int(sc_def[2])
+            rise = float(sc_def[3])
+            run = float(sc_def[4])
+            wid = float(sc_def[5])
+            yaw = float(sc_def[6])
+            is_down = bool(sc_def[7]) if len(sc_def) > 7 else False
+
+            for step_i in range(n_steps):
+                if is_down:
+                    step_h = rise * (n_steps - step_i)
+                    step_x = start_x + (step_i + 0.5) * run
+                else:
+                    step_h = rise * (step_i + 1)
+                    step_x = start_x + (step_i + 0.5) * run
+                step_y = start_y
+                walls_xml.append(
+                    f'<geom name="stair_{st_idx}_{step_i}" type="box" '
+                    f'pos="{step_x:.4f} {step_y:.4f} {step_h / 2.0:.4f}" '
+                    f'size="{run / 2.0:.4f} {wid / 2.0:.4f} {step_h / 2.0:.4f}" '
+                    f'material="stair_tread_mat" friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+                )
+                # Safety nosing stripe on leading edge
+                walls_xml.append(
+                    f'<geom name="stair_nosing_{st_idx}_{step_i}" type="box" '
+                    f'pos="{step_x - run/2.0 + 0.015:.4f} {step_y:.4f} {step_h - 0.003:.4f}" '
+                    f'size="0.015 {wid / 2.0 * 0.99:.4f} 0.003" '
+                    f'material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+                )
+
+    # 4h. Transparent Glass Pipe / Conduit (In-Pipe Crawling Inspection)
+    pipes = getattr(scenario, "pipes", None)
+    if pipes is not None and len(pipes) > 0:
+        for p_idx, p_def in enumerate(pipes):
+            start_x, start_y = float(p_def[0]), float(p_def[1])
+            p_len = float(p_def[2])
+            in_rad = float(p_def[3])
+            out_rad = float(p_def[4]) if len(p_def) > 4 else in_rad + 0.015
+
+            cx = start_x + p_len / 2.0
+            cy = start_y
+            cz = in_rad + 0.02
+
+            # Regular 16-sided polygonal transparent glass barrel with flat bottom track
+            n_facets = 16
+            facet_th = out_rad - in_rad
+            # Exact facet width so adjacent facets meet with flush tight seams
+            facet_w = float(2.0 * in_rad * np.tan(np.pi / n_facets) + 0.002)
+
+            for fi in range(n_facets):
+                # Align so fi=8 is exactly at 180 deg (flat horizontal floor at the bottom of the tube)
+                angle_rad = fi * (2.0 * np.pi / n_facets)
+                angle_deg = float(np.degrees(angle_rad))
+                r_mid = in_rad + facet_th / 2.0
+                fy = cy + r_mid * np.sin(angle_rad)
+                fz = cz + r_mid * np.cos(angle_rad)
+
+                walls_xml.append(
+                    f'<geom name="glass_facet_{p_idx}_{fi}" type="box" '
+                    f'pos="{cx:.4f} {fy:.4f} {fz:.4f}" '
+                    f'size="{p_len / 2.0:.4f} {facet_w / 2.0:.4f} {facet_th / 2.0:.4f}" '
+                    f'euler="{-angle_deg:.1f} 0 0" material="glass_pipe_mat" '
+                    f'friction="1.2 0.01 0.001" condim="3" priority="1" solref="0.012 1"/>'
+                )
+
+            # Chrome metallic reinforcement collar rings (outer perimeter ring only)
+            n_rings = max(int(p_len / 2.5) + 1, 2)
+            for ri in range(n_rings):
+                rx = start_x + ri * (p_len / (n_rings - 1))
+                # 16-facet outer collar ring around outer perimeter
+                for rfi in range(n_facets):
+                    r_angle = rfi * (2.0 * np.pi / n_facets)
+                    r_deg = float(np.degrees(r_angle))
+                    r_pos_y = cy + (out_rad + 0.01) * np.sin(r_angle)
+                    r_pos_z = cz + (out_rad + 0.01) * np.cos(r_angle)
+                    walls_xml.append(
+                        f'<geom name="pipe_collar_{p_idx}_{ri}_{rfi}" type="box" '
+                        f'pos="{rx:.4f} {r_pos_y:.4f} {r_pos_z:.4f}" '
+                        f'size="0.025 {facet_w / 2.0 * 1.05:.4f} 0.012" '
+                        f'euler="{-r_deg:.1f} 0 0" material="pipe_ring_mat" '
+                        f'contype="0" conaffinity="0"/>'
+                    )
+
+    # 4i. Athletic Runway Yardlines & Painted Distance Markers (Pure Visual, Zero Friction Obstruction)
+    yardlines = getattr(scenario, "yardlines", None)
+    if yardlines is not None and len(yardlines) > 0:
+        for y_idx, y_def in enumerate(yardlines):
+            yx, yy, yhx, yhy, y_rgba = float(y_def[0]), float(y_def[1]), float(y_def[2]), float(y_def[3]), str(y_def[4])
+            walls_xml.append(
+                f'<geom name="yardline_{y_idx}" type="box" '
+                f'pos="{yx:.4f} {yy:.4f} 0.0015" '
+                f'size="{yhx:.4f} {yhy:.4f} 0.0015" rgba="{y_rgba}" '
+                f'contype="0" conaffinity="0"/>'
+            )
+
+
     # 5. Goal Marker & Pad
     gx, gy = float(scenario.goal[0]), float(scenario.goal[1])
     goal_xml = f"""
@@ -420,9 +571,23 @@ def build_mujoco_scene_mjcf(
     else:
         core_rgba = "1.0 0.82 0.15 1"
 
+    # Floor grid. The checker texture holds a 2x2 block of squares, so one
+    # tile spans two squares. With texuniform the repeat count is per metre,
+    # hence 1 / (2 * square size). A visible grid is what makes motion
+    # readable in the videos; too fine a repeat blurs into flat colour.
+    grid_repeat = 1.0 / max(2.0 * float(floor_square_m), 1e-6)
+    floor_half = float(floor_half_extent)
+    grid_rgb1 = floor_rgb1
+    grid_rgb2 = floor_rgb2
+
     xml_str = f"""<mujoco model="radial_sphere_arena">
     <compiler angle="degree" coordinate="local"/>
     <option timestep="{timestep:.5f}" gravity="0 0 -9.81" integrator="implicitfast"/>
+
+    <!-- Pin the model extent to robot scale. MuJoCo derives the near/far clip
+         planes from it, so without this a large floor plane pushes znear past
+         the close-up cameras and the robot disappears from the render. -->
+    <statistic extent="4" center="0 0 0.4"/>
 
     <default>
         <geom contype="2" conaffinity="1"/>
@@ -436,10 +601,10 @@ def build_mujoco_scene_mjcf(
 
     <asset>
         <texture name="grid" type="2d" builtin="checker" width="512" height="512"
-                 rgb1="0.94 0.94 0.95" rgb2="0.86 0.86 0.88"/>
+                 rgb1="{grid_rgb1}" rgb2="{grid_rgb2}"/>
         <texture name="skybox" type="skybox" builtin="gradient"
                  rgb1="0.20 0.35 0.55" rgb2="0.04 0.07 0.12" width="512" height="512"/>
-        <material name="grid" texture="grid" texrepeat="35 35" reflectance="0.08" texuniform="true"/>
+        <material name="grid" texture="grid" texrepeat="{grid_repeat:.4f} {grid_repeat:.4f}" reflectance="0.08" texuniform="true"/>
         <material name="wall_mat" rgba="0.28 0.32 0.38 1" reflectance="0.05"/>
         <material name="goal_mat" rgba="0.0 0.85 0.90 0.60" reflectance="0.1"/>
         <material name="goal_pad_mat" rgba="0.0 0.85 0.90 0.35" reflectance="0.05"/>
@@ -458,6 +623,13 @@ def build_mujoco_scene_mjcf(
         <material name="slate_rock_mat" rgba="0.24 0.25 0.28 1" specular="0.35" shininess="0.5"/>
         <material name="sandstone_rock_mat" rgba="0.64 0.50 0.36 1" specular="0.15" shininess="0.2"/>
         <material name="basalt_rock_mat" rgba="0.18 0.19 0.21 1" specular="0.25" shininess="0.3"/>
+        <!-- Transparent Glass Conduit / Pipe Materials -->
+        <material name="glass_pipe_mat" rgba="0.25 0.78 0.95 0.28" specular="0.95" shininess="0.95" reflectance="0.25"/>
+        <material name="pipe_ring_mat" rgba="0.18 0.20 0.24 1.0" specular="0.8" shininess="0.9"/>
+        <!-- Incline Slopes & Staircase Materials -->
+        <material name="ramp_mat" rgba="0.45 0.46 0.48 1.0" specular="0.3" shininess="0.4"/>
+        <material name="stair_tread_mat" rgba="0.52 0.38 0.25 1.0" specular="0.2" shininess="0.3"/>
+        <material name="stair_nosing_mat" rgba="0.96 0.78 0.08 1.0" specular="0.6" shininess="0.8"/>
     </asset>
 
     <worldbody>
@@ -467,7 +639,7 @@ def build_mujoco_scene_mjcf(
                diffuse="0.40 0.40 0.40" specular="0.2 0.2 0.2"/>
 
         <!-- Floor Plane -->
-        <geom name="floor" type="plane" size="50 50 0.1" material="grid"
+        <geom name="floor" type="plane" size="{floor_half:.1f} {floor_half:.1f} 0.1" material="grid"
               friction="0.85 0.015 0.005" condim="4"/>
 
         <!-- Maze Walls -->

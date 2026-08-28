@@ -27,7 +27,7 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course")
 
 
 def _arc_length(pts: np.ndarray) -> float:
@@ -51,7 +51,12 @@ class Scenario:
     sand_patches: list | np.ndarray = None # Sand zones (x, y, hx, hy)
     stones: list | np.ndarray = None # Pebble clusters (x, y, hx, hy, n, max_sz)
     steps: list | np.ndarray = None # Ground step curbs (x, y, hx, hy, height)
+    ramps: list | np.ndarray = None # Incline slopes / ramps (cx, cy, length, width, h_change, pitch_deg, yaw)
+    staircases: list | np.ndarray = None # Multi-step flights (start_x, start_y, n_steps, rise, run, width, yaw, is_down)
+    pipes: list | np.ndarray = None # Hollow cylindrical transparent tubes (start_x, start_y, length, in_rad, out_rad, yaw)
+    yardlines: list | np.ndarray = None # Painted athletic track distance stripes (x, y, hx, hy, rgba)
     geo_field: np.ndarray = None   # (H, W) geodesic distance to goal; -1 = blocked
+
     geo_origin: np.ndarray = None  # (2,) world xy of field cell (0, 0) centre
     geo_res: float = 0.0           # field cell size (m); 0 = no field
 
@@ -748,17 +753,527 @@ def rocky_terrain_scenario(cfg, *, rng=None, name: str = "rocky_terrain") -> Sce
     )
 
 
+def slopes_scenario(cfg, *, rng=None, name: str = "slopes") -> Scenario:
+    """Uphill ramp climb (+15 deg incline), elevated ridge plateau, and downhill descent."""
+    rng = rng if rng is not None else np.random.default_rng()
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    goal = np.array([17.5, 0.0], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 180).astype(np.float32)
+    markers = pts[::8].copy()
+
+    # Ramps list: [cx, cy, length, width, h_change, pitch_deg, yaw]
+    # Ramp 1: Uphill from x=2.5 to 6.5 (rise +0.50m, pitch 7.2 deg)
+    # Plateau: Elevated ridge from x=6.5 to 11.5 at z=0.50m
+    # Ramp 2: Downhill from x=11.5 to 15.5 (descent -0.50m, pitch -7.2 deg)
+    ramps = [
+        [4.5, 0.0, 4.0, 1.8, 0.50, 7.2, 0.0],
+        [9.0, 0.0, 5.0, 1.8, 0.50, 0.0, 0.0],
+        [13.5, 0.0, 4.0, 1.8, -0.50, -7.2, 0.0],
+    ]
+
+    return Scenario(
+        kind="slopes", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=17.5,
+        ramps=ramps,
+    )
+
+
+def stairs_scenario(cfg, *, rng=None, name: str = "stairs") -> Scenario:
+    """Multi-step ascending flight of stairs, elevated landing, and descending stairs."""
+    rng = rng if rng is not None else np.random.default_rng()
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    goal = np.array([13.5, 0.0], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 140).astype(np.float32)
+    markers = pts[::8].copy()
+
+    # Staircases list: [start_x, start_y, n_steps, rise, run, width, yaw, is_down]
+    # Ascending 5 steps: x=2.5 to 3.8 (top z=0.25m)
+    # Descending 5 steps: x=6.8 to 8.1 (back down to floor)
+    staircases = [
+        [2.5, 0.0, 5, 0.05, 0.26, 1.6, 0.0, False],
+        [6.8, 0.0, 5, 0.05, 0.26, 1.6, 0.0, True],
+    ]
+    # Connecting solid elevated landing plateau at z=0.25m (x=3.8 to 6.8, center=5.3, length=3.0)
+    ramps = [
+        [5.3, 0.0, 3.0, 1.6, 0.25, 0.0, 0.0],
+    ]
+
+    return Scenario(
+        kind="stairs", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=13.5,
+        staircases=staircases,
+        ramps=ramps,
+    )
+
+
+def glass_pipe_scenario(cfg, *, rng=None, name: str = "glass_pipe") -> Scenario:
+    """Transparent glass cylindrical conduit / pipe with in-pipe crawling and 360-deg rod bracing."""
+    rng = rng if rng is not None else np.random.default_rng()
+    # Spawn directly INSIDE the transparent glass pipe at x=2.0
+    spawn = np.array([2.0, 0.0], dtype=np.float32)
+    goal = np.array([12.0, 0.0], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 120).astype(np.float32)
+    markers = pts[::8].copy()
+
+    # Pipes list: [start_x, start_y, length, in_rad, out_rad, yaw]
+    # 10.5-meter long transparent glass pipe spanning x=1.0 to 11.5
+    pipes = [
+        [1.0, 0.0, 10.5, 0.38, 0.395, 0.0],
+    ]
+
+    return Scenario(
+        kind="glass_pipe", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=10.0,
+        pipes=pipes,
+    )
+
+
+def extreme_gauntlet_scenario(cfg, *, rng=None, name: str = "extreme_gauntlet") -> Scenario:
+    """Integrated extreme multi-stage course: Uphill Incline -> Rocky Ridge -> Stairs -> Downhill -> Glass Pipe."""
+    rng = rng if rng is not None else np.random.default_rng()
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    goal = np.array([27.0, 0.0], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 270).astype(np.float32)
+    markers = pts[::10].copy()
+
+    # 1. Ramps: Uphill ramp (x=2.0 to 6.0, rise +0.60m) and Downhill ramp (x=14.0 to 17.5, descent -0.60m)
+    ramps = [
+        [4.0, 0.0, 4.0, 1.8, 0.60, 8.6, 0.0],    # Uphill
+        [8.0, 0.0, 4.0, 1.8, 0.0, 0.0, 0.0],     # Elevated Rocky Plateau (z=0.60m)
+        [15.75, 0.0, 3.5, 1.8, -0.60, -9.8, 0.0], # Downhill
+    ]
+
+    # 2. Stones on elevated plateau: 120 procedural boulders
+    stones = [
+        [8.0, 0.0, 1.8, 0.8, 120, 0.055],
+    ]
+
+    # 3. Staircase: 5 descending steps off plateau (x=10.0 to 11.3, step height 0.04m, landing)
+    staircases = [
+        [10.0, 0.0, 5, 0.04, 0.26, 1.6, 0.0, True],
+    ]
+
+    # 4. Transparent Glass Pipe: x=18.5 to 25.0 (length 6.5m)
+    pipes = [
+        [18.5, 0.0, 6.5, 0.38, 0.395, 0.0],
+    ]
+
+    return Scenario(
+        kind="extreme_gauntlet", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=27.0,
+        ramps=ramps,
+        staircases=staircases,
+        stones=stones,
+        pipes=pipes,
+    )
+
+
+def jump_track_scenario(cfg, *, rng=None, name="jump_track") -> Scenario:
+    """Long Jump & Hurdle Track: High-contrast athletic runway with distance markers, hurdles, and landing zone."""
+    spawn = np.array([0.0, 0.0], dtype=float)
+    goal = np.array([4.8, 0.0], dtype=float)
+    pts = np.linspace(spawn, goal, 15)
+    markers = pts.copy()
+
+    # Lateral perimeter guide rails
+    walls = np.array([
+        [-0.8, 1.20, 5.2, 1.20],
+        [-0.8, -1.20, 5.2, -1.20],
+    ])
+
+    # Visual Yardlines and Athletic Runway Markings (Zero-drag visual geoms)
+    yardlines = [
+        # Dark Athletic Runway Base (x = -0.5 to 5.2m)
+        [2.35, 0.0, 2.85, 1.15, "0.16 0.18 0.22 1.0"],
+        # Orange Takeoff Launch Pad (x = 0.0 to 0.4m)
+        [0.20, 0.0, 0.20, 1.10, "0.95 0.42 0.10 1.0"],
+        # Painted Distance Stripes every 0.50m
+        [0.50, 0.0, 0.025, 1.05, "0.95 0.95 0.95 1.0"],
+        [1.00, 0.0, 0.035, 1.05, "0.96 0.78 0.08 1.0"],
+        [1.50, 0.0, 0.025, 1.05, "0.95 0.95 0.95 1.0"],
+        [2.00, 0.0, 0.035, 1.05, "0.96 0.78 0.08 1.0"],
+        # Vivid Green Landing Zone Pad (x = 2.1 to 2.7m)
+        [2.40, 0.0, 0.30, 1.05, "0.12 0.82 0.38 1.0"],
+        [2.50, 0.0, 0.025, 1.05, "0.95 0.95 0.95 1.0"],
+        [3.00, 0.0, 0.035, 1.05, "0.96 0.78 0.08 1.0"],
+        [3.50, 0.0, 0.025, 1.05, "0.95 0.95 0.95 1.0"],
+        [4.00, 0.0, 0.035, 1.05, "0.96 0.78 0.08 1.0"],
+    ]
+
+    # Physical Hurdles to leap over in mid-air
+    steps = [
+        # Hurdle 1 at x=1.45m (height 8.0cm, width 1.6m)
+        [1.45, 0.0, 0.035, 0.80, 0.080],
+        # Hurdle 2 at x=3.25m (height 9.0cm, width 1.6m)
+        [3.25, 0.0, 0.035, 0.80, 0.090],
+    ]
+
+    return Scenario(
+        kind="jump_track", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=4.8,
+        walls=walls,
+        steps=steps,
+        yardlines=yardlines,
+    )
+
+
+
+# ---------------------------------------------------------------------------
+# Skill course — the hand-drawn corridor circuit used to exercise the skills
+# ---------------------------------------------------------------------------
+
+# Grid layout, transcribed from the sketch. Row 0 is the TOP corridor and row
+# index grows downward; column 0 is the far left. Each entry opens a run of
+# cells: ("row", r, c_from, c_to) or ("col", c, r_from, r_to), inclusive.
+_SKILL_COURSE_RUNS = [
+    ("row", 2, 0, 5),     # start corridor, heading right
+    ("col", 5, 0, 2),     # climb to the top corridor
+    ("row", 0, 5, 15),    # long top corridor
+    ("col", 15, 0, 6),    # right-hand descent
+    ("row", 2, 15, 19),   # dead-end spur: drive in, reverse out
+    ("row", 6, 5, 15),    # bottom corridor, heading left
+    ("col", 5, 6, 9),     # drop toward the goal
+    ("row", 9, 3, 5),     # goal corridor
+]
+
+# Centreline of the route as (col, row) cell coordinates, including the
+# there-and-back through the spur.
+_SKILL_COURSE_ROUTE = [
+    (0, 2), (5, 2), (5, 0), (15, 0), (15, 2),
+    (19, 2), (15, 2),                          # spur out and back
+    (15, 6), (5, 6), (5, 9), (3, 9),
+]
+
+
+def _skill_course_cells():
+    """Set of open (col, row) cells for the skill course."""
+    cells = set()
+    for axis, fixed, lo, hi in _SKILL_COURSE_RUNS:
+        for k in range(min(lo, hi), max(lo, hi) + 1):
+            cells.add((fixed, k) if axis == "col" else (k, fixed))
+    return cells
+
+
+def skill_course_scenario(cfg, *, rng=None, name: str = "skill_course") -> Scenario:
+    """Hand-drawn corridor circuit for demonstrating the skill library.
+
+    The route runs start -> right -> up -> long top straight -> down -> into a
+    dead-end spur and back out in reverse -> bottom corridor -> down -> goal.
+    Walls are placed on every face of an open cell whose neighbour is closed,
+    which handles the spur's T-junction without any special casing.
+    """
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "skill_course", None) if sc is not None else None
+    cell = float(getattr(course_cfg, "cell", 1.8))
+
+    cells = _skill_course_cells()
+
+    def centre(col, row):
+        return np.array([col * cell, -row * cell], dtype=float)
+
+    # One wall segment per open face that borders a closed cell.
+    half = cell / 2.0
+    walls = []
+    for (col, row) in sorted(cells):
+        cx, cy = centre(col, row)
+        # (neighbour offset, wall endpoints relative to the cell centre)
+        faces = [
+            ((0, -1), (-half, +half, +half, +half)),   # north (row - 1)
+            ((0, +1), (-half, -half, +half, -half)),   # south (row + 1)
+            ((-1, 0), (-half, -half, -half, +half)),   # west  (col - 1)
+            ((+1, 0), (+half, -half, +half, +half)),   # east  (col + 1)
+        ]
+        for (dc, dr), (ax, ay, bx, by) in faces:
+            if (col + dc, row + dr) in cells:
+                continue
+            walls.append([cx + ax, cy + ay, cx + bx, cy + by])
+
+    route = [centre(c, r) for c, r in _SKILL_COURSE_ROUTE]
+    spawn = route[0].copy()
+    goal = route[-1].copy()
+
+    # A solid box blocking the middle of the bottom corridor. The agent has to
+    # clear it with a running jump; there is no way around it, since the box
+    # spans the corridor.
+    box_h = float(getattr(course_cfg, "hurdle_height", 0.22))
+    box_depth = float(getattr(course_cfg, "hurdle_depth", 0.50))
+    bx, by = 0.5 * (route[_SKILL_COURSE_HURDLE_LEG[0]] + route[_SKILL_COURSE_HURDLE_LEG[1]])
+    hurdle = [float(bx), float(by), box_depth / 2.0, cell / 2.0 - 0.05, box_h]
+
+    # A second, deeper box on the start corridor. This one is a platform: the
+    # agent jumps up ONTO it, steadies itself, then drops off the far edge to
+    # carry on. It is deep enough to land on and stand still.
+    plat_h = float(getattr(course_cfg, "platform_height", 0.25))
+    plat_depth = float(getattr(course_cfg, "platform_depth", 1.20))
+    a, b = route[_SKILL_COURSE_PLATFORM_LEG[0]], route[_SKILL_COURSE_PLATFORM_LEG[1]]
+    px, py = a + _SKILL_COURSE_PLATFORM_FRAC * (b - a)
+    platform = [float(px), float(py), plat_depth / 2.0, cell / 2.0 - 0.05, plat_h]
+
+    # Dense waypoints so the look-ahead controller has something to track.
+    pts = [route[0]]
+    for a, b in zip(route[:-1], route[1:]):
+        n = max(2, int(np.linalg.norm(b - a) / 0.30))
+        for t in np.linspace(0.0, 1.0, n)[1:]:
+            pts.append(a + t * (b - a))
+    pts = np.asarray(pts, dtype=np.float32)
+
+    return Scenario(
+        kind="skill_course", name=name,
+        spawn_xy=spawn.astype(np.float32),
+        goal=goal.astype(np.float32),
+        path_pts=pts,
+        markers=np.asarray(route, dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        walls=np.asarray(walls, dtype=np.float32),
+        steps=[platform, hurdle],
+    )
+
+
+# Route indices of the leg whose midpoint carries the jump-over box.
+_SKILL_COURSE_HURDLE_LEG = (7, 8)
+
+# Leg and position along it for the jump-onto platform.
+_SKILL_COURSE_PLATFORM_LEG = (0, 1)
+_SKILL_COURSE_PLATFORM_FRAC = 0.55
+
+
+def skill_course_platform(cfg) -> dict:
+    """Centre, half-extents and height of the platform the agent jumps onto."""
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "skill_course", None) if sc is not None else None
+    cell = float(getattr(course_cfg, "cell", 1.8))
+    route = skill_course_route(cfg)
+    a, b = route[_SKILL_COURSE_PLATFORM_LEG[0]], route[_SKILL_COURSE_PLATFORM_LEG[1]]
+    depth = float(getattr(course_cfg, "platform_depth", 1.20))
+    return {
+        "xy": np.asarray(a + _SKILL_COURSE_PLATFORM_FRAC * (b - a), dtype=np.float32),
+        "half_depth": depth / 2.0,
+        "half_width": cell / 2.0 - 0.05,
+        "height": float(getattr(course_cfg, "platform_height", 0.25)),
+    }
+
+
+def skill_course_hurdle(cfg) -> dict:
+    """Centre, half-extents and height of the box blocking the bottom corridor."""
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "skill_course", None) if sc is not None else None
+    cell = float(getattr(course_cfg, "cell", 1.8))
+    route = skill_course_route(cfg)
+    a, b = route[_SKILL_COURSE_HURDLE_LEG[0]], route[_SKILL_COURSE_HURDLE_LEG[1]]
+    centre_xy = 0.5 * (a + b)
+    depth = float(getattr(course_cfg, "hurdle_depth", 0.50))
+    return {
+        "xy": np.asarray(centre_xy, dtype=np.float32),
+        "half_depth": depth / 2.0,
+        "half_width": cell / 2.0 - 0.05,
+        "height": float(getattr(course_cfg, "hurdle_height", 0.22)),
+    }
+
+
+def skill_course_route(cfg) -> np.ndarray:
+    """The course centreline as world xy, in travel order (spur included)."""
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "skill_course", None) if sc is not None else None
+    cell = float(getattr(course_cfg, "cell", 1.8))
+    return np.array([[c * cell, -r * cell] for c, r in _SKILL_COURSE_ROUTE],
+                    dtype=np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Platform course — a straight run of boxes, jumped over, onto and between
+# ---------------------------------------------------------------------------
+
+# Each entry is (x centre, height, depth, role). Roles:
+#   "over"  — a low box on the floor, to be cleared
+#   "onto"  — a deck to land on, reached from the floor or from the box before
+# Heights and gaps are inside what skills/jump_planner.py can guarantee: the
+# leap only carries about 0.25 m horizontally at its take-off height, and about
+# 0.5 m if it is dropping 0.15 m, so ascending steps are kept adjacent and only
+# descending steps get a real gap.
+# Decks are long on purpose. The take-off calibration assumes the ball has
+# reached cruise, and after landing it needs most of a deck to build that up
+# again before the next hop. Short decks leave it launching from a standstill.
+_PLATFORM_BOXES = [
+    (3.20, 0.12, 0.20, "over"),    # clear it from the floor
+    (6.50, 0.16, 2.60, "onto"),    # climb up from the floor
+    (9.15, 0.32, 2.60, "onto"),    # step up, decks all but touching
+    (11.75, 0.32, 2.20, "onto"),   # level hop across a 0.20 m gap
+    (14.45, 0.16, 2.20, "onto"),   # drop-down hop across a 0.50 m gap
+]
+
+_PLATFORM_LENGTH = 19.0            # corridor length (m)
+
+
+def platform_course_scenario(cfg, *, rng=None, name: str = "platform_course") -> Scenario:
+    """A straight corridor studded with boxes, in the manner of a platform game.
+
+    The robot clears one box from the floor, climbs onto a deck, steps up to a
+    taller one, hops the gap to a third, drops across to a lower fourth, then
+    falls back to the floor and runs to the goal.
+    """
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "platform_course", None) if sc is not None else None
+    width = float(getattr(course_cfg, "width", 1.8))
+    length = float(getattr(course_cfg, "length", _PLATFORM_LENGTH))
+
+    half_w = width / 2.0
+    spawn = np.array([0.0, 0.0], dtype=float)
+    goal = np.array([length - 0.9, 0.0], dtype=float)
+
+    # Side walls plus end caps: a single straight corridor.
+    walls = np.array([
+        [-0.9, +half_w, length, +half_w],
+        [-0.9, -half_w, length, -half_w],
+        [-0.9, -half_w, -0.9, +half_w],
+        [length, -half_w, length, +half_w],
+    ], dtype=float)
+
+    steps = [[float(x), 0.0, float(d) / 2.0, half_w - 0.05, float(h)]
+             for (x, h, d, _role) in _PLATFORM_BOXES]
+
+    pts = np.linspace(spawn, goal, 120).astype(np.float32)
+    return Scenario(
+        kind="platform_course", name=name,
+        spawn_xy=spawn.astype(np.float32),
+        goal=goal.astype(np.float32),
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        walls=walls.astype(np.float32),
+        steps=steps,
+    )
+
+
+def platform_course_boxes(cfg) -> list[dict]:
+    """The boxes as dicts, in travel order, with their edges worked out."""
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "platform_course", None) if sc is not None else None
+    width = float(getattr(course_cfg, "width", 1.8))
+    out = []
+    for i, (x, h, d, role) in enumerate(_PLATFORM_BOXES):
+        out.append({
+            "index": i,
+            "role": role,
+            "x": float(x),
+            "height": float(h),
+            "half_depth": float(d) / 2.0,
+            "half_width": width / 2.0 - 0.05,
+            "near": float(x) - float(d) / 2.0,
+            "far": float(x) + float(d) / 2.0,
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Pillar course — tall narrow columns, hopped between from a standstill
+# ---------------------------------------------------------------------------
+
+# (x centre, height, top size). The pads are square and small: the ball is
+# 0.30 m across the core, so a 0.60 m pad is somewhere to stand, not somewhere
+# to roll. Every hop is therefore a standing jump.
+#
+# Heights are 2.8x to 3.5x the core diameter. Reaching them needs the
+# long-stroke build in configs/rl/pillar_course.yaml; the standard build tops
+# out at a 0.42 m pad.
+# Pads are 0.90 m square. That is still too small to roll on -- the core is
+# 0.30 m across, so there is barely one ball-width of deck -- but 0.60 m pads
+# proved smaller than the jump's own landing scatter. A pad must be wider than
+# the spread of where the jump actually lands.
+#
+# The course is a LADDER. The guaranteed standing-jump rise, measured across
+# random orientations, floors at about 0.84 m -- so a single leap from the
+# floor onto the 0.85 m pillar cannot be promised. Each step here rises at
+# most 0.45 m, which every calibrated orientation clears; the tall pillars
+# are reached by climbing, the way a platformer would stage it.
+_PILLAR_COLUMNS = [
+    (2.20, 0.40, 0.90),    # starter block, 1.3x the core
+    (3.22, 0.85, 0.90),    # +0.45 -> 2.8x the core
+    (4.24, 1.05, 0.90),    # +0.20 -> 3.5x the core
+    (5.26, 0.65, 0.90),    # -0.40 -> down to 2.2x
+]
+
+_PILLAR_LENGTH = 9.0
+
+
+def pillar_course_scenario(cfg, *, rng=None, name: str = "pillar_course") -> Scenario:
+    """A corridor with three tall, narrow columns to hop between.
+
+    The robot drives up, stops, jumps onto the first column, stands still,
+    then hops column to column without ever rolling on top of one. The pads
+    are too small for that -- which is the point.
+    """
+    sc = getattr(cfg, "scenario", None)
+    course_cfg = getattr(sc, "pillar_course", None) if sc is not None else None
+    width = float(getattr(course_cfg, "width", 2.2))
+    length = float(getattr(course_cfg, "length", _PILLAR_LENGTH))
+
+    half_w = width / 2.0
+    spawn = np.array([0.0, 0.0], dtype=float)
+    goal = np.array([length - 0.9, 0.0], dtype=float)
+
+    walls = np.array([
+        [-0.9, +half_w, length, +half_w],
+        [-0.9, -half_w, length, -half_w],
+        [-0.9, -half_w, -0.9, +half_w],
+        [length, -half_w, length, +half_w],
+    ], dtype=float)
+
+    steps = [[float(x), 0.0, float(top) / 2.0, float(top) / 2.0, float(h)]
+             for (x, h, top) in _PILLAR_COLUMNS]
+
+    pts = np.linspace(spawn, goal, 90).astype(np.float32)
+    return Scenario(
+        kind="pillar_course", name=name,
+        spawn_xy=spawn.astype(np.float32),
+        goal=goal.astype(np.float32),
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        walls=walls.astype(np.float32),
+        steps=steps,
+    )
+
+
+def pillar_course_columns(cfg) -> list[dict]:
+    """The columns in travel order, with their edges worked out."""
+    out = []
+    for i, (x, h, top) in enumerate(_PILLAR_COLUMNS):
+        out.append({
+            "index": i,
+            "x": float(x),
+            "height": float(h),
+            "half_top": float(top) / 2.0,
+            "near": float(x) - float(top) / 2.0,
+            "far": float(x) + float(top) / 2.0,
+        })
+    return out
+
+
 _GENERATORS = {
     "path": path_scenario, "goal": goal_scenario,
     "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
     "maze": maze_scenario, "rocky_terrain": rocky_terrain_scenario,
     "rocky": rocky_terrain_scenario, "mountain": rocky_terrain_scenario,
+    "slopes": slopes_scenario, "incline": slopes_scenario,
+    "stairs": stairs_scenario, "staircase": stairs_scenario,
+    "glass_pipe": glass_pipe_scenario, "pipe": glass_pipe_scenario, "tunnel": glass_pipe_scenario,
+    "extreme_gauntlet": extreme_gauntlet_scenario, "gauntlet": extreme_gauntlet_scenario,
+    "skill_course": skill_course_scenario, "course": skill_course_scenario,
+    "platform_course": platform_course_scenario, "platforms": platform_course_scenario,
+    "pillar_course": pillar_course_scenario, "pillars": pillar_course_scenario,
+    "jump_track": jump_track_scenario, "jump": jump_track_scenario, "long_jump": jump_track_scenario, "hurdle": jump_track_scenario,
 }
 
 
 def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> Scenario:
-    """Generate a scenario of the given ``kind`` (``"path"`` | ``"goal"``)."""
+    """Generate a scenario of the given ``kind``."""
     if kind not in _GENERATORS:
         raise ValueError(f"unknown scenario kind {kind!r}; expected one of {KINDS}")
     rng = np.random.default_rng(seed)
     return _GENERATORS[kind](cfg, rng=rng, name=name or kind)
+

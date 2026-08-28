@@ -1,0 +1,40 @@
+# Pillar course: tall, narrow columns hopped between with standing jumps.
+#
+# This course uses a LONG-STROKE build. Jump height is set almost entirely by
+# rod stroke, and the pillars here are three to four times the height of the
+# 0.30 m core, which the standard 0.16 m stroke cannot reach:
+#
+#   stroke (m)   standing jump rise (m)   tallest pad it can land on
+#   0.16         0.40                     0.42
+#   0.26         1.11                     1.15
+#   0.30         1.41                     1.44
+#
+# The pads are deliberately small, so the robot cannot roll on them and every
+# hop is a standing jump from a standstill. That suits this gait: the standing
+# jump is the one that goes high, it just does not travel far -- about 0.39 m
+# of reach at the apex -- so the pillars are set close together.
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "pillar_course"
+  kind: "pillar_course"
+  maze:
+    wall_height: 1.8      # the hops peak near 2 m; a 0.22 m wall let a
+                          # deflected ball leave the arena altogether
+  pillar_course:
+    width: 2.8            # leaves a 0.95 m side lane past the 0.9 m pads. The
+                          # ball pins itself on any wall within its 0.41 m rod
+                          # reach, so the lane must clear that on BOTH sides
+
+robot:
+  appearance_theme: "realistic"
+  max_extend: 0.26        # long-stroke build; 0.16 is the default
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

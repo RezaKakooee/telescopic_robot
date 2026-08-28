@@ -917,4 +917,132 @@ To provide clear visibility of the ball mechanics without tracking rotation jitt
 - **Full Evaluation Video ($35.0\text{s}$, Goal reached at Step 840)**:
   [`storage_local/20260825_1452__close_fixed_rocky_maze_eval/fixed_close_dual_composite.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_1452__close_fixed_rocky_maze_eval/fixed_close_dual_composite.mp4)
 
+---
+
+## 32. Transparent Glass Pipe / Conduit Inspection ($360^\circ$ Radial In-Pipe Crawling)
+
+To test the robot's ability to inspect and traverse confined industrial pipelines and conduits, we designed a **$8.5\text{-Meter}$ Transparent Glass Pipeline**:
+
+<p align="center">
+  <img src="assets/terrain_glass_pipe_preview.png" width="80%" />
+</p>
+
+### A. Optical Glass MJCF Modeling & Physical Barrel
+* **Optical Transparency Formulation**:
+  ```xml
+  <material name="glass_pipe_mat" rgba="0.25 0.78 0.95 0.28" specular="0.95" shininess="0.95" reflectance="0.25"/>
+  <material name="pipe_ring_mat" rgba="0.18 0.20 0.24 1.0" specular="0.8" shininess="0.9"/>
+  ```
+* **16-Faceted Polygonal Barrel**: Formed by $N=16$ transparent glass panels arranged circularly ($R_{\text{in}} = 0.38\text{m}$, wall thickness $0.015\text{m}$, length $8.5\text{m}$) reinforced with structural chrome collar rings at $2.0\text{m}$ intervals.
+* **Internal Contact Physics**: Bitmask `contype="2" conaffinity="1"` on glass facets guarantees 100% rigid contact for internal rods pushing against the curved inner walls and ceiling.
+
+### B. In-Pipe Circumferential Bracing Controller (`enable_pipe_bracing: true`)
+Inside the pipe, radial rods around the full $360^\circ$ cross-section expand outward to match the inner pipe radius, bracing the ball against the ceiling and side walls while trailing rear rods propel the robot forward:
+
+$$A_{\text{pipe}, i} = k_{\text{pipe}} \cdot \max(0.35,\, 1.0 - 0.65 \max(u_{\text{long}, i}, 0.0)) \quad \text{for } \sqrt{u_{\text{lat}, i}^2 + u_{z, i}^2} > 0.30$$
+
+- **In-Pipe Crawling Video ($18.9\text{s}$, Goal reached at Step 453)**:
+  [`storage_local/20260825_2341__in_pipe_crawling_eval/in_pipe_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2341__in_pipe_crawling_eval/in_pipe_dual_close_view.mp4)
+
+---
+
+## 33. Multi-Stage Incline Slopes & Multi-Step Staircase Flights
+
+### A. Uphill / Downhill Slopes (`slopes`, $+15^\circ / -15^\circ$)
+High-traction inclined ramp slabs ($4.0\text{m}$ ascent, $5.0\text{m}$ solid elevated ridge plateau at $z = 0.50\text{m}$, and $4.0\text{m}$ descent) with safety guide curbs:
+
+<p align="center">
+  <img src="assets/terrain_slopes_preview.png" width="85%" />
+</p>
+
+* **Incline Traction Assist**: Dynamically scales rear push force to overcome gravity during uphill climbs.
+* **Ridge Plateau Cruise**: Solid elevated plateau block prevents gap drop-through and supports continuous rolling.
+* **Video Recording ($25.0\text{s}$, Goal reached at Step 601)**: [`storage_local/20260825_2349__extreme_terrains_showcase/terrain_slopes_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2349__extreme_terrains_showcase/terrain_slopes_dual_close_view.mp4)
+
+### B. Multi-Step Staircase Flights (`stairs`)
+Sequential flights of 5 ascending and 5 descending steps ($5.0\text{ cm}$ rise, $26.0\text{ cm}$ run) with high-visibility nosing stripes and a solid elevated landing platform at $z=0.25\text{m}$:
+
+<p align="center">
+  <img src="assets/terrain_stairs_preview.png" width="85%" />
+</p>
+
+* **Step-Vaulting Push Power**: Rhythmic rear rod pulse ($3.0\times$ boost) vaults the ball up consecutive step edges without front catching.
+* **Video Recording ($29.7\text{s}$, Goal reached at Step 712)**: [`storage_local/20260825_2349__extreme_terrains_showcase/terrain_stairs_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2349__extreme_terrains_showcase/terrain_stairs_dual_close_view.mp4)
+
+---
+
+## 34. Non-Stalling Dynamic Peristaltic Locomotion Physics
+
+### A. Root Causes of Terrain Stalling and Mechanical Remedies
+1. **Shaft vs. Foot Contact Friction**:
+   * *Problem*: When cylindrical rod shafts touched the ground alongside feet, large contact areas caused excessive rolling resistance.
+   * *Fix*: Recessed `inner_geom_k` capsule shafts behind the vulcanized rubber spherical `foot_k` pads ($r=0.022\text{m}$), ensuring pure point contact.
+2. **Leading-Sector Kickstand Braking**:
+   * *Problem*: Any rod extending in the forward sector ($u_{\text{long}} > -0.05$) created backward counter-torque $\tau = r \times F$ that physically blocked forward rolling into rising terrain.
+   * *Fix*: Strict directional tucking in controller: `wave[u_long > -0.05] = 0.0` and `wave[u_z > 0.10] = 0.0`.
+3. **Seesaw Core Tipping on Slopes**:
+   * *Problem*: Extending bottom vertical rods ($u_z \approx -1.0$) to full $0.16\text{m}$ lifted the rear of the ball and pitched the front core sphere into the ramp.
+   * *Fix*: Low-profile underbelly support ($25\%$ stroke, $\le 0.04\text{m}$) maintains clearance while trailing rear rods ($u_{\text{long}} < -0.10$) deliver $100\%$ propulsion stroke.
+
+### B. Summary of Extreme Terrain Validations
+
+| Scenario | Terrain Features | Traversal Distance | Final Result | Time / Steps | Video Artifact |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **`glass_pipe`** | $16$-facet optical glass pipe ($R=0.38\text{m}$, $L=10.5\text{m}$) | $10.0\text{ m}$ | **Goal Reached** | $18.9\text{ s}$ (453 steps) | [`in_pipe_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2341__in_pipe_crawling_eval/in_pipe_dual_close_view.mp4) |
+| **`slopes`** | $+15^\circ$ ramp, $5\text{m}$ plateau ($z=0.50\text{m}$), $-15^\circ$ descent | $17.5\text{ m}$ | **Goal Reached** | $25.0\text{ s}$ (601 steps) | [`terrain_slopes_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2349__extreme_terrains_showcase/terrain_slopes_dual_close_view.mp4) |
+| **`stairs`** | 5 ascending steps, elevated landing ($z=0.25\text{m}$), 5 descending steps | $13.5\text{ m}$ | **Goal Reached** | $29.7\text{ s}$ (712 steps) | [`terrain_stairs_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2349__extreme_terrains_showcase/terrain_stairs_dual_close_view.mp4) |
+| **`extreme_gauntlet`** | Integrated pipeline: Rubble $\to$ Slopes $\to$ Stairs $\to$ Glass Pipe | $27.0\text{ m}$ | **50s Showcase** | $50.0\text{ s}$ (1200 steps) | [`terrain_extreme_gauntlet_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260825_2349__extreme_terrains_showcase/terrain_extreme_gauntlet_dual_close_view.mp4) |
+
+---
+
+## 35. Explosive Standing Vertical Jump Locomotion
+
+We implemented and verified an **Explosive Standing Vertical Jump Maneuver** that launches the 60-bar radial sphere from a stationary standing rest position into high airborne flight:
+
+<p align="center">
+  <img src="assets/standing_jump_progression_grid.png" width="98%" />
+</p>
+
+### The 5-Phase Standing Jump State Machine:
+1. **Stationary Stand ($z = 0.208\,\text{m}$)**: Stable resting posture on bottom contact rods with zero horizontal speed.
+2. **Deep Crouch Preload ($z = 0.156\,\text{m}$)**: Active retraction of ground rods to maximize kinematic travel stroke.
+3. **Explosive Takeoff Impulse ($v_z = +3.14\,\text{m/s}$)**: Simultaneous $100\%$ full-stroke extension ($0.16\,\text{m}$) across all downward-facing ground rods, generating $> 600\,\text{N}$ vertical ground reaction force on the $5.5\,\text{kg}$ sphere ($> 11\,\text{g}$ launch acceleration).
+4. **Airborne Flight Apex ($z = 0.658\,\text{m}$)**: High mid-air flight with $+45.0\,\text{cm}$ net vertical launch clearance off the floor, with shadow completely detached below.
+5. **Compliant Landing Touchdown ($z = 0.194\,\text{m}$)**: Soft suspension extension absorbs ground impact energy without excessive bouncing.
+
+### Evaluation Metrics:
+* **Standing Baseline Height**: $0.208\,\text{m}$
+* **Peak Airborne Altitude**: $0.658\,\text{m}$ ($+45.0\,\text{cm}$ vertical launch clearance)
+* **Peak Takeoff Velocity**: $+3.14\,\text{m/s}$
+* **Horizontal Drift**: $< 0.20\,\text{m}$ (maintains near-pure vertical trajectory)
+* **Dual Close-Up Video ($15.0\,\text{s}$)**: [`storage_local/20260826_1127__standing_jump_eval/standing_jump_dual_close_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260826_1127__standing_jump_eval/standing_jump_dual_close_view.mp4)
+* **Stationary Arena Overview Video ($15.0\,\text{s}$)**: [`storage_local/20260826_1127__standing_jump_eval/standing_jump_stationary_overview.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260826_1127__standing_jump_eval/standing_jump_stationary_overview.mp4)
+
+---
+
+## 36. Directional Forward Jump & High-Speed Hurdle Leap
+
+We developed and verified the **Directional Forward Jump / Hurdle Leap Maneuver** on a high-contrast athletic runway equipped with painted distance markings, yard lines, and an elevated physical hurdle bar:
+
+<p align="center">
+  <img src="assets/forward_jump_track_progression.png" width="98%" />
+</p>
+
+### The 5-Stage Forward Leap on Marked Track:
+1. **Stationary Stand at Start Line ($X = 0.0\,\text{m}$)**: Resting stably on the orange launch box with zero initial momentum.
+2. **Standing Forward Jump ($z_{\text{peak}} = 0.554\,\text{m}, +34.6\,\text{cm}$ net lift)**: Deep crouch preload followed by directional forward impulse launches the ball upward with forward bias.
+3. **High-Speed Accelerating Sprint ($v_x = +1.79\,\text{m/s}$)**: Rear-pusher peristaltic drive builds forward momentum across the $0.5\,\text{m}$ and $1.0\,\text{m}$ yard lines.
+4. **Explosive Airborne Hurdle Leap ($v_x = +2.56\,\text{m/s}, v_z = +2.60\,\text{m/s}$)**: Kinematic pre-leap dip followed by full-cluster explosive impulse launches the ball into a massive parabolic trajectory, flying **$+1.12\,\text{m}$ forward in mid-air** and completely clearing the physical hurdle at $X = 1.45\,\text{m}$ with $z = 0.404\,\text{m}$ ($+32.4\,\text{cm}$ clearance above the $8\,\text{cm}$ bar).
+5. **Compliant Touchdown & Rollout ($X = 2.3\,\text{m}$)**: Smooth suspension shock absorption upon touchdown past the hurdle.
+
+### Evaluation Metrics & Camera Streams:
+* **Hurdle Clearance in Mid-Air**: $+32.4\,\text{cm}$ vertical clearance above the $8.0\,\text{cm}$ obstacle bar at $X = 1.45\,\text{m}$
+* **Forward Airborne Leap Distance**: **$+1.12\,\text{m}$** in mid-air in a single leap
+* **Peak Hurdle Leap Altitude**: $z = 0.455\,\text{m}$ ($+24.7\,\text{cm}$ net lift during sprint)
+* **Peak Vertical Takeoff Velocity ($v_z$)**: $+2.60\,\text{m/s}$
+* **Max Forward Velocity ($v_x$)**: $+2.56\,\text{m/s}$
+* **Dual Synchronized Video ($13.3\,\text{s}$)**: [`storage_local/20260827_0017__forward_jump_track_eval/forward_jump_toward_camera_dual.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260827_0017__forward_jump_track_eval/forward_jump_toward_camera_dual.mp4)
+  *(Left: Fixed Front View jumping straight toward camera; Right: Fixed Lateral Trackside View showing the flight arc over the hurdle and yardlines)*
+* **Front View (Jumping Toward Camera)**: [`storage_local/20260827_0017__forward_jump_track_eval/forward_jump_front_toward_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260827_0017__forward_jump_track_eval/forward_jump_front_toward_view.mp4)
+* **Lateral Trackside View**: [`storage_local/20260827_0017__forward_jump_track_eval/forward_jump_lateral_track_view.mp4`](file:///home/azureuser/telescopic_robot/storage_local/20260827_0017__forward_jump_track_eval/forward_jump_lateral_track_view.mp4)
 

@@ -1,0 +1,28 @@
+defaults:
+  - config
+  - _self_
+
+# Multi-Step Staircase Flight (5 Ascending Steps, Ridge Landing, 5 Descending Steps)
+robot:
+  appearance_theme: realistic
+
+scenario:
+  kind: stairs
+  name: terrain_staircase_steps
+  goal:
+    x_range: [13.5, 13.5]
+    y_range: [0.0, 0.0]
+
+controller:
+  base: 0.0
+  back_gain: 2.2
+  lookahead: 1.2
+  enable_curb_vaulting: true
+  curb_boost_gain: 2.8
+  enable_underbelly_contact: true
+  underbelly_stance_gain: 0.45
+  underbelly_threshold_z: -0.20
+  enable_active_suspension: true
+  target_ride_height: 0.28
+  suspension_kp: 0.75
+  suspension_kd: 0.15

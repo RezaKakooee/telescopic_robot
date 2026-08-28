@@ -1,0 +1,28 @@
+defaults:
+  - config
+  - _self_
+
+# Transparent Glass Conduit / Pipe (In-Pipe Crawling Inspection with 360° Rod Adaptation)
+robot:
+  appearance_theme: realistic
+
+scenario:
+  kind: glass_pipe
+  name: terrain_transparent_glass_pipe
+  goal:
+    x_range: [12.5, 12.5]
+    y_range: [0.0, 0.0]
+
+controller:
+  base: 0.0
+  back_gain: 2.2
+  lookahead: 1.2
+  enable_pipe_bracing: true
+  pipe_bracing_gain: 0.42
+  enable_underbelly_contact: true
+  underbelly_stance_gain: 0.40
+  underbelly_threshold_z: -0.20
+  enable_active_suspension: true
+  target_ride_height: 0.28
+  suspension_kp: 0.75
+  suspension_kd: 0.15

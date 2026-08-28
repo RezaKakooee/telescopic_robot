@@ -1,0 +1,30 @@
+# Skill-demo course: the hand-drawn circuit driven by the skills library.
+#
+# Platform height is capped by physics, not by tuning. Measured on this robot:
+#
+#   * the running leap peaks at about 0.60 m of core height, so the underside
+#     of the tucked ball reaches roughly 0.44 m -- that is the tallest thing
+#     it can land on top of;
+#   * a longer rod stroke does raise the jump a lot (0.26 m stroke lifts a
+#     STANDING jump to 1.2 m), but a standing jump carries almost no forward
+#     speed, so the robot goes straight up beside the box and never lands on
+#     it. The running jump cannot use the longer stroke, because the crouch
+#     has no time to seat the rods while the ball is rolling.
+#   * raising the actuator force limit does nothing at all on its own.
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "skill_course"
+  kind: "skill_course"
+
+robot:
+  appearance_theme: "realistic"
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

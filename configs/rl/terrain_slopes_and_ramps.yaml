@@ -1,0 +1,28 @@
+defaults:
+  - config
+  - _self_
+
+# Incline Slopes & Ramps (+18° Uphill Ascent, Ridge Plateau, -18° Downhill Descent)
+robot:
+  appearance_theme: realistic
+
+scenario:
+  kind: slopes
+  name: terrain_slopes_and_ramps
+  goal:
+    x_range: [16.0, 16.0]
+    y_range: [0.0, 0.0]
+
+controller:
+  base: 0.0
+  back_gain: 2.2
+  lookahead: 1.2
+  enable_underbelly_contact: true
+  underbelly_stance_gain: 0.45
+  underbelly_threshold_z: -0.20
+  enable_active_suspension: true
+  target_ride_height: 0.28
+  suspension_kp: 0.75
+  suspension_kd: 0.15
+  enable_incline_assist: true
+  incline_boost_gain: 1.50

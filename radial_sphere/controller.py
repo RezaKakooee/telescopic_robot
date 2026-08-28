@@ -130,77 +130,64 @@ def bar_targets(
     target_ride_height: float = 0.28,
     suspension_kp: float = 0.65,
     suspension_kd: float = 0.12,
-    suspension_force_compliance: float = 0.0015,
+    suspension_force_compliance: float = 0.0018,
     nominal_support_force: float = 10.0,
+    # --- In-Pipe Circumferential Bracing Strategy (Transparent Glass Tube Inspection) ---
+    enable_pipe_bracing: bool = False,
+    pipe_bracing_gain: float = 0.42,
+    # --- Incline Slope Traction Assist & Downhill Braking ---
+    enable_incline_assist: bool = False,
+    incline_pitch: float = 0.0,
+    incline_boost_gain: float = 1.45,
 ) -> np.ndarray:
     """Compute per-bar extension targets based on physical peristaltic cam mechanics."""
     R = quat_to_rotmat(quat)
     dirs_world = dirs_body @ R.T
 
+    # 1. Base Push Wave (Dynamic Peristaltic Drive)
     # Longitudinal coordinate along travel direction (-1 rear, +1 front)
     u_long = dirs_world[:, 0] * d_hat[0] + dirs_world[:, 1] * d_hat[1]
-    # Lateral coordinate perpendicular to travel direction
     u_lat = dirs_world[:, 0] * (-d_hat[1]) + dirs_world[:, 1] * d_hat[0]
-    # Vertical coordinate (-1 down, +1 up)
     u_z = dirs_world[:, 2]
 
-    # Rear factor: strictly non-zero only for trailing bars (u_long < 0)
-    rear = np.clip(-u_long, 0.0, 1.0)
-    # Downward stance factor: boosts ground-contacting push in lower hemisphere
-    down_bias = 0.35 + 0.65 * np.clip(-u_z, 0.0, 1.0)
-    # Lateral tuck factor: suppress side flank rods from flaring out laterally
-    lat_tuck = np.clip(1.0 - 1.2 * (u_lat ** 2), 0.0, 1.0)
+    # Rear factor: trailing rods in rear hemisphere generate strong forward torque
+    rear_factor = np.clip((-u_long - 0.10) / 0.90, 0.0, 1.0)
+    # Downward stance factor: concentrates push in rear-downward quadrant
+    down_factor = np.clip(1.0 - abs(u_z + 0.35) / 0.85, 0.0, 1.0)
+    # Lateral tuck factor: suppress side flank rods from extending laterally
+    lat_tuck = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
 
-    # 1. Base Push Wave (Adaptive Grouping, Standard, Power-Cosine, or Gaussian Stance)
-    if enable_adaptive_grouping:
-        # Select top `group_size` (e.g. 10) rods aligned with ideal rear-downward push vector
-        ideal_push_dir = -0.707 * np.array([d_hat[0], d_hat[1], 0.0]) + np.array([0.0, 0.0, -0.707])
-        ideal_push_dir /= np.linalg.norm(ideal_push_dir)
-        scores = dirs_world @ ideal_push_dir
-        invalid_mask = (u_long >= -0.05) | (u_z >= 0.15)
-        scores[invalid_mask] = -999.0
+    # Effective back gain (boosted on steep incline slopes)
+    effective_gain = back_gain
+    if enable_incline_assist and incline_pitch > 0.04:
+        effective_gain = back_gain * (1.0 + incline_boost_gain * np.sin(incline_pitch))
 
-        wave = np.zeros(len(dirs_body), dtype=np.float32)
-        sorted_indices = np.argsort(scores)[::-1]
-        rear_group = sorted_indices[:group_size]
-        rear_group = rear_group[scores[rear_group] > 0.0]
-        if len(rear_group) > 0:
-            wave[rear_group] = 1.0
-    elif enable_gaussian_stance:
-        # Smooth C-infinity Gaussian stance window for whisper-quiet ground handoffs
-        cos_align = -u_long * 0.707 - u_z * 0.707
-        theta = np.arccos(np.clip(cos_align, -1.0, 1.0))
-        wave = np.clip(np.exp(-(theta ** 2) / (2.0 * (gaussian_stance_sigma ** 2))) * lat_tuck * back_gain, 0.0, 1.0)
-    elif enable_power_wave:
-        rear_factor = rear ** wave_power_exponent
-        wave = np.clip((rear_factor) * down_bias * lat_tuck * back_gain, 0.0, 1.0)
-    else:
-        wave = np.clip((rear ** 1.3) * down_bias * lat_tuck * back_gain, 0.0, 1.0)
+    wave = np.clip((rear_factor ** 1.1) * down_factor * effective_gain * lat_tuck, 0.0, 1.0)
 
-    # Strict spatial tucking for non-underbelly rods: front (u_long >= 0) and top (u_z >= 0.15)
-    wave[u_long >= 0.0] = 0.0
-    wave[u_z >= 0.15] = 0.0
-
-    # Obstacle Passover: boost rear trailing push rods to vault over ground obstacles
+    # 2. Obstacle / Curb Vaulting Boost
     if enable_curb_vaulting:
-        is_rear_pusher = (u_long < -0.08) & (u_z < 0.08)
+        is_rear_pusher = (u_long < -0.10) & (u_z < 0.10)
         wave[is_rear_pusher] = np.clip(wave[is_rear_pusher] * curb_boost_gain, 0.0, 1.0)
-        # Keep leading rods cleanly tucked so they do not catch the front lip
-        wave[u_long > -0.05] = 0.0
 
-    # Ground-Contacting Underbelly Stance Strategy:
-    # Rods directly underneath the ball (u_z < threshold) actively extend downward
-    # to maintain continuous solid ground/rock contact support beneath the core,
-    # with a propulsion gradient so rear underbelly rods drive forward while bottom rods support weight.
+    # 3. Ground-Contacting Underbelly Support (Capped low-profile so no seesaw tipping occurs)
     if enable_underbelly_contact:
-        is_underbelly = u_z < underbelly_threshold_z
+        is_underbelly = (u_z < underbelly_threshold_z) & (u_long <= -0.05)
         depth_fraction = np.clip((-u_z - abs(underbelly_threshold_z)) / (1.0 - abs(underbelly_threshold_z)), 0.0, 1.0)
-        # Forward rolling gradient: center/rear underbelly rods provide support & drive, leading rods gently conform
-        roll_gradient = np.clip(1.0 - 0.75 * np.maximum(u_long, 0.0), 0.30, 1.0)
-        # Lateral flank tucking: prevent side rods from extending into adjacent walls
-        lat_tuck_underbelly = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
-        stance_wave = depth_fraction * underbelly_stance_gain * roll_gradient * lat_tuck_underbelly
-        wave = np.where(is_underbelly, np.maximum(wave, stance_wave), wave)
+        support_stance = depth_fraction * underbelly_stance_gain * np.clip(1.0 - 1.5 * (u_lat ** 2), 0.0, 1.0)
+        wave = np.where(is_underbelly, np.maximum(wave, support_stance), wave)
+
+    # 4. In-Pipe Circumferential Bracing (Transparent Glass Conduit Inspection)
+    if enable_pipe_bracing:
+        radial_dist = np.sqrt(u_lat ** 2 + u_z ** 2)
+        is_side_guide = (radial_dist > 0.35) & (u_z < 0.10) & (u_long <= 0.05)
+        pipe_stance = pipe_bracing_gain * np.clip(1.0 - 0.70 * np.maximum(u_long, 0.0), 0.30, 0.60)
+        is_rear_pusher = (u_long < -0.08) & (u_z < 0.10)
+        wave = np.where(is_side_guide, np.maximum(wave, pipe_stance), wave)
+        wave[is_rear_pusher] = np.maximum(wave[is_rear_pusher], 0.90)
+
+    # Absolute guarantee: no rod in the leading forward sector (u_long > -0.05) or top (u_z > 0.10) ever extends
+    wave[u_long > -0.05] = 0.0
+    wave[u_z > 0.10] = 0.0
 
     targets = min_offset + drive * (max_extend - min_offset) * wave
 
@@ -278,3 +265,104 @@ def bar_targets(
         targets = np.clip(targets, last_targets - max_delta, last_targets + max_delta)
 
     return targets
+
+
+def standing_jump_targets(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    *,
+    phase: str = "stand",  # "stand", "crouch", "takeoff", "airborne", "landing"
+    landing_standoff: float = 0.055,
+    stand_height_offset: float = 0.045,
+) -> np.ndarray:
+    """Compute 60-bar radial extension targets for explosive standing vertical jump.
+
+    Phases:
+    1. 'stand': Stable resting posture on ground contact cluster (z ~ 0.21m).
+    2. 'crouch': Deep retraction of bottom rods to store travel stroke (z ~ 0.16m).
+    3. 'takeoff': Simultaneous 100% full-stroke impulse on all downward rods (+3.3 m/s launch velocity).
+    4. 'airborne': Mid-air tuck holding spherical profile (+45-50 cm net vertical launch clearance).
+    5. 'landing': Compliant touchdown suspension to absorb landing impact.
+    """
+    R = quat_to_rotmat(quat)
+    dirs_world = dirs_body @ R.T
+    u_z = dirs_world[:, 2]
+
+    targets = np.zeros(len(dirs_body), dtype=np.float32)
+
+    if phase == "crouch":
+        # Full retraction to store kinematic stroke
+        targets[:] = 0.00
+    elif phase == "takeoff":
+        # Maximum explosive impulse across all downward-facing ground rods
+        ground_mask = (u_z < 0.10)
+        targets[ground_mask] = max_extend
+        targets[u_z > 0.15] = 0.0
+    elif phase == "airborne":
+        # Mid-air aerodynamic profile
+        targets[:] = 0.015
+    elif phase == "landing":
+        # Compliant touchdown damper
+        bottom_mask = (u_z < -0.20)
+        targets[bottom_mask] = landing_standoff
+    return targets
+
+
+def forward_jump_targets(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    d_hat: np.ndarray,
+    *,
+    phase: str = "stand",  # "stand", "crouch", "takeoff", "airborne", "landing"
+    landing_standoff: float = 0.055,
+    stand_height_offset: float = 0.045,
+    rollout_gain: float = 0.12,
+) -> np.ndarray:
+    """Compute 60-bar radial extension targets for explosive directional forward jump / hurdle leap.
+
+    Phases:
+    1. 'stand': Stable resting posture on ground contact cluster (z ~ 0.21m).
+    2. 'crouch': Deep retraction of bottom rods to store travel stroke (z ~ 0.16m).
+    3. 'takeoff': Rear-biased 100% full-stroke impulse on ground rods (+2.5 m/s vx, +2.6 m/s vz launch).
+    4. 'airborne': Mid-air tuck holding spherical profile (+35-45 cm net clearance, > 1.1m flight distance).
+    5. 'landing': Compliant touchdown suspension to absorb landing impact and roll forward.
+    """
+    R = quat_to_rotmat(quat)
+    dirs_world = dirs_body @ R.T
+
+    u_long = dirs_world[:, 0] * d_hat[0] + dirs_world[:, 1] * d_hat[1]
+    u_lat = dirs_world[:, 0] * (-d_hat[1]) + dirs_world[:, 1] * d_hat[0]
+    u_z = dirs_world[:, 2]
+
+    targets = np.zeros(len(dirs_body), dtype=np.float32)
+
+    if phase == "crouch":
+        # Full retraction to store kinematic stroke
+        targets[:] = 0.00
+    elif phase == "takeoff":
+        # Directional forward impulse: rear-downward rods fire with 100% stroke, front rods retract
+        ground_mask = (u_z < 0.10)
+        forward_bias = np.clip(1.0 - 0.85 * np.maximum(u_long, -0.3), 0.35, 1.0)
+        targets[ground_mask] = max_extend * forward_bias[ground_mask]
+        targets[u_long > 0.15] = 0.0
+        targets[u_z > 0.15] = 0.0
+    elif phase == "airborne":
+        # Mid-air aerodynamic profile
+        targets[:] = 0.015
+    elif phase == "landing":
+        # Compliant touchdown damper with forward rollout torque
+        bottom_mask = (u_z < -0.20)
+        targets[bottom_mask] = landing_standoff
+        rear_pusher = (u_long < -0.15) & (u_z < 0.0)
+        targets[rear_pusher] = rollout_gain
+        targets[u_long > 0.0] = 0.0
+    else:
+        # Stationary standing rest
+        bottom_mask = (u_z < -0.30)
+        targets[bottom_mask] = stand_height_offset
+
+    return targets
+
+
