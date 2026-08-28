@@ -952,6 +952,53 @@ leading ones cannot vault. Both are untried; see `handoff.md`.
 **Rule produced:** a landing gear is a lever if the ground arrives before
 the fall has begun. Geometry decides, not preference.
 
+### 12.9 The chimney: what a radial-rod ball can and cannot do between two walls
+
+Three more skills arrived from a parallel session — `circle`, `straddle_gap`
+and `chimney_climb` — with tests that pass. The first two are sound. The
+chimney was not: its driver **pinned the ball's orientation and x every
+step** (`qpos[3:7] = [1,0,0,0]`), wrote rod targets in the body frame, and
+"descended" by lowering the jump force while continuing to jump. It looked
+like climbing. It was teleportation. Rebuilt from measurements:
+
+| mechanism | under free physics | number |
+|---|---|---|
+| **clamp** — near-horizontal rods press both walls | **holds** | 10–16 feet, ~1 kN, creep ~1 cm/s |
+| **inchworm** — angled rods push the walls to lift the core | **does not lift** | −1 to −9 cm per cycle, all variants |
+| **wall-jump** — push off one wall, fly to the other | **climbs** | 0.40 m shaft, ~1 m/s, 6/6 seeds |
+| **friction servo** — clamp extension servoed on vz | **controlled descent** | 2.5 m at 0.4 m/s, touchdown 0.15 m/s |
+
+The inchworm was tried five ways: full clamp, no clamp, light clamp (each rod
+commanded a few mm past its own wall distance), preload-then-release, three
+angle bands. Every one crept *down*. The physics: a position-controlled
+radial rod has no friction at its foot until it is pressed, and it is pressed
+only once the wall has stopped it — at which point no stroke remains to turn
+into lift. The wall-jump works because the ball arrives with sideways
+momentum: the impact *is* the preload. There is no smooth static climb for
+this mechanism; the smooth option is the same zig-zag at 70 % push, which is
+2–4× slower and lands the same (3/3 seeds).
+
+**Exiting the top** taught the second lesson. A wall push lifts the ball at
+most ~0.17 m above the push point, so it can never clear a lip level with the
+wall it just pushed off — every attempt (steep bands, armed higher, wider
+tops) bounced back in. It *can* clear the lip of a **lower** wall opposite:
+push off the tall wall from just above the low lip, fly over, land on the low
+box top, brake with `stop`. The chimney now has a 4.0 m wall and a 3.3 m
+wall, which is how real chimneys are exited too.
+
+| seeds | outcome |
+|---|---|
+| 6 / 6 (full push) | up the shaft, over the 3.3 m lip, stopped on the box top, 3–13 s |
+| 3 / 3 (gentle, 70 % push) | same, 9–22 s |
+
+The first jump is a floor jump, not a wall push — from the floor the wall-push
+rods point at the floor. And the ball drifts along the open shaft; a
+recentring roll before relaunch, and biasing each push toward the shaft's
+middle, keep it in.
+
+**Rule produced:** a pinned simulation proves nothing. Every claim in this
+section is from a ball that rotates and drifts as the physics says.
+
 ---
 
 ## 13. The library as it stands
@@ -979,9 +1026,8 @@ Adding a thirteenth is three steps, documented in `skills/README.md`.
 
 ## 14. Known weaknesses
 
-- **`fall_down` does not open its landing gear on short drops.** Asked for,
-  implemented, then gated off below 0.5 m because it vaulted the ball off
-  the next pad (§12.8). Trigger on lip clearance instead. Untried.
+- **No smooth chimney climb exists for this mechanism** (§12.9). The
+  zig-zag at 70 % push is the gentlest thing that climbs.
 - **Probe-abort rate is high by choice.** `PROBE_TRUST = 1.0` buys 0.45 m of
   stand-off from each face at the price of re-dealing about a third of
   launches. The constant is the trade.
@@ -1021,9 +1067,6 @@ Adding a thirteenth is three steps, documented in `skills/README.md`.
 
 ## Next
 
-- Make `fall_down` open its gear on every drop, triggered by clearing the
-  lip rather than by drop height, and verify the pillar roll-off across
-  seeds. This is the one request from this chapter that is not yet met.
 
 - Sync the launch to the gait cycle. §11 shows the take-off varies by 0.26 m
   of peak with the gait phase, and planning around that is what caps the

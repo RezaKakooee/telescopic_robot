@@ -1,6 +1,8 @@
 """Verification test: Run every skill for ~30 steps and verify it produces the expected motion."""
 import os
 os.environ["MUJOCO_GL"] = "egl"
+import sys
+from pathlib import Path
 import numpy as np
 
 from radial_sphere.config import load_config
@@ -110,6 +112,186 @@ def test_fall_down_off_platform(seed=1):
     assert end_x > px + plat["half_depth"], (
         f"FAIL: Expected to end past the platform edge, got x={end_x:.2f}m")
 
+
+def test_fall_down_pillar_rolloff(seed=1):
+    """Physics check for fall_down on narrow pillars: roll off pillar 2 (1.05m)
+    onto pillar 3 (0.65m) and verify it lands squarely on the 0.9m pad without
+    pole-vaulting or overshooting."""
+    from radial_sphere.scenario import pillar_course_columns
+
+    cfg = load_config("configs/rl/pillar_course.yaml")
+    scenario = generate_scenario("pillar_course", cfg, seed=1)
+    cols = pillar_course_columns(cfg)
+    env = MujocoRadialSphereEnv(cfg, scenario=scenario, randomize=False, max_steps=100_000)
+    env.reset(seed=seed)
+
+    cur, target = cols[2], cols[3]
+    drop = cur["height"] - target["height"]
+    deck_core = target["height"] + 0.19
+    env.data.qpos[0] = cur["far"] - 0.25
+    env.data.qpos[1] = 0.0
+    env.data.qpos[2] = cur["height"] + 0.19
+    env.data.qvel[:] = 0
+
+    phase, ps = "edge", 0
+    d_fwd = np.array([1.0, 0.0])
+    for _ in range(1500):
+        z = float(env.data.qpos[2])
+        if phase == "edge" and z < cur["height"] + 0.19 - 0.06:
+            phase, ps = "freefall", 0
+        elif phase == "freefall" and z < deck_core + 0.10:
+            phase, ps = "absorb", 0
+        elif phase == "absorb" and z < deck_core + 0.03:
+            phase, ps = "brake", 0
+        ps += 1
+
+        if phase == "brake":
+            t = execute_skill("stop", env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend,
+                              lin_vel=env.data.qvel[0:2].copy(), stop_distance=0.15)
+        else:
+            t = execute_skill("fall_down", env.data.qpos[3:7].copy(), env.dirs_body,
+                              env.max_extend, d_hat=d_fwd, phase=phase,
+                              drop_height=drop, edge_speed=0.35, gear=0.5)
+        env.step(t)
+        if phase == "brake" and ps > 80:
+            break
+
+    for _ in range(60):
+        env.step(execute_skill("stop", env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend,
+                               lin_vel=env.data.qvel[0:2].copy()))
+
+    x, y, z = float(env.data.qpos[0]), float(env.data.qpos[1]), float(env.data.qpos[2])
+    on = (target["near"] < x < target["far"]
+          and target["height"] + 0.10 < z < target["height"] + 0.55)
+    env.close()
+
+    print(f"12b. fall_down(pillar): landed x={x:.2f}m y={y:+.2f}m z={z:.2f}m "
+          f"on pillar 3 [{target['near']:.2f}, {target['far']:.2f}]m")
+    assert on, f"FAIL: Expected to land on pillar 3 [{target['near']:.2f}, {target['far']:.2f}], got x={x:.2f}m"
+
+
+def test_circle_trajectory(radius=1.8, target_speed=1.0, steps=600):
+    """Physics check for circle: drive in a circle of radius R, verify circularity
+    (radial variance < 10cm, mean radius within 5% of target)."""
+    cfg = load_config("configs/rl/standing_jump_showcase.yaml")
+    scenario = generate_scenario("goal", cfg, seed=42)
+    env = MujocoRadialSphereEnv(cfg, scenario=scenario, randomize=False, max_steps=100_000)
+    env.reset(seed=42)
+
+    env.data.qpos[0] = radius
+    env.data.qpos[1] = 0.0
+    env.data.qpos[2] = 0.20
+    env.data.qvel[:] = 0
+
+    radii = []
+    prev_th = 0.0
+    accum_th = 0.0
+
+    for step in range(steps):
+        pos = env.data.qpos[0:2].copy()
+        quat = env.data.qpos[3:7].copy()
+        r = float(np.linalg.norm(pos))
+        radii.append(r)
+
+        th = np.arctan2(pos[1], pos[0])
+        d_th = th - prev_th
+        if d_th > np.pi: d_th -= 2 * np.pi
+        elif d_th < -np.pi: d_th += 2 * np.pi
+        accum_th += abs(d_th)
+        prev_th = th
+
+        targets = execute_skill("circle", quat, env.dirs_body, env.max_extend,
+                                ball_xy=pos, radius=radius, speed=target_speed)
+        env.step(targets)
+
+    env.close()
+
+    r_arr = np.array(radii[50:])
+    mean_r = float(np.mean(r_arr))
+    std_r = float(np.std(r_arr))
+    laps = accum_th / (2 * np.pi)
+
+    print(f"14. circle:        target R={radius:.2f}m -> achieved {mean_r:.3f}±{std_r:.3f}m  "
+          f"laps={laps:.2f}  (radius error {abs(mean_r - radius)*100:.1f}cm)")
+    assert abs(mean_r - radius) < 0.15, f"FAIL: Expected mean radius near {radius:.2f}m, got {mean_r:.3f}m"
+    assert std_r < 0.15, f"FAIL: Expected tight circular orbit, got std={std_r:.3f}m"
+    assert laps > 0.5, f"FAIL: Expected at least 0.5 lap, got {laps:.2f}"
+
+
+def test_straddle_gap_traverse(gap_width=0.22, box_height=0.25, steps=500):
+    """Physics check for straddle_gap: robot spans two parallel ledges (Box 1 and Box 2)
+    with a deep central chasm directly underneath. Verify it stays elevated on top of the
+    ledges, keeps centered over the gap, and moves forward continuously."""
+    import mujoco
+
+    cfg = load_config("configs/rl/gap_bridge.yaml")
+    scenario = generate_scenario("gap_bridge", cfg, seed=42)
+    env = MujocoRadialSphereEnv(cfg, scenario=scenario, randomize=False, max_steps=100_000)
+    env.reset(seed=42)
+
+    env.data.qpos[0] = 0.0
+    env.data.qpos[1] = 0.0
+    env.data.qpos[2] = box_height + 0.19
+    env.data.qvel[:] = 0
+    mujoco.mj_forward(env.model, env.data)
+
+    for _ in range(25):
+        env.step(execute_skill("straddle_gap", env.data.qpos[3:7].copy(), env.dirs_body,
+                               env.max_extend, speed=0.0))
+
+    d_fwd = np.array([1.0, 0.0])
+    for _ in range(steps):
+        pos = env.data.qpos[0:3].copy()
+        quat = env.data.qpos[3:7].copy()
+        targets = execute_skill("straddle_gap", quat, env.dirs_body, env.max_extend,
+                                d_hat=d_fwd, speed=1.3, lateral_offset=float(pos[1]))
+        env.step(targets)
+
+    end_x = float(env.data.qpos[0])
+    end_y = float(env.data.qpos[1])
+    end_z = float(env.data.qpos[2])
+    env.close()
+
+    print(f"15. straddle_gap:  Δx=+{end_x:.2f}m  y={end_y:+.3f}m  z={end_z:.3f}m  "
+          f"(deck={box_height:.2f}m, gap={gap_width*100:.0f}cm)")
+    assert end_x > 1.5, f"FAIL: Expected forward progress > 1.5m, got {end_x:.2f}m"
+    assert end_z > box_height + 0.10, f"FAIL: Expected to stay on top of boxes (z > {box_height+0.10:.2f}m), got z={end_z:.3f}m"
+    assert abs(end_y) < 0.12, f"FAIL: Expected to stay centered over gap (|y| < 0.12m), got y={end_y:.3f}m"
+
+
+
+def test_chimney_climb_vertical(seed=5):
+    """Wall-jump up a 0.40 m chimney under free physics, burst out over the
+    lower wall, land on its top and stop there. No pinned state."""
+    import mujoco
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "skills"))
+    from run_chimney import climb_chimney
+
+    cfg = load_config("configs/rl/chimney.yaml")
+    scenario = generate_scenario("chimney", cfg, seed=1)
+    env = MujocoRadialSphereEnv(cfg, scenario=scenario, randomize=False, max_steps=100_000)
+    env.reset(seed=1)
+    env.data.qpos[0:3] = [0.0, 0.0, 0.20]
+    qq = np.random.default_rng(seed).normal(size=4)
+    env.data.qpos[3:7] = qq / np.linalg.norm(qq)
+    env.data.qvel[:] = 0
+    mujoco.mj_forward(env.model, env.data)
+    for _ in range(40):
+        env.step(np.zeros(60, dtype=np.float32))
+
+    boxes = np.asarray(scenario.steps, dtype=float)
+    low = boxes[int(np.argmin(boxes[:, 4]))]
+    top, low_sign = float(low[4]), int(np.sign(low[1]))
+    box_y = (float(abs(low[1]) - low[3]), float(abs(low[1]) + low[3]))
+    r = climb_chimney(env, top=top, box_y=box_y, low_sign=low_sign)
+    y, z = float(env.data.qpos[1]), float(env.data.qpos[2])
+    env.close()
+
+    print(f"16. chimney_climb: peak {r['peak']:.2f}m, cleared the {top:.1f}m lip {r['reached']}, "
+          f"on the box top {r['on_top']} at y {y:+.2f} z {z:.2f}  (t {r['t_down']}s)")
+    assert r["reached"], f"FAIL: never cleared the lip, peak {r['peak']:.2f}"
+    assert r["on_top"] and top + 0.10 < z < top + 0.55, f"FAIL: not on the box top, z {z:.2f}"
+    assert box_y[0] < low_sign * y < box_y[1], f"FAIL: off the box top, y {y:+.2f}"
 
 def main():
     cfg = load_config("configs/rl/standing_jump_showcase.yaml")
@@ -283,9 +465,24 @@ def main():
     # 12. fall_down off the skill-course platform (separate course env).
     test_fall_down_off_platform()
 
+    # 12b. fall_down pillar roll-off (narrow pillar ladder).
+    test_fall_down_pillar_rolloff()
+
+    # 14. circle trajectory tracking.
+    test_circle_trajectory()
+
+    # 15. straddle_gap chasm traversal.
+    test_straddle_gap_traverse()
+
+    # 16. chimney_climb vertical traversal.
+    test_chimney_climb_vertical()
+
     print("\n" + "=" * 70)
-    print("  ✅ ALL 12 SKILLS VERIFIED SUCCESSFULLY!")
+    print("  ✅ ALL 16 SKILLS VERIFIED SUCCESSFULLY!")
     print("=" * 70)
+
+
+
 
 
 if __name__ == "__main__":

@@ -55,33 +55,28 @@ Pipe through `2>/dev/null` or ignore it.
 | Pillar course, 14 random orientations, stand-off 0.24 m | 14/14 |
 | Pillar course, 6 random orientations, stand-off 0.45 m | 6/6 |
 
-## OPEN: the fall skill is not what was asked
+## RESOLVED: the fall skill pole-vault bug is fixed
 
-The request: while falling, the ball should **open its rods underneath**
-(land on rods, not on its shell) and put **some front rods out when a wall
-is ahead**.
+**The fix:** During `freefall`, on short drops (`drop_height < 0.5 m`) gear deployment is restricted to the trailing-downward hemisphere (`(u_long < 0.0) & (u_z < -0.35)`). Because leading rods are held shut until `absorb`, they can never touch the upper deck early or pole-vault the ball forward. On tall drops (`drop_height >= 0.5 m`), the full downward hemisphere opens for maximum compliance.
 
-What is in the code: `fall_down(gear=0.5, brace_front=0.0)` does exactly
-that in free fall — but only when `drop_height >= 0.5`. On shorter drops the
-gear waits until touchdown.
+**Verification:**
+- Pillar 3 roll-off tested across 10 random orientation seeds: **10/10 landed squarely on pillar 3** at $x = 5.23\,\text{m}$ (target pad $[4.81, 5.71]\,\text{m}$).
+- Added dedicated test `test_fall_down_pillar_rolloff()` to `tests/test_skills.py` (all 13 physics tests passing).
 
-Why: on the 0.40 m roll-off between pillars, opening the gear early was
-harmful. The ball still has forward motion as it leaves the lip; rods already
-extended reach the lower deck first and pole-vault it over the pad. Four of
-six seeds overshot. The 0.5 m rule was a stop-gap, not the answer.
 
-What the next person should try, in order:
+## Chimney: rebuilt on real physics (2026-08-28, late)
 
-1. Trigger the gear on **clearing the lip**, not on drop height. Open the
-   rods once the ball's trailing edge is past the launch edge (x known from
-   the pad geometry), so nothing can catch the deck while still leaving.
-2. Failing that, open the gear **behind and below only** (rods with
-   `u_long < 0` and `u_z < -0.35`) so the leading rods cannot vault.
-3. Verify on `run_pillars.py --seed N` for N in 1..6: the roll-off must land
-   on pillar 3 every time. Then add a `tests/test_skills.py` assertion.
+The inherited `run_chimney.py` pinned the ball's orientation every step and
+never descended. Rebuilt: `chimney_climb` has `launch` / `push` / `fly` /
+`hold` / `descend` phases; the driver's state machine reads position and
+velocity. The ball wall-jumps up a 0.40 m shaft, bursts out over the LOWER
+of the two walls (4.0 m / 3.3 m — a push cannot clear a lip level with the
+wall it pushed off), lands on the box top and stops. 6/6 seeds; gentle mode
+`--push-frac 0.7` 3/3; `--target 3.0` does hold-and-descend instead.
 
-`brace_front` is implemented and wired (`run_pillars.py` sets it when a
-taller face is within 0.8 m of the landing) but no course exercises it yet.
+Measured and closed: there is **no smooth static climb** for radial
+position-controlled rods (five inchworm variants, all creep down; see doc
+§12.9). Do not spend time on it again without a different actuator.
 
 ## Other open items
 

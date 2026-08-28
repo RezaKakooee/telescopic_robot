@@ -233,30 +233,31 @@ def build_mujoco_scene_mjcf(
                 f'size="{shx:.4f} {shy:.4f} {sh / 2.0:.4f}" material="wood_plank_mat" '
                 f'friction="1.25 0.01 0.001" condim="4" priority="1" solref="0.008 1" solimp="0.92 0.96 0.002"/>'
             )
-            # Dark end-grain caps on both lateral ends
-            cap_th = 0.012
-            walls_xml.append(
-                f'<geom name="wood_cap_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy + cap_th / 2:.4f} {sh / 2.0:.4f}" '
-                f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
-                f'friction="1.2 0.01 0.001" condim="3"/>'
-            )
-            walls_xml.append(
-                f'<geom name="wood_cap_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy - cap_th / 2:.4f} {sh / 2.0:.4f}" '
-                f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
-                f'friction="1.2 0.01 0.001" condim="3"/>'
-            )
-            # Heavy steel ground anchor brackets on outer sides
-            br_w = 0.025
-            walls_xml.append(
-                f'<geom name="wood_bracket_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy - br_w / 2:.4f} 0.008" '
-                f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
-                f'friction="0.8 0.005 0.0001" condim="3"/>'
-            )
-            walls_xml.append(
-                f'<geom name="wood_bracket_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy + br_w / 2:.4f} 0.008" '
-                f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
-                f'friction="0.8 0.005 0.0001" condim="3"/>'
-            )
+            # End-grain caps and anchor brackets only for low ground planks (not tall vertical box pillars)
+            if sh <= 0.35:
+                cap_th = 0.012
+                walls_xml.append(
+                    f'<geom name="wood_cap_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy + cap_th / 2:.4f} {sh / 2.0:.4f}" '
+                    f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
+                    f'friction="1.2 0.01 0.001" condim="3"/>'
+                )
+                walls_xml.append(
+                    f'<geom name="wood_cap_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy - cap_th / 2:.4f} {sh / 2.0:.4f}" '
+                    f'size="{shx * 1.008:.4f} {cap_th / 2:.4f} {sh / 2.0 * 1.008:.4f}" material="wood_dark_mat" '
+                    f'friction="1.2 0.01 0.001" condim="3"/>'
+                )
+                br_w = 0.025
+                walls_xml.append(
+                    f'<geom name="wood_bracket_a_{s_idx}" type="box" pos="{sx:.4f} {sy - shy - br_w / 2:.4f} 0.008" '
+                    f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
+                    f'friction="0.8 0.005 0.0001" condim="3"/>'
+                )
+                walls_xml.append(
+                    f'<geom name="wood_bracket_b_{s_idx}" type="box" pos="{sx:.4f} {sy + shy + br_w / 2:.4f} 0.008" '
+                    f'size="{shx * 0.55:.4f} {br_w / 2:.4f} 0.008" material="wood_bracket_mat" '
+                    f'friction="0.8 0.005 0.0001" condim="3"/>'
+                )
+
 
     # 4c. Floor Gaps / Holes / Pits in the ground
     # Each gap: (cx, cy, half_x, half_y, depth)
@@ -537,8 +538,9 @@ def build_mujoco_scene_mjcf(
     <geom name="goal_pad" type="cylinder" pos="{gx:.4f} {gy:.4f} 0.004"
           size="0.45 0.004" material="goal_pad_mat" contype="0" conaffinity="0"/>
     <geom name="goal_marker" type="cylinder" pos="{gx:.4f} {gy:.4f} 0.25"
-          size="0.25 0.25" material="goal_mat" contype="1" conaffinity="1"/>
+          size="0.25 0.25" material="goal_mat" contype="0" conaffinity="0"/>
     """
+
 
     # 6. Cameras Setup
     if len(walls) > 0:

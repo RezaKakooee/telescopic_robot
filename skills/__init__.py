@@ -23,9 +23,11 @@ from .locomotion import (
     go_fast,
     go_slow,
     reverse,
+    circle,
+    straddle_gap,
 )
 from .falling import fall_down
-from .interaction import push_against_wall
+from .interaction import push_against_wall, chimney_climb
 from .jumping import (
     jump_to,
     jump_up,
@@ -53,8 +55,14 @@ SKILL_REGISTRY: dict[str, callable] = {
     "go_fast": go_fast,
     "go_slow": go_slow,
     "reverse": reverse,
+    "circle": circle,
+    "straddle_gap": straddle_gap,
+    "straddle": straddle_gap,
     # Interaction
     "push_against_wall": push_against_wall,
+    "chimney_climb": chimney_climb,
+    "chimney": chimney_climb,
+    "vertical_climb": chimney_climb,
     # Jumping
     "jump_up": jump_up,
     "jump_forward_while_stopped": jump_forward_while_stopped,
@@ -63,6 +71,9 @@ SKILL_REGISTRY: dict[str, callable] = {
     # Falling
     "fall_down": fall_down,
 }
+
+
+
 
 SKILL_NAMES = list(SKILL_REGISTRY.keys())
 

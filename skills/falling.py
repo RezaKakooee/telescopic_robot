@@ -86,16 +86,25 @@ def fall_down(
 
     elif phase == "freefall":
         targets[:] = tuck
-        # Landing gear opens in the air only on drops long enough to use it.
-        # On a short drop with forward motion (rolling off a 0.4 m step) the
-        # extended rods reach the lower deck while the ball is still leaving
-        # the lip and pole-vault it forward -- measured: every such roll-off
-        # overshot the pad. There the gear opens at "absorb" instead.
-        if drop_height is None or drop_height >= 0.5:
-            targets[u_z < -0.35] = float(np.clip(gear, 0.0, 1.0)) * max_extend
+        g = float(np.clip(gear, 0.0, 1.0)) * max_extend
+        if drop_height is not None and drop_height < 0.5:
+            # SHORT DROP — the ball still has forward carry from the creep and
+            # may not have cleared the lip yet.  Only extend rods that point
+            # both DOWNWARD and TRAILING (behind the roll direction).  A
+            # leading rod that extends while the ball is still near the lip
+            # touches the upper deck first and pole-vaults the ball forward,
+            # overshooting the target pad.
+            rear_bottom = (u_long < 0.0) & (u_z < -0.35)
+            targets[rear_bottom] = g
+        else:
+            # TALL DROP (>= 0.5 m) or unknown height — the ball clears the lip
+            # with room to spare, so the full bottom hemisphere is safe and
+            # gives better cushioning.
+            targets[u_z < -0.35] = g
         if brace_front > 0.0:
             front = (u_long > 0.40) & (np.abs(u_z) < 0.55)
             targets[front] = float(np.clip(brace_front, 0.0, 1.0)) * max_extend
+
 
     elif phase == "absorb":
         cushion = absorb

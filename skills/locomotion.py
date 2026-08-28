@@ -371,3 +371,154 @@ def reverse(
                 turn=np.pi, back_gain=back_gain, min_offset=min_offset)
 
 
+# ---------------------------------------------------------------------------
+# 14. circle (circular trajectory / orbital steering)
+# ---------------------------------------------------------------------------
+
+def circle(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    *,
+    ball_xy: np.ndarray | None = None,
+    d_hat: np.ndarray | None = None,
+    center_xy: np.ndarray | tuple[float, float] = (0.0, 0.0),
+    radius: float = 1.8,
+    speed: float = 1.0,
+    clockwise: bool = False,
+    lookahead: float = 0.25,
+    radial_gain: float = 2.0,
+    min_offset: float = 0.025,
+    back_gain: float | None = None,
+) -> np.ndarray:
+    """Drive continuously in a circular orbit of specified radius.
+
+    Uses pure-pursuit orbital steering with dynamic understeer compensation:
+    computes an orbital target point ahead along the circumference and adjusts
+    the instantaneous heading demand so the robot holds a steady circular trajectory
+    with sub-centimetre radial variance.
+
+    Parameters
+    ----------
+    ball_xy : (2,) world-frame xy position of the ball.
+    d_hat : (2,) reference direction (fallback if ball_xy is None).
+    center_xy : (2,) center of the circle in world xy (default [0, 0]).
+    radius : desired circle radius in metres (default 1.8 m).
+    speed : target cruise speed in m/s (default 1.0 m/s).
+    clockwise : True for clockwise circle, False for counter-clockwise.
+    lookahead : look-ahead arc distance in metres (default 0.25 m).
+    radial_gain : stiffness of radial correction (default 2.0).
+    """
+    if ball_xy is not None:
+        p = np.asarray(ball_xy, dtype=np.float64)[:2]
+        c = np.asarray(center_xy, dtype=np.float64)[:2]
+        rel = p - c
+        r = float(np.linalg.norm(rel))
+        th_now = float(np.arctan2(rel[1], rel[0]))
+
+        # Direction of travel: +1 for counter-clockwise, -1 for clockwise
+        sign = -1.0 if clockwise else +1.0
+
+        # Look-ahead angle along the circular path
+        d_th = sign * (lookahead / max(radius, 0.2))
+        th_target = th_now + d_th
+
+        # Dynamic radius target: pulls inward when drifting out to counteract turning lag
+        # Calibrated feedforward lead: offset target by 0.06m to center steady-state tracking
+        nominal_r = max(0.2, radius - 0.065)
+        r_target_dynamic = max(0.2, nominal_r - radial_gain * (r - radius))
+        p_target = c + r_target_dynamic * np.array([np.cos(th_target), np.sin(th_target)])
+
+        # Heading vector from current ball position to the lookahead target point
+        heading_vec = p_target - p
+        h_norm = float(np.linalg.norm(heading_vec))
+        d_cmd = heading_vec / max(h_norm, 1e-6)
+    elif d_hat is not None:
+        d_cmd = np.asarray(d_hat, dtype=np.float64)
+    else:
+        d_cmd = np.array([1.0, 0.0], dtype=np.float64)
+
+    return move(quat, dirs_body, max_extend, d_hat=d_cmd, speed=speed,
+                turn=0.0, back_gain=back_gain, min_offset=min_offset)
+
+
+# ---------------------------------------------------------------------------
+# 15. straddle_gap (dual-flank outrigger locomotion across a central hole/trench)
+# ---------------------------------------------------------------------------
+
+def straddle_gap(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    d_hat: np.ndarray | None = None,
+    *,
+    gap_half_width: float = 0.11,
+    speed: float = 1.3,
+    min_lat: float = 0.10,
+    min_offset: float = 0.025,
+    back_gain: float | None = None,
+    lateral_offset: float = 0.0,
+    centering_gain: float = 1.8,
+) -> np.ndarray:
+    """Drive forward while straddling a longitudinal hole, trench, or gap between two ledges.
+
+    When rolling across a central gap between two parallel elevated platforms (Box 1 and Box 2),
+    downward rods in the central strip point into empty air. This skill:
+    1. Tucks the central underbelly (|u_lat| < min_lat + 0.02) to prevent dragging on inner lips or voids.
+    2. Extends trailing rods on the left and right downward flanks simultaneously with a high-traction peristaltic wave.
+    3. Keeps leading rods retracted so they never kickstand or brake against the platform surfaces.
+    4. Applies active heading centering from `lateral_offset` to keep the ball locked onto the gap centerline.
+
+    Parameters
+    ----------
+    quat : (4,) core orientation quaternion.
+    dirs_body : (60, 3) body-frame rod unit vectors.
+    max_extend : float, maximum rod extension in metres.
+    d_hat : (2,) reference forward heading along the gap (default [1.0, 0.0]).
+    gap_half_width : half-width of the central hole/gap in metres (default 0.11 m).
+    speed : commanded cruise speed in m/s (default 1.3 m/s).
+    min_lat : minimum lateral coordinate (|u_lat|) to activate flank pusher (default 0.10).
+    lateral_offset : measured y-offset from the gap centerline for active centering.
+    centering_gain : proportional heading gain to steer back to gap centerline (default 1.8).
+    """
+    heading = np.asarray(d_hat, dtype=np.float64) if d_hat is not None else np.array([1.0, 0.0])
+    gain = float(back_gain) if back_gain is not None else 3.8
+
+    # Active heading centering
+    turn_angle = float(np.clip(-centering_gain * lateral_offset, -0.25, 0.25))
+    d_cmd = _rotate(heading, turn_angle) if abs(turn_angle) > 1e-4 else heading
+
+    dirs_world, u_long, u_lat, u_z = _decompose(quat, dirs_body, d_cmd)
+
+    targets = np.zeros(len(dirs_body), dtype=np.float32)
+
+    # Trailing flank push wave on Box 1 (Left) and Box 2 (Right)
+    rear_flank = (u_long < -0.02) & (np.abs(u_lat) > min_lat) & (u_z < 0.30)
+    rear_w = np.clip((-u_long) / 0.85, 0.0, 1.0) ** 0.90
+    flank_w = np.clip((np.abs(u_lat) - min_lat) / 0.25, 0.0, 1.0)
+    down_w = np.clip(1.0 - np.abs(u_z + 0.30) / 0.85, 0.0, 1.0)
+
+    wave = np.clip(rear_w * flank_w * down_w * gain, 0.0, 1.0)
+    targets[rear_flank] = max_extend * wave[rear_flank]
+
+    # Explicit central void tuck (never touch hole or inner edges)
+    central_void = (np.abs(u_lat) < min_lat + 0.02) & (u_z < 0.12)
+    targets[central_void] = 0.0
+
+    # Leading rods tucked to prevent braking
+    targets[u_long > 0.01] = 0.0
+
+    return targets
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -27,7 +27,9 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney")
+
+
 
 
 def _arc_length(pts: np.ndarray) -> float:
@@ -922,10 +924,215 @@ def jump_track_scenario(cfg, *, rng=None, name="jump_track") -> Scenario:
     )
 
 
+# ---------------------------------------------------------------------------
+# Circle Track — circular arena with painted lane dashes and spokes
+# ---------------------------------------------------------------------------
+
+def circle_track_scenario(cfg, *, rng=None, name: str = "circle_track", radius: float = 1.8) -> Scenario:
+    """Circular athletic arena with painted circular lane markings, radial spokes,
+    and a center hub for demonstrating circular trajectory tracking."""
+    spawn = np.array([radius, 0.0], dtype=float)
+    goal = np.array([0.0, 0.0], dtype=float)
+
+    # 128 discretized points forming the circular reference path
+
+    thetas = np.linspace(0, 2 * np.pi, 128, endpoint=False)
+    pts = np.stack([radius * np.cos(thetas), radius * np.sin(thetas)], axis=1)
+    markers = pts[::8].copy()
+
+    # Painted ground markings (zero collision)
+    yardlines = []
+    # Center hub
+    yardlines.append([0.0, 0.0, 0.15, 0.15, "0.96 0.78 0.08 1.0"])
+
+    # 64 dashed segments along the circular track
+    n_seg = 64
+    seg_len = (2 * np.pi * radius) / n_seg * 0.45
+    for k in range(n_seg):
+        th = 2 * np.pi * k / n_seg
+        xk = radius * np.cos(th)
+        yk = radius * np.sin(th)
+        # Alternate colors: vivid gold and bright white
+        color = "0.96 0.78 0.08 0.95" if k % 4 == 0 else "0.95 0.95 0.95 0.8"
+        yardlines.append([xk, yk, 0.035, seg_len, color])
+
+    # 4 radial spoke yardlines (North, South, East, West)
+    yardlines.append([radius, 0.0, 0.25, 0.04, "0.95 0.42 0.10 1.0"])   # Start / Finish line (East)
+    yardlines.append([0.0, radius, 0.04, 0.25, "0.12 0.82 0.38 1.0"])   # Quarter mark (North)
+    yardlines.append([-radius, 0.0, 0.25, 0.04, "0.95 0.42 0.10 1.0"])  # Halfway mark (West)
+    yardlines.append([0.0, -radius, 0.04, 0.25, "0.12 0.82 0.38 1.0"])  # 3/4 mark (South)
+
+    # 4 axis-aligned perimeter boundary walls around the 7.6m x 7.6m arena
+    walls = [
+        [-3.8, -3.8, 3.8, -3.8],
+        [3.8, -3.8, 3.8, 3.8],
+        [3.8, 3.8, -3.8, 3.8],
+        [-3.8, 3.8, -3.8, -3.8],
+    ]
+
+    return Scenario(
+        kind="circle_track", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=2 * np.pi * radius,
+        walls=np.array(walls),
+        yardlines=yardlines,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gap Bridge — Dual parallel ledges (Box 1 & Box 2) spanning an open hole
+# ---------------------------------------------------------------------------
+
+def gap_bridge_scenario(cfg, *, rng=None, name: str = "gap_bridge", gap_width: float = 0.22, box_height: float = 0.25) -> Scenario:
+    """Parallel dual-box arena with a deep central chasm/hole underneath.
+
+    Box 1 (Left) and Box 2 (Right) run parallel along the X axis, starting at x = -0.15m
+    (with the ball at x = 0.0m at the very beginning of the track) and extending to x = 5.6m.
+    The gap between them is `gap_width` (default 0.22m).
+    Directly underneath the center is an open drop to the floor.
+    """
+    half_gap = gap_width / 2.0
+    box_w = 0.60
+    box_y_left = half_gap + box_w / 2.0    # +0.41m
+    box_y_right = -half_gap - box_w / 2.0  # -0.41m
+    x_start = -0.15
+    x_end = 5.60
+    box_len = x_end - x_start
+    cx = (x_start + x_end) / 2.0           # 2.725m
+    hx = box_len / 2.0                     # 2.875m
+
+    steps = [
+        # Box 1 (Left ledge): pos_x, pos_y, hx, hy, height
+        [cx, box_y_left, hx, box_w / 2.0, box_height],
+        # Box 2 (Right ledge)
+        [cx, box_y_right, hx, box_w / 2.0, box_height],
+    ]
+
+    spawn = np.array([0.0, 0.0], dtype=float)
+    goal = np.array([5.0, 0.0], dtype=float)
+
+    # Path points along the gap centerline
+    pts = np.array([
+        [0.0, 0.0],
+        [1.5, 0.0],
+        [3.0, 0.0],
+        [5.0, 0.0],
+    ], dtype=float)
+    markers = pts.copy()
+
+    # Visual yardlines and distance stripes along both Box 1 and Box 2
+    yardlines = [
+        # Inner lip warning stripe on Box 1 (y = +half_gap)
+        [cx, half_gap + 0.015, hx, 0.012, "0.96 0.78 0.08 1.0"],
+        # Inner lip warning stripe on Box 2 (y = -half_gap)
+        [cx, -half_gap - 0.015, hx, 0.012, "0.96 0.78 0.08 1.0"],
+        # Start Line at the beginning of the track (x = 0.0m)
+        [0.0, 0.0, 0.035, half_gap + box_w, "0.95 0.42 0.10 1.0"],
+        # Finish Line at the end of the track (x = 5.0m)
+        [5.0, 0.0, 0.045, half_gap + box_w, "0.12 0.82 0.38 1.0"],
+    ]
+
+    # Distance stripes every 0.50m on both Box 1 and Box 2
+    for dist in np.arange(0.5, 5.0, 0.5):
+        color = "0.96 0.78 0.08 0.9" if int(round(dist * 10)) % 10 == 0 else "0.95 0.95 0.95 0.75"
+        # Stripe on Box 1
+        yardlines.append([dist, box_y_left, 0.02, box_w / 2.0 * 0.9, color])
+        # Stripe on Box 2
+        yardlines.append([dist, box_y_right, 0.02, box_w / 2.0 * 0.9, color])
+
+    walls = np.array([
+        [-0.8, -1.8, 6.2, -1.8],
+        [6.2, -1.8, 6.2, 1.8],
+        [6.2, 1.8, -0.8, 1.8],
+        [-0.8, 1.8, -0.8, -1.8],
+    ])
+
+    return Scenario(
+        kind="gap_bridge", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=5.0,
+        walls=walls,
+        steps=steps,
+        yardlines=yardlines,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Chimney — Two tall vertical boxes forming a vertical shaft/fissure
+# ---------------------------------------------------------------------------
+
+def chimney_scenario(cfg, *, rng=None, name: str = "chimney", shaft_width: float = 0.40, shaft_height: float = 4.0, shaft_length: float = 1.2) -> Scenario:
+    """Vertical chimney arena with two opposing vertical box walls.
+
+    Box 1 (Left) and Box 2 (Right) stand vertically with an open shaft of width `shaft_width`
+    (default 0.40m) between them. The ball climbs up and down by pressing outward against both faces.
+    """
+    half_gap = shaft_width / 2.0
+    # Box (wall) thickness. The climb exits over the lip with about 1.5 m/s of
+    # sideways carry and lands 0.6-0.9 m out; a 0.5 m top was narrower than
+    # the landing scatter, so the default is a full-width wall top.
+    ch = getattr(getattr(cfg, "scenario", None), "chimney", None)
+    box_w = float(getattr(ch, "box_width", 1.30))
+    # The two walls are NOT the same height. A wall push lifts the ball at
+    # most ~0.17 m above the push point, so it can never clear a lip level
+    # with the wall it just pushed off. It CAN clear the lip of a lower wall
+    # opposite: push off the tall wall from just above the low lip, fly over,
+    # land on the low box top. Real chimneys are exited the same way.
+    low_h = float(getattr(ch, "low_box_height", shaft_height - 0.7))
+    box_y_left = half_gap + box_w / 2.0    # +0.45m
+    box_y_right = -half_gap - box_w / 2.0  # -0.45m
+
+
+    steps = [
+        # Box 1 (Left vertical box): pos_x, pos_y, hx, hy, height
+        [0.0, box_y_left, shaft_length / 2.0, box_w / 2.0, low_h],
+        # Box 2 (Right vertical box)
+        [0.0, box_y_right, shaft_length / 2.0, box_w / 2.0, shaft_height],
+    ]
+
+    spawn = np.array([0.0, 0.0], dtype=float)
+    goal = np.array([0.0, 10.0], dtype=float)
+
+
+    pts = np.array([
+        [0.0, 0.0],
+        [0.0, 0.0],
+    ], dtype=float)
+    markers = pts.copy()
+
+    # Visual height markers along the vertical box faces
+    yardlines = []
+    for h in np.arange(0.5, shaft_height, 0.5):
+        color = "0.96 0.78 0.08 1.0" if int(round(h * 10)) % 10 == 0 else "0.95 0.95 0.95 0.8"
+        # Stripe on left box face
+        yardlines.append([0.0, half_gap + 0.01, shaft_length / 2.0 * 0.9, 0.02, color])
+        # Stripe on right box face
+        yardlines.append([0.0, -half_gap - 0.01, shaft_length / 2.0 * 0.9, 0.02, color])
+
+    walls = np.array([
+        [-shaft_length / 2.0 - 0.2, -1.2, shaft_length / 2.0 + 0.2, -1.2],
+        [shaft_length / 2.0 + 0.2, -1.2, shaft_length / 2.0 + 0.2, 1.2],
+        [shaft_length / 2.0 + 0.2, 1.2, -shaft_length / 2.0 - 0.2, 1.2],
+        [-shaft_length / 2.0 - 0.2, 1.2, -shaft_length / 2.0 - 0.2, -1.2],
+    ])
+
+    return Scenario(
+        kind="chimney", name=name,
+        spawn_xy=spawn, goal=goal,
+        path_pts=pts, markers=markers, path_length=shaft_height,
+        walls=walls,
+        steps=steps,
+        yardlines=yardlines,
+    )
+
+
+
 
 # ---------------------------------------------------------------------------
 # Skill course — the hand-drawn corridor circuit used to exercise the skills
 # ---------------------------------------------------------------------------
+
+
 
 # Grid layout, transcribed from the sketch. Row 0 is the TOP corridor and row
 # index grows downward; column 0 is the far left. Each entry opens a run of
@@ -1267,7 +1474,13 @@ _GENERATORS = {
     "platform_course": platform_course_scenario, "platforms": platform_course_scenario,
     "pillar_course": pillar_course_scenario, "pillars": pillar_course_scenario,
     "jump_track": jump_track_scenario, "jump": jump_track_scenario, "long_jump": jump_track_scenario, "hurdle": jump_track_scenario,
+    "circle_track": circle_track_scenario, "circle": circle_track_scenario,
+    "gap_bridge": gap_bridge_scenario, "straddle": gap_bridge_scenario, "chasm": gap_bridge_scenario, "trench": gap_bridge_scenario,
+    "chimney": chimney_scenario, "vertical_shaft": chimney_scenario, "vertical_climb": chimney_scenario,
 }
+
+
+
 
 
 def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> Scenario:

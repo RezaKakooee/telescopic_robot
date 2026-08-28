@@ -1,0 +1,22 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "circle_track_arena"
+  kind: "circle_track"
+  goal_pos: [1.8, 0.0]
+
+floor:
+  size: [8.0, 8.0]
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

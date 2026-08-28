@@ -27,8 +27,12 @@ from . import execute_skill
 NEEDS_HEADING = {
     "move_forward", "move_right", "move_left", "go_fast", "go_slow", "reverse",
     "jump_forward_while_stopped", "jump_forward_while_moving", "fall_down",
-    "jump_to",
+    "jump_to", "straddle_gap", "straddle",
 }
+
+
+# Skills that read the robot's own position.
+NEEDS_POSITION = {"circle"}
 
 # Skills that read the robot's own velocity.
 NEEDS_VELOCITY = {"stop"}
@@ -93,6 +97,9 @@ def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
     quat = env.data.qpos[3:7].copy()
     call = dict(kwargs)
 
+    if name in NEEDS_POSITION and "ball_xy" not in call:
+        call["ball_xy"] = env.data.qpos[0:2].copy()
+
     if name in NEEDS_HEADING:
         if d_hat is None:
             raise ValueError(f"skill {name!r} needs d_hat (a 2-vector heading)")
@@ -104,6 +111,7 @@ def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
     # jump_to servos its burn against the live velocity.
     if name == "jump_to" and "vel" not in call:
         call["vel"] = env.data.qvel[0:3].copy()
+
 
     if name in NEEDS_WALL_NORMAL:
         if wall_normal is None:

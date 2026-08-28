@@ -74,3 +74,91 @@ def push_against_wall(
     targets[bottom_mask] = np.maximum(targets[bottom_mask], stance_height)
 
     return targets.astype(np.float32)
+
+
+# ---------------------------------------------------------------------------
+# 16. chimney_climb  (wall-jump up, clamp to hold, friction-servo down)
+# ---------------------------------------------------------------------------
+
+def chimney_climb(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    wall_axis: np.ndarray | None = None,
+    *,
+    phase: str = "hold",
+    side: int = +1,
+    clamp_ext: float | None = None,
+    push_lat: float = 0.45,
+    push_z_lo: float = 0.20,
+    push_z_hi: float = 0.85,
+    clamp_lat: float = 0.70,
+    clamp_z: float = 0.50,
+    gear: float = 0.5,
+    near_floor: bool = False,
+    push_frac: float = 1.0,
+    x_off: float = 0.0,
+    tuck: float = 0.010,
+    stance_height: float = 0.045,
+) -> np.ndarray:
+    """Climb a chimney -- two facing walls a little wider than the ball.
+
+    Three mechanisms, all measured under free physics (no pinned state):
+
+    * **push** -- the ball leans on one wall and fires the rods that point
+      into that wall and downward. Radial rods make no torque about the core,
+      so the reaction is a clean up-and-across shove: the ball flies to the
+      other wall, gaining height. Alternating sides is the ascent. With the
+      standard 0.16 m rods it climbs a 0.40 m shaft at about 1 m/s.
+    * **hold** -- the near-horizontal rods on both sides press the walls at
+      full stroke. Ten to sixteen feet, about 1 kN of clamp, friction holds
+      the ball's weight with a creep of roughly a centimetre per second.
+    * **descend** -- the same clamp at a *commanded* extension. Less
+      extension, less friction, faster slide. The caller servos `clamp_ext`
+      on the measured vertical speed to descend at whatever rate it wants.
+
+    Phases: "stand", "launch", "push", "fly", "hold", "descend".
+    `side` is +1 to push off the wall in the +`wall_axis` direction, -1 for
+    the other. `near_floor` opens the landing gear underneath.
+    """
+    R = quat_to_rotmat(quat)
+    dirs_world = dirs_body @ R.T
+
+    axis = np.asarray(wall_axis if wall_axis is not None else [0.0, 1.0], dtype=np.float64)
+    n = float(np.linalg.norm(axis))
+    axis = axis / n if n > 1e-6 else np.array([0.0, 1.0])
+
+    u_lat = dirs_world[:, 0] * axis[0] + dirs_world[:, 1] * axis[1]
+    u_z = dirs_world[:, 2]
+    targets = np.zeros(len(dirs_body), dtype=np.float32)
+
+    if phase == "push":
+        m = (side * u_lat > push_lat) & (u_z < -push_z_lo) & (u_z > -push_z_hi)
+        if abs(x_off) > 0.08:
+            # Drifting along the shaft: drop the rods whose push would carry
+            # the ball further out, so each shove also steers it back.
+            u_x = dirs_world[:, 0] * axis[1] - dirs_world[:, 1] * axis[0]
+            m &= (u_x * np.sign(x_off) > -0.25)
+        targets[m] = float(np.clip(push_frac, 0.2, 1.0)) * max_extend
+
+    elif phase == "launch":
+        # Straight up off the floor: every downward rod, lateral ones held
+        # in so nothing jams against the walls on the way up.
+        m = (u_z < -0.10) & (np.abs(u_lat) < 0.60)
+        targets[m] = max_extend
+
+    elif phase == "fly":
+        targets[:] = tuck
+
+    elif phase in ("hold", "descend"):
+        ext = max_extend if clamp_ext is None else float(np.clip(clamp_ext, 0.0, max_extend))
+        m = (np.abs(u_lat) > clamp_lat) & (np.abs(u_z) < clamp_z)
+        targets[m] = ext
+        if near_floor:
+            g = float(np.clip(gear, 0.0, 1.0)) * max_extend
+            targets[u_z < -0.35] = np.maximum(targets[u_z < -0.35], g)
+
+    else:  # "stand"
+        targets[(u_z < -0.30) & (np.abs(u_lat) < 0.35)] = stance_height
+
+    return np.clip(targets, 0.0, max_extend).astype(np.float32)

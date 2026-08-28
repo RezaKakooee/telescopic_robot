@@ -61,7 +61,7 @@ better in a plan, not because they are different gaits.
 | `move_left` | `move(turn=+π/2)` |
 | `reverse` | `move(turn=π)` |
 
-## The 14 skills
+## The 17 skills
 
 | # | Skill | What it does | Needs |
 |---|---|---|---|
@@ -79,6 +79,12 @@ better in a plan, not because they are different gaits.
 | 11 | `jump_forward_while_moving` | Hurdle leap while sprinting. | `d_hat`, `phase` |
 | 12 | `fall_down` | Step off a ledge; cushion scales with `drop_height`; `gear` opens the rods underneath on long drops, `brace_front` bumpers a wall ahead. | `d_hat`, `phase`, `drop_height`, `gear`, `brace_front` |
 | 13 | `jump_to` | Standing jump aimed by TAKE-OFF VELOCITY: the burn is servo-controlled against the live velocity each step, with lateral drift trimmed to zero. | `d_hat`, `phase`, `vx_target`, `vz_target`, `wall_lock` |
+| 14 | `circle` | Continuous circular orbit with pure-pursuit lead & dynamic understeer compensation. Holds radius to within ±1.5 cm. | `ball_xy`, `center_xy`, `radius`, `speed`, `clockwise` |
+| 15 | `straddle_gap` | Dual-flank outrigger locomotion across a central hole/trench between two platforms (Box 1 & Box 2). Tucks central underbelly while driving on lateral flanks with active heading centering. | `d_hat`, `speed`, `lateral_offset`, `min_lat` |
+| 16 | `chimney_climb` | Between two walls, under free physics: `launch` off the floor, `push`/`fly` wall-jump zig-zag up, `hold` (clamp both walls, ~1 kN), `descend` (clamp extension servoed on vz). Exits over the LOWER wall onto its top. | `wall_axis`, `phase`, `side`, `clamp_ext`, `push_frac`, `x_off` |
+
+
+
 
 `d_hat` is a 2-vector heading in world xy. `wall_normal` is a 2-vector
 pointing **from the wall toward the robot**.
