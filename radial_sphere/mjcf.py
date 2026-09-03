@@ -57,65 +57,168 @@ def build_robot_mjcf(
     bar_length: float | None = None,
     sleeve_radius: float = 0.012,
     inner_radius: float = 0.008,
+    rod_mechanism: str = "single_stage",
 ) -> tuple[str, np.ndarray]:
     """Build a self-contained MJCF for the radial-sphere robot.
 
     Args:
-        bar_length: sliding rod length; default keeps the rod's rear end inside
-            the sleeve at full extension (so the telescope never comes apart).
-
-    Returns:
-        xml: MJCF string.
-        dirs: (n_bars, 3) unit direction vectors for each bar (body frame).
+        rod_mechanism: "single_stage" (baseline rigid rod) |
+                       "multi_stage" (concentric nesting telescopic stages) |
+                       "zip_chain" (tangential flexible chain cassette).
     """
     dirs = fibonacci_sphere(n_bars)
     tip0 = sphere_radius + SLEEVE_STUB + TIP_GAP      # foot centre at zero extension
     sleeve_mouth = sphere_radius + SLEEVE_STUB
     if bar_length is None:
         bar_length = max_extend + TIP_GAP + 0.35 * sphere_radius
-    assert bar_length >= max_extend + TIP_GAP, \
-        "rod would fully exit the sleeve at max extension"
 
     bars: list[str] = []
     actuators: list[str] = []
+    equalities: list[str] = []
+
     for k, (ux, uy, uz) in enumerate(dirs):
-        u = np.array([ux, uy, uz])
-        # Per-bar hue so individual bars are trackable in videos: with uniform
-        # colors the extension pattern (long at back, short at front) is fixed
-        # relative to the chase camera and telescoping reads as a rigid ball.
+        u = np.array([ux, uy, uz], dtype=float)
+        u_unit = u / (np.linalg.norm(u) + 1e-12)
         rr, gg, bb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 1.00)
         fr, fg, fb = colorsys.hsv_to_rgb(k / n_bars, 0.90, 0.65)
-        sleeve_from = (0.55 * sphere_radius) * u
-        sleeve_to = sleeve_mouth * u
-        rod_to = tip0 * u
-        rod_from = (tip0 - bar_length) * u
-        foot = tip0 * u
-        bars.append(
-            f"""
-            <geom name="sleeve_{k}" type="capsule"
-                  fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
-                          {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
-                  size="{sleeve_radius}" rgba="1.0 0.82 0.15 1" mass="0.005"
-                  contype="0" conaffinity="0"/>
-            <body name="inner_{k}" pos="0 0 0">
-                <joint name="slide_{k}" type="slide"
-                       axis="{ux:.5f} {uy:.5f} {uz:.5f}"
-                       range="0 {max_extend}" armature="0.02"/>
-                <geom name="inner_geom_{k}" type="capsule"
-                      fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
-                              {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
-                      size="{inner_radius}" rgba="{rr:.3f} {gg:.3f} {bb:.3f} 1" mass="0.008"
+        foot_rgba = f"{fr:.3f} {fg:.3f} {fb:.3f} 1"
+        rod_rgba = f"{rr:.3f} {gg:.3f} {bb:.3f} 1"
+        sleeve_rgba = "1.0 0.82 0.15 1"
+
+        if rod_mechanism in ["multi_stage", "concentric_telescopic"]:
+            r_base = 0.493 * sphere_radius
+            sleeve_from = r_base * u_unit
+            sleeve_to = sleeve_mouth * u_unit
+            st1_p1 = (r_base - 0.002) * u_unit
+            st1_p2 = tip0 * u_unit
+            st2_p1 = (r_base + 0.002) * u_unit
+            st2_p2 = (tip0 - FOOT_RADIUS * 0.9) * u_unit
+
+            bars.append(
+                f"""
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius * 1.10:.5f}" rgba="{sleeve_rgba}" mass="0.004"
                       contype="0" conaffinity="0"/>
-                <geom name="foot_{k}" type="sphere"
-                      pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
-                      size="{FOOT_RADIUS}" rgba="{fr:.3f} {fg:.3f} {fb:.3f} 1" mass="0.004"
-                      friction="4.0 0.05 0.002" condim="4" priority="1"
-                      solref="0.005 1" solimp="0.95 0.99 0.001"/>
-            </body>
-            """
-        )
-        # RoboVerse's mujoco handler looks up actuators by JOINT name, so the
-        # actuator name must equal the joint name (slide_k).
+                <body name="stage1_{k}" pos="0 0 0">
+                    <joint name="slide1_{k}" type="slide" axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend * 0.5}" armature="0.01"/>
+                    <geom name="stage1_geom_{k}" type="capsule"
+                          fromto="{st1_p1[0]:.5f} {st1_p1[1]:.5f} {st1_p1[2]:.5f}
+                                  {st1_p2[0]:.5f} {st1_p2[1]:.5f} {st1_p2[2]:.5f}"
+                          size="{sleeve_radius * 0.85:.5f}" rgba="{sleeve_rgba}" mass="0.003"
+                          contype="0" conaffinity="0"/>
+                </body>
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide" axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.02"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{st2_p1[0]:.5f} {st2_p1[1]:.5f} {st2_p1[2]:.5f}
+                                  {st2_p2[0]:.5f} {st2_p2[1]:.5f} {st2_p2[2]:.5f}"
+                          size="{inner_radius * 0.95:.5f}" rgba="{rod_rgba}" mass="0.004"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                          friction="4.0 0.05 0.002" condim="4" priority="1"
+                          solref="0.005 1" solimp="0.95 0.99 0.001"/>
+                </body>
+                """
+            )
+            equalities.append(
+                f'<joint joint1="slide1_{k}" joint2="slide_{k}" polycoef="0 0.5 0 0 0"/>'
+            )
+
+        elif rod_mechanism in ["zip_chain", "push_chain"]:
+            r_base = 0.493 * sphere_radius
+            sleeve_from = r_base * u_unit
+            sleeve_to = sleeve_mouth * u_unit
+            up = np.array([0, 0, 1.0]) if abs(uz) < 0.9 else np.array([1.0, 0, 0])
+            tangent = np.cross(u_unit, up)
+            tangent /= (np.linalg.norm(tangent) + 1e-12)
+            c_p1 = (sphere_radius * 0.85) * u_unit
+            c_p2 = c_p1 + 0.038 * tangent
+
+            st1_p1 = (r_base - 0.002) * u_unit
+            st1_p2 = tip0 * u_unit
+            st2_p1 = (r_base + 0.002) * u_unit
+            st2_p2 = (tip0 - FOOT_RADIUS * 0.9) * u_unit
+
+            chain1_rgba = "0.70 0.73 0.80 1"
+
+            bars.append(
+                f"""
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius * 1.15:.5f}" rgba="{sleeve_rgba}" mass="0.003"
+                      contype="0" conaffinity="0"/>
+                <geom name="cassette_{k}" type="capsule"
+                      fromto="{c_p1[0]:.5f} {c_p1[1]:.5f} {c_p1[2]:.5f}
+                              {c_p2[0]:.5f} {c_p2[1]:.5f} {c_p2[2]:.5f}"
+                      size="{sleeve_radius * 0.92:.5f}" rgba="0.45 0.48 0.55 1" mass="0.004"
+                      contype="0" conaffinity="0"/>
+                <body name="stage1_{k}" pos="0 0 0">
+                    <joint name="slide1_{k}" type="slide" axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend * 0.5}" armature="0.01"/>
+                    <geom name="stage1_geom_{k}" type="capsule"
+                          fromto="{st1_p1[0]:.5f} {st1_p1[1]:.5f} {st1_p1[2]:.5f}
+                                  {st1_p2[0]:.5f} {st1_p2[1]:.5f} {st1_p2[2]:.5f}"
+                          size="{sleeve_radius * 0.85:.5f}" rgba="{chain1_rgba}" mass="0.003"
+                          contype="0" conaffinity="0"/>
+                </body>
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide" axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.02"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{st2_p1[0]:.5f} {st2_p1[1]:.5f} {st2_p1[2]:.5f}
+                                  {st2_p2[0]:.5f} {st2_p2[1]:.5f} {st2_p2[2]:.5f}"
+                          size="{inner_radius * 1.05:.5f}" rgba="{rod_rgba}" mass="0.007"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                          friction="4.0 0.05 0.002" condim="4" priority="1"
+                          solref="0.005 1" solimp="0.95 0.99 0.001"/>
+                </body>
+                """
+            )
+            equalities.append(
+                f'<joint joint1="slide1_{k}" joint2="slide_{k}" polycoef="0 0.5 0 0 0"/>'
+            )
+
+        else:
+            sleeve_from = (0.55 * sphere_radius) * u_unit
+            sleeve_to = sleeve_mouth * u_unit
+            rod_to = tip0 * u_unit
+            rod_from = (tip0 - bar_length) * u_unit
+            foot = tip0 * u_unit
+            bars.append(
+                f"""
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius}" rgba="1.0 0.82 0.15 1" mass="0.005"
+                      contype="0" conaffinity="0"/>
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.02"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
+                                  {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
+                          size="{inner_radius}" rgba="{rr:.3f} {gg:.3f} {bb:.3f} 1" mass="0.008"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{fr:.3f} {fg:.3f} {fb:.3f} 1" mass="0.004"
+                          friction="4.0 0.05 0.002" condim="4" priority="1"
+                          solref="0.005 1" solimp="0.95 0.99 0.001"/>
+                </body>
+                """
+            )
+
         actuators.append(
             f'<position name="slide_{k}" joint="slide_{k}" '
             f'ctrlrange="0 {max_extend}" forcerange="-80 80"/>'
@@ -127,9 +230,12 @@ def build_robot_mjcf(
         <body name="core" pos="0 0 0">
             <geom name="core_geom" type="sphere" size="{sphere_radius}"
                   rgba="1.0 0.82 0.15 1" mass="0.5"/>
+            <geom name="avionics_hub" type="sphere" size="0.045"
+                  rgba="0.10 0.75 0.90 0.85" mass="0.10" contype="0" conaffinity="0"/>
             {''.join(bars)}
         </body>
     </worldbody>
+    {f'<equality>{"".join(equalities)}</equality>' if equalities else ''}
     <actuator>
         {''.join(actuators)}
     </actuator>

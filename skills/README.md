@@ -61,7 +61,7 @@ better in a plan, not because they are different gaits.
 | `move_left` | `move(turn=+π/2)` |
 | `reverse` | `move(turn=π)` |
 
-## The 17 skills
+## Core skill registry
 
 | # | Skill | What it does | Needs |
 |---|---|---|---|
@@ -82,6 +82,8 @@ better in a plan, not because they are different gaits.
 | 14 | `circle` | Continuous circular orbit with pure-pursuit lead & dynamic understeer compensation. Holds radius to within ±1.5 cm. | `ball_xy`, `center_xy`, `radius`, `speed`, `clockwise` |
 | 15 | `straddle_gap` | Dual-flank outrigger locomotion across a central hole/trench between two platforms (Box 1 & Box 2). Tucks central underbelly while driving on lateral flanks with active heading centering. | `d_hat`, `speed`, `lateral_offset`, `min_lat` |
 | 16 | `chimney_climb` | Between two walls, under free physics: `launch` off the floor, `push`/`fly` wall-jump zig-zag up, `hold` (clamp both walls, ~1 kN), `descend` (clamp extension servoed on vz). Exits over the LOWER wall onto its top. | `wall_axis`, `phase`, `side`, `clamp_ext`, `push_frac`, `x_off` |
+| 17 | `backflip` | Rightward rebound with counter-clockwise airborne pitch; aliases: `somersault`, `flip`. | `phase`, `direction`, `launch_power`, `launch_torque` |
+| 18 | `stairs` | Dispatches a composed stair traversal: planned `jump_to` hops, `stop`, `move`, and controlled `fall_down` drops; aliases: `climb_stairs`, `step_vault`. | `phase`, `d_hat`, live velocity, planned takeoff/drop values |
 
 
 
@@ -132,6 +134,7 @@ From `tests/test_skills.py`. Numbers are real MuJoCo runs, not estimates.
 | `jump_forward_while_stopped` | Peak 0.577 m, +0.41 m forward. |
 | `jump_forward_while_moving` | Peak 0.483 m, +3.60 m forward, 2.55 m/s. |
 | `fall_down` | Drops 36 cm off a ledge, lands upright at 2.27 m/s. |
+| `stairs` | Compact 1.8 m-wide course: three first-attempt 25 cm climbs and three verified drops; peak z 1.602 m, zero core impacts, settles at x=11.28 m. |
 
 ## Jump phases
 
@@ -141,6 +144,8 @@ The three jump skills are state machines. You pass a `phase` string.
 - `jump_forward_while_stopped`: same phases, rear-biased takeoff
 - `jump_forward_while_moving`: `sprint` → `dip` → `launch` → `airborne` → `landing`
 - `fall_down`: `edge` → `freefall` → `absorb` → `settle`
+- `stairs` ascent: `hop_crouch` → `hop_takeoff` → `hop_airborne` → `hop_landing`; descent delegates to the complete `fall_down` sequence
+- full backflip runner: `approach` → `compact` → `counter-plant` → `preload-tuck` → `rebound-launch` → `tuck` → `flare` → `settle`
 
 `fall_down` is driven by **height**, not by a step count. How long the creep
 to the lip takes varies, so a fixed schedule tucks the rods at the wrong
@@ -148,6 +153,12 @@ moment.
 
 You do not have to time these yourself. `skills/runner.py` holds the
 verified timings and applies them for you.
+
+The backflip is an exception because it also distinguishes a preload hop from
+the main flight using live contacts. Run it through
+`scripts/skills/run_somersault.py`. See the
+[Backflip Skill guide](../docs/backflip_skill.md) for its signed direction
+convention, state machine, telemetry, and acceptance criteria.
 
 ## Running a skill
 
@@ -168,7 +179,19 @@ python scripts/skills/run_skill.py --demo --seconds 30 --video --per-skill \
 # push against the nearest maze wall (lidar finds it)
 python scripts/skills/run_skill.py --skill push_against_wall --kind maze \
     --config configs/rl/config.yaml --seed 3 --seconds 30 --video --per-skill
+
+# physics-verified rightward, counter-clockwise backflip
+python scripts/skills/run_somersault.py
+
+# geometry- and contact-verified stair course (add --no-video for tests)
+python scripts/skills/run_stairs.py
 ```
+
+The stair controller is intentionally a composition of existing skills. The
+runner plans each tread hop with `skills/hop_planner.py`, retries after a small
+sideways footing change when orientation produces a weak launch, and counts a
+step only after contact with that tread plus a stable pose inside its bounds.
+See the [Stairs Skill guide](../docs/stairs_skill.md).
 
 Videos land under `storage_local/<run id>/renders/`.
 

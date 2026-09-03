@@ -27,7 +27,7 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom")
 
 
 
@@ -56,7 +56,14 @@ class Scenario:
     ramps: list | np.ndarray = None # Incline slopes / ramps (cx, cy, length, width, h_change, pitch_deg, yaw)
     staircases: list | np.ndarray = None # Multi-step flights (start_x, start_y, n_steps, rise, run, width, yaw, is_down)
     pipes: list | np.ndarray = None # Hollow cylindrical transparent tubes (start_x, start_y, length, in_rad, out_rad, yaw)
+    vertical_cylinders: list | np.ndarray = None # Hollow upright vertical cylinders (cx, cy, height, in_rad, out_rad)
+    motordromes: list | np.ndarray = None # Wall of Death arena with 45-deg base apron ramp (cx, cy, floor_r, wall_r, apron_h, total_h)
+    cones: list | np.ndarray = None # Athletic training cones / traffic cones (x, y, radius)
     yardlines: list | np.ndarray = None # Painted athletic track distance stripes (x, y, hx, hy, rgba)
+    wall_mode: str = "curved"      # Wall run mode: "curved", "banked", "flat_multistep", "flat"
+    wall_bank_deg: float = 0.0     # Inward bank tilt angle (deg)
+    wall_height: float = 0.0       # Wall-run geom height; 0 for scenarios that do not expose it
+    wall_thickness: float = 0.0    # Wall-run geom thickness; used for surface rather than centre-line distance
     geo_field: np.ndarray = None   # (H, W) geodesic distance to goal; -1 = blocked
 
     geo_origin: np.ndarray = None  # (2,) world xy of field cell (0, 0) centre
@@ -781,30 +788,66 @@ def slopes_scenario(cfg, *, rng=None, name: str = "slopes") -> Scenario:
     )
 
 
+def stairs_course_geometry(cfg) -> dict:
+    """Return the configured stair dimensions and target support surfaces."""
+    sc = cfg.scenario
+    n_steps = int(getattr(sc, "n_steps", 3))
+    rise = float(getattr(sc, "rise", 0.25))
+    run = float(getattr(sc, "run_length", 1.50))
+    start_x = float(getattr(sc, "start_x", 2.0))
+    plateau_length = float(getattr(sc, "plateau_length", 2.0))
+    width = float(getattr(sc, "width", 4.0))
+    top = n_steps * rise
+    plateau_start = start_x + n_steps * run
+    descent_start = plateau_start + plateau_length
+    descent_end = descent_start + n_steps * run
+    finish_x = float(getattr(sc, "finish_x", descent_end + 1.0))
+
+    ascent = [
+        {"index": i + 1, "near": start_x + i * run,
+         "far": start_x + (i + 1) * run, "height": (i + 1) * rise,
+         "geom": f"stair_0_{i}"}
+        for i in range(n_steps)
+    ]
+    descent = [
+        {"index": i + 1, "near": descent_start + (i + 1) * run,
+         "far": descent_start + (i + 2) * run if i < n_steps - 1 else finish_x,
+         "height": top - (i + 1) * rise,
+         "geom": f"stair_1_{i + 1}" if i < n_steps - 1 else "floor"}
+        for i in range(n_steps)
+    ]
+    return {
+        "n_steps": n_steps, "rise": rise, "run": run, "start_x": start_x,
+        "width": width, "top": top, "plateau_start": plateau_start,
+        "descent_start": descent_start, "descent_end": descent_end,
+        "finish_x": finish_x, "ascent": ascent, "descent": descent,
+    }
+
+
 def stairs_scenario(cfg, *, rng=None, name: str = "stairs") -> Scenario:
-    """Multi-step ascending flight of stairs, elevated landing, and descending stairs."""
+    """Configured ascending flight, elevated plateau, and descending flight."""
     rng = rng if rng is not None else np.random.default_rng()
+    geo = stairs_course_geometry(cfg)
     spawn = np.array([0.0, 0.0], dtype=np.float32)
-    goal = np.array([13.5, 0.0], dtype=np.float32)
-    pts = np.linspace(spawn, goal, 140).astype(np.float32)
+    goal = np.array([geo["finish_x"], 0.0], dtype=np.float32)
+    pts = np.linspace(spawn, goal, 150).astype(np.float32)
     markers = pts[::8].copy()
 
-    # Staircases list: [start_x, start_y, n_steps, rise, run, width, yaw, is_down]
-    # Ascending 5 steps: x=2.5 to 3.8 (top z=0.25m)
-    # Descending 5 steps: x=6.8 to 8.1 (back down to floor)
+    # Dimensions come from the config. The default compact course keeps the
+    # 25 cm rise but uses 1.3 m treads and a 1.25 m top plateau.
     staircases = [
-        [2.5, 0.0, 5, 0.05, 0.26, 1.6, 0.0, False],
-        [6.8, 0.0, 5, 0.05, 0.26, 1.6, 0.0, True],
+        [geo["start_x"], 0.0, geo["n_steps"], geo["rise"], geo["run"], geo["width"], 0.0, False],
+        [geo["descent_start"], 0.0, geo["n_steps"], geo["rise"], geo["run"], geo["width"], 0.0, True],
     ]
-    # Connecting solid elevated landing plateau at z=0.25m (x=3.8 to 6.8, center=5.3, length=3.0)
     ramps = [
-        [5.3, 0.0, 3.0, 1.6, 0.25, 0.0, 0.0],
+        [geo["plateau_start"] + float(getattr(cfg.scenario, "plateau_length", 2.0)) / 2.0,
+         0.0, float(getattr(cfg.scenario, "plateau_length", 2.0)), geo["width"], geo["top"], 0.0, 0.0],
     ]
 
     return Scenario(
         kind="stairs", name=name,
         spawn_xy=spawn, goal=goal,
-        path_pts=pts, markers=markers, path_length=13.5,
+        path_pts=pts, markers=markers, path_length=geo["finish_x"],
         staircases=staircases,
         ramps=ramps,
     )
@@ -1461,6 +1504,398 @@ def pillar_course_columns(cfg) -> list[dict]:
     return out
 
 
+def vertical_cylinder_scenario(cfg, *, rng=None, name: str = "vertical_cylinder") -> Scenario:
+    """Empty vertical cylinder / transparent silo with downhill acceleration launch ramp.
+
+    Cylinder centered at (0, 0), radius R = 0.85m, height H = 4.0m.
+    Downhill acceleration ramp from x=-4.0 to 0.0 at y=-0.85m (drop 1.2m) feeds tangentially into the cylinder.
+    """
+    in_rad = float(getattr(cfg.scenario, "cylinder_radius", 0.85) if hasattr(cfg, "scenario") else 0.85)
+    height = float(getattr(cfg.scenario, "cylinder_height", 4.0) if hasattr(cfg, "scenario") else 4.0)
+    out_rad = in_rad + 0.02
+
+    cylinders = [
+        [0.0, 0.0, height, in_rad, out_rad]
+    ]
+
+    # Downhill launch ramp: cx=-2.0, cy=-in_rad, length=4.0m, width=1.0m, drop=-1.20m, pitch=-16.7 deg
+    ramps = [
+        [-2.0, -in_rad, 4.0, 1.0, -1.20, -16.7, 0.0]
+    ]
+
+    # Spawn at top of downhill launch ramp
+    spawn = np.array([-3.8, -in_rad], dtype=np.float32)
+    # Goal at top rim of cylinder
+    goal = np.array([0.0, 0.0], dtype=np.float32)
+
+    # Waypoints: down the ramp -> into the circular cylinder
+    ramp_pts = np.column_stack([np.linspace(-3.8, 0.0, 20), np.full(20, -in_rad)]).astype(np.float32)
+    angles = np.linspace(-np.pi/2, 3.5 * np.pi, 60)
+    r_track = in_rad - 0.16
+    circ_pts = np.column_stack([r_track * np.cos(angles), r_track * np.sin(angles)]).astype(np.float32)
+    pts = np.vstack([ramp_pts, circ_pts])
+
+    return Scenario(
+        kind="vertical_cylinder",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        vertical_cylinders=cylinders,
+        ramps=ramps,
+    )
+
+
+def wall_run_scenario(cfg, *, rng=None, name: str = "wall_run") -> Scenario:
+    """A long, tall wall with a clear lane beside it, for a horizontal wall run.
+
+    Supports three modular modes:
+    1. 'curved': A wall that bends in plan, giving a changing local normal.
+    2. 'banked': An inclined wall with a fully 3-D surface normal.
+    3. 'flat_multistep' (or 'flat'): A straight vertical parkour wall.
+    """
+    sc = getattr(cfg, "scenario", None)
+    mode = str(getattr(sc, "mode", "curved") if sc is not None else "curved").lower()
+    wall_y = float(getattr(sc, "wall_y", 1.30) if sc is not None else 1.30)
+    length = float(getattr(sc, "wall_length", 62.0) if sc is not None else 62.0)
+    lane = float(getattr(sc, "lane_offset", 2.60) if sc is not None else 2.60)
+    maze_cfg = getattr(sc, "maze", sc)
+    wall_height = float(getattr(maze_cfg, "wall_height", 3.0))
+    wall_thickness = float(getattr(maze_cfg, "wall_thickness", 0.12))
+
+    wall_bank_deg = 0.0
+
+    if mode == "curved":
+        curved_cfg = getattr(sc, "curved", None)
+        radius = float(getattr(curved_cfg, "radius", 7.50) if curved_cfg is not None else 7.50)
+        arc_deg = float(getattr(curved_cfg, "arc_deg", 45.0) if curved_cfg is not None else 45.0)
+        arc_rad = np.radians(arc_deg)
+
+        # Approach wall (extended straight run-up from x=0 to x=8.0 at y=wall_y for maximum ground acceleration)
+        app_len = float(getattr(curved_cfg, "app_len", 8.0) if curved_cfg is not None else 8.0)
+        wall_segs = [[0.0, wall_y, app_len, wall_y]]
+
+        # Curved wall arc: Center is at (app_len, wall_y - radius)
+        n_facets = 32
+        alphas = np.linspace(0.0, arc_rad, n_facets + 1)
+        arc_xs = app_len + radius * np.sin(alphas)
+        arc_ys = (wall_y - radius) + radius * np.cos(alphas)
+
+        for i in range(n_facets):
+            wall_segs.append([arc_xs[i], arc_ys[i], arc_xs[i+1], arc_ys[i+1]])
+
+        # Straight exit wall tangent to the end of the arc
+        exit_dir = np.array([np.cos(arc_rad), -np.sin(arc_rad)])
+        last_pt = np.array([arc_xs[-1], arc_ys[-1]])
+        exit_end = last_pt + max(length - app_len - radius * arc_rad, 10.0) * exit_dir
+        wall_segs.append([last_pt[0], last_pt[1], exit_end[0], exit_end[1]])
+
+        walls = np.array(wall_segs, dtype=np.float32)
+        spawn = np.array([1.0, wall_y - lane], dtype=np.float32)
+        goal = np.array([arc_xs[-1], arc_ys[-1] - lane], dtype=np.float32)
+        pts = np.linspace(spawn, goal, 60).astype(np.float32)
+
+    elif mode == "banked":
+        banked_cfg = getattr(sc, "banked", None)
+        bank_deg = float(getattr(banked_cfg, "bank_deg", 78.0) if banked_cfg is not None else 78.0)
+        wall_bank_deg = 90.0 - bank_deg   # Roll tilt around X axis (e.g. 12.0 deg)
+
+        walls = np.array([[0.0, wall_y, length, wall_y]], dtype=np.float32)
+        spawn = np.array([1.0, wall_y - lane], dtype=np.float32)
+        goal = np.array([length - 2.0, wall_y - lane], dtype=np.float32)
+        pts = np.column_stack([
+            np.linspace(spawn[0], goal[0], 60),
+            np.full(60, spawn[1]),
+        ]).astype(np.float32)
+
+    else:  # "flat_multistep" or "flat"
+        walls = np.array([[0.0, wall_y, length, wall_y]], dtype=np.float32)
+        spawn = np.array([1.0, wall_y - lane], dtype=np.float32)
+        goal = np.array([length - 2.0, wall_y - lane], dtype=np.float32)
+        pts = np.column_stack([
+            np.linspace(spawn[0], goal[0], 60),
+            np.full(60, spawn[1]),
+        ]).astype(np.float32)
+
+    return Scenario(
+        kind="wall_run",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        walls=walls,
+        wall_mode=mode,
+        wall_bank_deg=wall_bank_deg,
+        wall_height=wall_height,
+        wall_thickness=wall_thickness,
+    )
+
+
+def _soft_min(a, b, eps):
+    """Smallest of `a` and `b`, rounded off over a width of `eps`.
+
+    A plain ``min`` of two curves leaves a crease where they cross. On a
+    surface something rides at speed, a crease is a step to catch on. This is
+    the usual polynomial smooth minimum: exact wherever the two are further
+    apart than `eps`, and a smooth arc across the crossover.
+    """
+    a = np.asarray(a, dtype=np.float64)
+    b = np.asarray(b, dtype=np.float64)
+    if eps <= 1e-9:
+        return np.minimum(a, b)
+    h = np.clip(0.5 + 0.5 * (b - a) / eps, 0.0, 1.0)
+    return b * (1.0 - h) + a * h - eps * h * (1.0 - h)
+
+
+def motordrome_scenario(cfg, *, rng=None, name: str = "motordrome") -> Scenario:
+    """Wall of Death arena: a flat floor, a banked drome bowl, and a wall.
+
+    The bowl is the part that matters. Set ``bowl_max_bank`` above 0 and the
+    apron becomes a curved transition instead of a straight cone: shallow at
+    the bottom, steepening to that angle at the rim, built from
+    ``bowl_segments`` conical rings.
+
+    Why curved. A ball cannot be held on a vertical wall by friction --
+    measured here across wall radii from 0.70 m to 1.80 m and speeds up to
+    twice what the friction limit needs, it slid down every time. The friction
+    that holds a rolling ball also spins it, so it rolls down the wall. What it
+    can do is ride a bank, where the boards supply the centripetal force
+    directly. The bank a given speed can hold is fixed by
+
+        v^2 = g * r * tan(bank)
+
+    so a curved bowl lets the robot settle at whatever height its speed has
+    earned, and climb as it gets faster. Measured: 4.5 m/s rides about 55
+    degrees at r = 1.4 m.
+    """
+    floor_r = float(getattr(cfg.scenario, "floor_radius", 1.6) if hasattr(cfg, "scenario") else 1.6)
+    wall_r = float(getattr(cfg.scenario, "wall_radius", 2.4) if hasattr(cfg, "scenario") else 2.4)
+    apron_h = float(getattr(cfg.scenario, "apron_height", 0.8) if hasattr(cfg, "scenario") else 0.8)
+    total_h = float(getattr(cfg.scenario, "cylinder_height", 4.5) if hasattr(cfg, "scenario") else 4.5)
+
+    wall_mu = float(getattr(cfg.scenario, "wall_friction", 1.35) if hasattr(cfg, "scenario") else 1.35)
+    max_bank = float(getattr(cfg.scenario, "bowl_max_bank", 0.0) if hasattr(cfg, "scenario") else 0.0)
+    n_seg = int(getattr(cfg.scenario, "bowl_segments", 12) if hasattr(cfg, "scenario") else 12)
+    start_bank = float(getattr(cfg.scenario, "bowl_start_bank", 0.0) if hasattr(cfg, "scenario") else 0.0)
+
+    ride_v = float(getattr(cfg.scenario, "bowl_ride_speed", 0.0) if hasattr(cfg, "scenario") else 0.0)
+    ramp_k = float(getattr(cfg.scenario, "bowl_ramp_rate", 6.0) if hasattr(cfg, "scenario") else 6.0)
+    rim_v = float(getattr(cfg.scenario, "bowl_rim_speed", 0.0) if hasattr(cfg, "scenario") else 0.0)
+
+    lip_bank = float(getattr(cfg.scenario, "bowl_lip_bank", 0.0) if hasattr(cfg, "scenario") else 0.0)
+    lip_width = float(getattr(cfg.scenario, "bowl_lip_width", 0.60) if hasattr(cfg, "scenario") else 0.60)
+    blend = float(getattr(cfg.scenario, "bowl_blend", 0.35) if hasattr(cfg, "scenario") else 0.35)
+    bank_weight = float(getattr(cfg.scenario, "bowl_bank_weight", 0.55) if hasattr(cfg, "scenario") else 0.55)
+    ride_end = float(getattr(cfg.scenario, "bowl_ride_end", 0.0) if hasattr(cfg, "scenario") else 0.0)
+    if ride_end <= 0.0:
+        ride_end = wall_r - (lip_width if lip_bank > 1.0 else 0.0)
+
+    profile = None
+    if max_bank > 1.0:
+        # Shape the bowl from the ride condition itself. A rider circling at
+        # speed v sits where v^2 = g * r * tan(bank), so the bank that carries
+        # a chosen speed at every radius is
+        #
+        #     tan(bank) = v^2 / (g * r)
+        #
+        # Follow that curve and the whole bowl is ridable at one speed, which
+        # is what makes the climb continuous rather than a single ledge. Near
+        # the floor edge the curve is far too steep to drive onto, so the bank
+        # is ramped in linearly and the gentler of the two wins.
+        #
+        # The three pieces are joined with a soft minimum rather than a plain
+        # one. A plain min leaves a crease at every crossover, and a crease in
+        # a surface a robot rides at 5 m/s is a step to catch on.
+        # Work on a fine grid first, then keep only `n_seg` rings, spaced so
+        # each one turns the bank by about the same amount. Even spacing in
+        # radius wastes rings on the long shallow middle and leaves the tight
+        # curl at the top looking like a staircase.
+        rr = np.linspace(floor_r, wall_r, 601)
+        ramp = ramp_k * (rr - floor_r)
+        if ride_v > 0.0:
+            # Let the speed the bank carries rise a little across the bowl, so
+            # each metre further out costs a little more speed. A bank built
+            # for one speed everywhere is neutral: nothing decides where the
+            # robot sits. A rising one gives the climb a gradient to work up.
+            # Anchor the ride line to `ride_end`, not to the rim. The rim has
+            # to move outward to make room for the lip, and if the ride line
+            # moved with it every bank angle would shift and the tuning would
+            # have to start again.
+            span = max(ride_end - floor_r, 1e-6)
+            frac = np.clip((rr - floor_r) / span, 0.0, 1.0)
+            v_r = ride_v + (rim_v - ride_v if rim_v > 0 else 0.0) * frac
+            ride = (v_r ** 2) / (9.81 * np.maximum(rr, 1e-6))
+            tanb = _soft_min(ramp, ride, blend)
+        else:
+            tanb = ramp
+        tanb = _soft_min(tanb, np.full_like(rr, np.tan(np.radians(max_bank))), blend)
+
+        if lip_bank > 1.0 and lip_width > 1e-3:
+            # Curl the last stretch up toward the vertical wall so the two meet
+            # tangentially. Without this the boards stop at their riding angle
+            # and the wall starts at 90 degrees, leaving a hard corner right
+            # where the robot rides highest.
+            #
+            # `smoothstep` has zero slope at both ends, so the curl starts and
+            # finishes without a kink of its own.
+            t = np.clip((rr - ride_end) / max(wall_r - ride_end, 1e-6), 0.0, 1.0)
+            curl = t * t * (3.0 - 2.0 * t)
+            tanb = tanb + (np.tan(np.radians(lip_bank)) - tanb) * curl
+
+        zz = np.concatenate([[0.0], np.cumsum(0.5 * (tanb[1:] + tanb[:-1]) * np.diff(rr))])
+
+        # Resample: walk equal steps along "radius travelled plus bank turned",
+        # so rings crowd into the curl and thin out across the flat middle.
+        bank = np.arctan(tanb)
+        effort = np.concatenate([[0.0], np.cumsum(
+            np.abs(np.diff(rr)) + bank_weight * np.abs(np.diff(bank)))])
+        want = np.linspace(0.0, effort[-1], n_seg + 1)
+        r_keep = np.interp(want, effort, rr)
+        z_keep = np.interp(r_keep, rr, zz)
+        profile = [(float(a), float(b)) for a, b in zip(r_keep, z_keep)]
+        apron_h = profile[-1][1]
+        total_h = max(total_h, apron_h + 0.4)
+
+    n_facets = int(getattr(cfg.scenario, "bowl_facets", 32) if hasattr(cfg, "scenario") else 32)
+    motordromes = [
+        [0.0, 0.0, floor_r, wall_r, apron_h, total_h, wall_mu, profile, n_facets,
+         float(getattr(cfg.scenario, "bowl_plank_lap", 1.06) if hasattr(cfg, "scenario") else 1.06),
+         float(getattr(cfg.scenario, "bowl_plank_pad", 0.02) if hasattr(cfg, "scenario") else 0.02),
+         float(ride_end)]
+    ]
+
+    # Spawn on the flat floor inside the arena
+    spawn = np.array([min(0.90, floor_r * 0.6), 0.0], dtype=np.float32)
+    # Goal at top rim of the vertical wall
+    goal = np.array([0.0, 0.0], dtype=np.float32)
+
+    # Reference helical path
+    angles = np.linspace(0, 6 * np.pi, 80)
+    r_track = np.linspace(0.90, wall_r - 0.16, 80)
+    pts = np.column_stack([r_track * np.cos(angles), r_track * np.sin(angles)]).astype(np.float32)
+
+    return Scenario(
+        kind="motordrome",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        motordromes=motordromes,
+    )
+
+
+def training_cones_scenario(cfg, *, rng=None, name: str = "training_cones") -> Scenario:
+    """Slalom weave course through a linear row of 10 training cones.
+
+    Cones are spaced evenly along the central axis (y = 0.0). The robot starts
+    at (0.0, 0.0) with an open sprint runway, weaves alternating left and right
+    around each of the 10 cones (left of cone 1, right of cone 2, etc.), and
+    crosses the finish gate at the far end without touching any cone.
+    """
+    sc = getattr(cfg, "scenario", None)
+    n_cones = int(getattr(sc, "n_cones", 10)) if sc is not None else 10
+    spacing = float(getattr(sc, "spacing", 2.40)) if sc is not None else 2.40
+    first_cone_x = float(getattr(sc, "first_cone_x", 2.40)) if sc is not None else 2.40
+    cone_r = float(getattr(sc, "cone_radius", 0.12)) if sc is not None else 0.12
+    weave_amp = float(getattr(sc, "weave_amplitude", 0.75)) if sc is not None else 0.75
+
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+
+    # Place N cones in a line along y = 0.0
+    cone_xs = first_cone_x + np.arange(n_cones) * spacing
+    cones = np.column_stack([cone_xs, np.zeros(n_cones), np.full(n_cones, cone_r)]).astype(np.float32)
+
+    last_x = float(cone_xs[-1]) + spacing
+    goal = np.array([last_x, 0.0], dtype=np.float32)
+
+    # Reference slalom wave path
+    xs = np.linspace(spawn[0], goal[0], 150)
+    # Smooth alternating S-curve through the gates
+    ys = weave_amp * np.sin(np.pi * (xs - (first_cone_x - spacing / 2.0)) / spacing)
+    # Flatten approach and exit
+    ys[xs < first_cone_x - 0.6] = 0.0
+    ys[xs > cone_xs[-1] + 0.6] = 0.0
+    pts = np.column_stack([xs, ys]).astype(np.float32)
+
+    return Scenario(
+        kind="training_cones",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        cones=cones,
+    )
+
+
+def curved_training_cones_scenario(cfg, *, rng=None, name: str = "curved_training_cones") -> Scenario:
+    """Slalom weave course with unevenly spaced cones along a winding curved track.
+
+    Cones are positioned along an undulating curvy centerline:
+        y_center(x) = curve_amp * sin(2 * pi * x / wave_len)
+    with non-uniform, uneven spacings between consecutive cones. The robot must
+    weave alternating left and right around every cone while tracking the overall
+    curved trajectory without collisions.
+    """
+    sc = getattr(cfg, "scenario", None)
+    n_cones = int(getattr(sc, "n_cones", 10)) if sc is not None else 10
+    curve_amp = float(getattr(sc, "curve_amplitude", 1.50)) if sc is not None else 1.50
+    wave_len = float(getattr(sc, "wave_length", 18.0)) if sc is not None else 18.0
+    first_cone_x = float(getattr(sc, "first_cone_x", 2.50)) if sc is not None else 2.50
+    cone_r = float(getattr(sc, "cone_radius", 0.12)) if sc is not None else 0.12
+
+    # Uneven spacing distribution between the 10 cones
+    custom_spacings = getattr(sc, "spacings", None)
+    if custom_spacings is not None:
+        spacings = list(custom_spacings)
+    else:
+        # Realistic uneven race slalom spacings (varying from 1.9m to 2.9m)
+        spacings = [2.40, 2.80, 2.10, 2.90, 2.30, 2.00, 2.70, 2.20, 2.60]
+
+    # Calculate x positions of cones
+    cone_xs = [first_cone_x]
+    for sp in spacings[:n_cones - 1]:
+        cone_xs.append(cone_xs[-1] + float(sp))
+    cone_xs = np.array(cone_xs, dtype=np.float32)
+
+    # Compute curvy centerline y positions
+    def centerline_y(x_arr):
+        # Taper smoothly from 0 at spawn (x=0) to full curve
+        taper = np.clip(x_arr / 3.0, 0.0, 1.0)
+        return taper * curve_amp * np.sin(2.0 * np.pi * x_arr / wave_len)
+
+    cone_ys = centerline_y(cone_xs)
+    cones = np.column_stack([cone_xs, cone_ys, np.full(len(cone_xs), cone_r)]).astype(np.float32)
+
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    last_x = float(cone_xs[-1]) + 2.5
+    last_y = float(centerline_y(np.array([last_x]))[0])
+    goal = np.array([last_x, last_y], dtype=np.float32)
+
+    # High-resolution reference path
+    xs = np.linspace(spawn[0], goal[0], 200)
+    ys = centerline_y(xs)
+    pts = np.column_stack([xs, ys]).astype(np.float32)
+
+    return Scenario(
+        kind="curved_training_cones",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(_arc_length(pts)),
+        cones=cones,
+    )
+
+
 _GENERATORS = {
     "path": path_scenario, "goal": goal_scenario,
     "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
@@ -1474,9 +1909,14 @@ _GENERATORS = {
     "platform_course": platform_course_scenario, "platforms": platform_course_scenario,
     "pillar_course": pillar_course_scenario, "pillars": pillar_course_scenario,
     "jump_track": jump_track_scenario, "jump": jump_track_scenario, "long_jump": jump_track_scenario, "hurdle": jump_track_scenario,
+    "wall_run": wall_run_scenario,
     "circle_track": circle_track_scenario, "circle": circle_track_scenario,
     "gap_bridge": gap_bridge_scenario, "straddle": gap_bridge_scenario, "chasm": gap_bridge_scenario, "trench": gap_bridge_scenario,
     "chimney": chimney_scenario, "vertical_shaft": chimney_scenario, "vertical_climb": chimney_scenario,
+    "vertical_cylinder": vertical_cylinder_scenario, "cylinder": vertical_cylinder_scenario, "silo": vertical_cylinder_scenario, "vortex": vertical_cylinder_scenario,
+    "motordrome": motordrome_scenario, "wall_of_death": motordrome_scenario, "silodrome": motordrome_scenario,
+    "training_cones": training_cones_scenario, "cones": training_cones_scenario, "slalom": training_cones_scenario,
+    "curved_cones": curved_training_cones_scenario, "curved_training_cones": curved_training_cones_scenario, "uneven_slalom": curved_training_cones_scenario,
 }
 
 
@@ -1489,4 +1929,3 @@ def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> 
         raise ValueError(f"unknown scenario kind {kind!r}; expected one of {KINDS}")
     rng = np.random.default_rng(seed)
     return _GENERATORS[kind](cfg, rng=rng, name=name or kind)
-

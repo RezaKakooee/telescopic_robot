@@ -1,0 +1,30 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "stairs_course"
+  kind: "stairs"
+  n_steps: 3
+  rise: 0.25
+  run_length: 1.30
+  plateau_length: 1.25
+  width: 1.80
+  wall_height: 1.80
+  start_x: 1.50
+  finish_x: 11.50
+
+floor:
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+  # Match the calibrated standing-hop envelope used by hop_planner.py.
+  max_extend: 0.26
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.20
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

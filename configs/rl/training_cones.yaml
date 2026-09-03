@@ -1,0 +1,26 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "training_cones_slalom"
+  kind: "training_cones"
+  n_cones: 10
+  spacing: 2.40
+  first_cone_x: 2.40
+  cone_radius: 0.12
+  weave_amplitude: 0.75
+
+floor:
+  size: [30.0, 6.0]
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

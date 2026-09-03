@@ -32,7 +32,15 @@ NEEDS_HEADING = {
 
 
 # Skills that read the robot's own position.
-NEEDS_POSITION = {"circle"}
+NEEDS_POSITION = {"circle", "slalom", "training_cones", "curved_slalom", "curved_training_cones"}
+
+#: Skills that carry their own state and arena model, so the generic runner
+#: cannot drive them. They need arena geometry, contacts, and course state;
+#: use their dedicated runner under ``scripts/skills/``.
+SELF_DRIVEN = {
+    "wall_of_death", "motordrome", "wall_run", "horizontal_wall_run",
+    "stairs", "climb_stairs", "step_vault",
+}
 
 # Skills that read the robot's own velocity.
 NEEDS_VELOCITY = {"stop"}
@@ -94,6 +102,11 @@ PHASE_SCHEDULES = {
 
 def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
     """Rod targets for one step of skill *name*, with env state routed in."""
+    if name in SELF_DRIVEN:
+        raise ValueError(
+            f"skill {name!r} keeps its own state and needs an arena model; "
+            "drive it with its dedicated runner under scripts/skills/")
+
     quat = env.data.qpos[3:7].copy()
     call = dict(kwargs)
 

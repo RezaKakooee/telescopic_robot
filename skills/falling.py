@@ -78,7 +78,7 @@ def fall_down(
         down = np.clip(1.0 - abs(u_z + 0.35) / 0.85, 0.0, 1.0)
         lat = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
         from .locomotion import gain_for_speed
-        wave = np.clip((rear ** 1.1) * down * gain_for_speed(edge_speed) * lat,
+        wave = np.clip((rear ** 1.1) * down * gain_for_speed(edge_speed, max_extend) * lat,
                        0.0, 1.0)
         wave[u_long > -0.05] = 0.0
         wave[u_z > 0.10] = 0.0

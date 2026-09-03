@@ -1,0 +1,28 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "curved_training_cones_slalom"
+  kind: "curved_training_cones"
+  n_cones: 10
+  curve_amplitude: 1.50
+  wave_length: 18.0
+  first_cone_x: 2.50
+  cone_radius: 0.12
+  # Uneven non-uniform spacing between consecutive cones
+  spacings: [2.40, 2.80, 2.10, 2.90, 2.30, 2.00, 2.70, 2.20, 2.60]
+
+floor:
+  size: [32.0, 10.0]
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

@@ -44,8 +44,14 @@ def _decompose(quat, dirs_body, d_hat):
 # Measured cruise speed against push-wave amplitude, at full stroke, averaged
 # over the last 250 of 600 steps on flat ground. This is the map that lets a
 # caller ask for m/s instead of a gain. Re-measure it if the robot changes.
+#
+# Two builds are calibrated, because the same amplitude is not the same speed
+# on a longer rod. The relation is not a simple scale: at the lowest amplitude
+# the 0.30 m build is 4.0x faster than the 0.16 m one, at the highest only
+# 1.95x. So both curves are stored and the answer is interpolated between them
+# by stroke, rather than stretched from one.
 SPEED_CURVE = (
-    # back_gain, cruise speed (m/s)
+    # back_gain, cruise speed (m/s), stroke 0.16 m
     (1.00, 0.33),
     (1.15, 0.44),
     (1.30, 0.57),
@@ -56,10 +62,29 @@ SPEED_CURVE = (
     (3.20, 2.25),
     (4.00, 2.80),
 )
+
+#: The same amplitudes on the long-stroke build.
+SPEED_CURVE_LONG = (
+    # back_gain, cruise speed (m/s), stroke 0.30 m
+    (1.00, 1.32),
+    (1.15, 1.58),
+    (1.30, 1.86),
+    (1.60, 2.34),
+    (2.00, 2.98),
+    (2.40, 3.54),
+    (2.80, 4.03),
+    (3.20, 4.42),
+    (4.00, 5.46),
+)
+
+#: The strokes those two curves were measured at.
+CURVE_STROKES = (0.16, 0.30)
+
 _GAINS = np.array([g for g, _v in SPEED_CURVE])
 _SPEEDS = np.array([v for _g, v in SPEED_CURVE])
+_SPEEDS_LONG = np.array([v for _g, v in SPEED_CURVE_LONG])
 
-#: Slowest and fastest cruise this gait can actually hold.
+#: Slowest and fastest cruise the default 0.16 m build can hold.
 MIN_SPEED = float(_SPEEDS[0])
 MAX_SPEED = float(_SPEEDS[-1])
 
@@ -71,20 +96,45 @@ COAST_PER_SPEED = 0.62
 MAX_BRAKE_GAIN = 3.0
 
 
-def gain_for_speed(speed):
+def speed_curve(max_extend=None):
+    """Cruise speeds for :data:`SPEED_CURVE`'s amplitudes, at a given stroke.
+
+    Interpolated between the two measured builds and held flat outside them.
+    Pass None for the 0.16 m default.
+    """
+    if max_extend is None:
+        return _SPEEDS
+    t = float(np.clip((float(max_extend) - CURVE_STROKES[0])
+                      / (CURVE_STROKES[1] - CURVE_STROKES[0]), 0.0, 1.0))
+    return _SPEEDS * (1.0 - t) + _SPEEDS_LONG * t
+
+
+def speed_range(max_extend=None):
+    """``(slowest, fastest)`` cruise this build can hold, in m/s."""
+    sp = speed_curve(max_extend)
+    return float(sp[0]), float(sp[-1])
+
+
+def gain_for_speed(speed, max_extend=None):
     """Push-wave amplitude that cruises at `speed` m/s, from the measured curve.
 
-    Speeds outside the measured range are clamped: below MIN_SPEED the rods
+    Speeds outside the measured range are clamped: below the slowest the rods
     stop reaching the ground and the robot stalls rather than crawling, and
-    above MAX_SPEED there is no evidence to extrapolate from.
+    above the fastest there is no evidence to extrapolate from.
+
+    Pass `max_extend` whenever the build is not the default 0.16 m stroke.
+    Without it a request for 1.2 m/s on the 0.30 m build returns the amplitude
+    that would cruise at 1.2 m/s on the short one, which on the long one is
+    nearer 2.9 m/s.
     """
-    v = float(np.clip(speed, MIN_SPEED, MAX_SPEED))
-    return float(np.interp(v, _SPEEDS, _GAINS))
+    sp = speed_curve(max_extend)
+    v = float(np.clip(speed, sp[0], sp[-1]))
+    return float(np.interp(v, sp, _GAINS))
 
 
-def speed_for_gain(gain):
+def speed_for_gain(gain, max_extend=None):
     """Inverse of :func:`gain_for_speed`; cruise speed a given amplitude holds."""
-    return float(np.interp(float(gain), _GAINS, _SPEEDS))
+    return float(np.interp(float(gain), _GAINS, speed_curve(max_extend)))
 
 
 def _rotate(d_hat, radians):
@@ -138,7 +188,7 @@ def move(
     it directly.
     """
     heading = _rotate(d_hat, turn) if turn else np.asarray(d_hat, dtype=np.float64)
-    gain = float(back_gain) if back_gain is not None else gain_for_speed(speed)
+    gain = float(back_gain) if back_gain is not None else gain_for_speed(speed, max_extend)
 
     _, u_long, u_lat, u_z = _decompose(quat, dirs_body, heading)
 
@@ -522,3 +572,116 @@ def straddle_gap(
 
 
 
+
+
+# ---------------------------------------------------------------------------
+# 17. surface_drive (the gait, re-aimed at any surface -- floor, bank, or wall)
+# ---------------------------------------------------------------------------
+
+def surface_drive(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    normal: np.ndarray,
+    along: np.ndarray,
+    *,
+    speed: float = 1.2,
+    min_offset: float = 0.025,
+    back_gain: float | None = None,
+    press: float = 0.0,
+    brake: float = 0.0,
+    reach_cap: np.ndarray | None = None,
+) -> np.ndarray:
+    """Drive along a surface whose normal is `normal`, in the direction `along`.
+
+    `move` assumes the ground is below: its stance window is built on the rod's
+    z-component, so the wave always pushes down. That is one special case of a
+    more general rule -- push against whatever surface is carrying you.
+
+    Here the surface is given explicitly:
+
+    normal : (3,) unit vector from the ball's centre TOWARD the surface.
+        Floor -> (0, 0, -1). A vertical wall on the outside of a cylinder ->
+        the outward radial direction. A bank at angle t -> sin(t)*radial
+        - cos(t)*z.
+    along : (3,) desired travel direction. Its component along `normal` is
+        removed, so it may be passed loosely (e.g. tangential plus a climb
+        component) and will be projected into the surface.
+
+    With normal = (0, 0, -1) this reproduces `move` exactly: the stance window
+    peaks at rods 0.35 into the surface, the leading sector is shut, and the
+    lateral tuck is unchanged. The only difference is that "into the surface"
+    is now a direction the caller chooses.
+
+    `reach_cap` is a per-rod ceiling on the stroke, in metres: the extension at
+    which that rod's foot just meets the surface. Without it a rod commanded
+    past the surface keeps pushing, and on a wall that push throws the ball
+    back off -- measured at 31 N inward against 9.5 N of centrifugal force,
+    which is what wrecked every earlier attempt at this. Gravity hides the
+    problem on a floor, because it re-seats the ball each time. Nothing
+    re-seats it on a wall.
+
+    `brake` is the same trick :func:`stop` uses, moved into the surface frame.
+    A rod that reaches the ground *in front* of the contact point on a rolling
+    body is a kickstand, not a push. Extending the leading sector therefore
+    slows the robot down. 0 is off, 1 is a full kickstand.
+
+    `press` adds a floor to the extension of rods pointing at the surface,
+    independent of the travelling wave. On a wall ridden by centrifugal force
+    it keeps a few feet in contact through the gaps in the wave, which is what
+    stops the ball skipping off the wall between pushes.
+    """
+    R = quat_to_rotmat(quat)
+    dirs_world = dirs_body @ R.T
+
+    n = np.asarray(normal, dtype=np.float64)
+    n = n / max(float(np.linalg.norm(n)), 1e-9)
+
+    d = np.asarray(along, dtype=np.float64)
+    d = d - float(np.dot(d, n)) * n              # project into the surface
+    dn = float(np.linalg.norm(d))
+    if dn < 1e-9:                                # no usable direction: just press
+        u_n_only = dirs_world @ n
+        targets = np.full(len(dirs_body), min_offset, dtype=np.float32)
+        if press > 0.0:
+            hold = np.clip((u_n_only - 0.30) / 0.70, 0.0, 1.0)
+            targets = np.maximum(targets, min_offset + press * (max_extend - min_offset) * hold)
+        if reach_cap is not None:
+            targets = np.minimum(targets, reach_cap)
+        return targets
+    d = d / dn
+
+    lat = np.cross(n, d)
+
+    u_long = dirs_world @ d
+    u_lat = dirs_world @ lat
+    u_n = dirs_world @ n                         # +1 = pointing straight at the surface
+
+    gain = float(back_gain) if back_gain is not None else gain_for_speed(speed, max_extend)
+
+    rear = np.clip((-u_long - 0.10) / 0.90, 0.0, 1.0)
+    # Stance window: peaks at rods 0.35 into the surface, i.e. at the contact
+    # patch and slightly trailing -- the same shape `move` uses against z.
+    stance = np.clip(1.0 - np.abs(u_n - 0.35) / 0.85, 0.0, 1.0)
+    tuck = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
+    wave = np.clip((rear ** 1.1) * stance * gain * tuck, 0.0, 1.0)
+
+    wave[u_long > -0.05] = 0.0                   # leading sector is a brake
+    wave[u_n < -0.10] = 0.0                      # rods pointing away from the surface
+
+    targets = min_offset + (max_extend - min_offset) * wave
+
+    if press > 0.0:
+        hold = np.clip((u_n - 0.30) / 0.70, 0.0, 1.0)
+        targets = np.maximum(targets, min_offset + press * (max_extend - min_offset) * hold)
+
+    if brake > 0.0:
+        lead = np.clip((u_long - 0.10) / 0.90, 0.0, 1.0)
+        foot = np.clip((u_n - 0.20) / 0.80, 0.0, 1.0)
+        kick = np.clip(float(brake) * lead * foot, 0.0, 1.0)
+        targets = np.maximum(targets, min_offset + (max_extend - min_offset) * kick)
+
+    if reach_cap is not None:
+        targets = np.minimum(targets, np.asarray(reach_cap, dtype=np.float64))
+
+    return targets.astype(np.float32)

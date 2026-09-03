@@ -1065,12 +1065,306 @@ Adding a thirteenth is three steps, documented in `skills/README.md`.
    Measure the spread, plan against the worst of it, and let the system refuse
    what it cannot guarantee.
 
+
+---
+
+## 13. The Wall of Death, and the one equation that runs it
+
+The ask was simple. Make the ball ride up the inside of a cylinder like a
+motorcycle in a wall of death. Geometry could change; the movement algorithm
+was the priority.
+
+The inherited arena was a 2.4 m vertical cylinder with a 45-degree apron. The
+robot reached 1.30-1.40 m once, bounced off the wall, and came back down.
+
+### 13.1 A vertical wall cannot work, and that is not a tuning problem
+
+Before changing anything I asked the narrow question: can this robot be held on
+a vertical wall at all?
+
+On a vertical wall the only force that can hold a body up is friction. For a
+sliding block that is fine. For a **rolling** ball it is not, because the same
+friction that holds it also applies a torque about its centre. The ball spins
+up and rolls down the wall.
+
+Measured, with the ball placed on the wall at speed and driven:
+
+| wall radius | speed | outcome |
+|---|---|---|
+| 0.70 m | 1.3x and 2.0x the friction limit | slid down |
+| 0.90 m | same | slid down |
+| 1.10 m | same | slid down |
+| 1.40 m | same | slid down |
+| 1.80 m | same | slid down |
+
+Every case dropped about 1.12 m in 0.57 s. Radius changed nothing. Neither did
+speed. A uniformly-extended ball used as a plain wheel, with no control at all,
+slid down too.
+
+Two workarounds were tried and measured before being dropped:
+
+- **Press many rods against the wall.** This does hold the ball. It also turns
+  it into a skid. Sliding friction then costs about 20 m/s^2 of drag, and the
+  speed falls to zero inside a second.
+- **Drive the wave up the wall instead of along it.** Pitch values from 0 to 30
+  were tried. All fell.
+
+### 13.2 The bank does what friction cannot
+
+A banked surface needs no friction. The boards themselves push inward. Balance
+that push against what a circle demands and the whole problem is one line:
+
+    v^2 = g * r * tan(b)
+
+Faster means further out. Further out on a bowl means higher. A drome rider
+climbs by opening the throttle, not by steering upward.
+
+Measured on straight cones, driving tangentially with no climb command at all:
+
+| bank | outcome |
+|---|---|
+| 30, 45 deg | held speed but drifted down |
+| 60 deg | **climbed 0.93 m and held 4.25 m/s** |
+| 75 deg | kept 5.40 m/s, sank 0.11 m/s |
+| 88 deg | fell |
+
+So the arena became a drome bowl, built to follow `tan(b) = v^2/(g r)`, with
+the vertical wall left standing above the rim where it belongs.
+
+### 13.3 The bug that hid everything else
+
+For a long stretch the robot would not build speed on the bowl at all, and I
+blamed the gait. It was not the gait.
+
+`surface_frame` reads the surface normal from MuJoCo's contact list. My first
+version took the direction from the core to the contact point. Those two are
+the same only for a plain sphere. **This robot stands on rods.** A ball resting
+on a rod tilted 45 degrees puts its contact 45 degrees off vertical, so the
+function reported a 45-degree slope on flat ground.
+
+That wrong normal went straight into the gait, which aims its push wave by it.
+Using MuJoCo's own `contact.frame` normal instead fixed it in one edit.
+
+The general lesson is the same one as §11's fake calibration. When a
+measurement and a model disagree, check that the measurement measures what its
+name claims.
+
+### 13.4 Speed is not free
+
+Even with the right normal and the right bowl, the robot kept flinging itself
+out of the arena. The trace showed why:
+
+| t | radius | speed | what the circle needed |
+|---|---|---|---|
+| 10 s | 1.21 m | 5.93 m/s | 29 m/s^2 |
+
+The gait can make about 4.5 m/s^2 sideways. So the robot ran wide, met the
+steep boards at an angle it could not ride, and lost everything it had built.
+It then did this again, and again, for ninety seconds.
+
+The controller had a radius plan and no throttle plan. Full gain, always.
+
+The fix is `Bowl.target_speed`: ask for the speed the *commanded circle* can
+hold, and no more. Speed on a bank has to be paid for with radius. With that in
+place the robot spirals out steadily and stays.
+
+### 13.5 Result
+
+| quantity | before | after |
+|---|---|---|
+| peak height | 1.30-1.40 m | 1.90 m |
+| sustained height | none, it fell back | 1.73 m, never below 1.66 m |
+| sustained speed | - | 4.75 m/s |
+| laps in 75 s | - | 18.0 |
+
+The bowl is 1.67 m deep, so the robot settles riding at its rim.
+
+### 13.6 A side repair: the speed curve was only true at one stroke
+
+`SPEED_CURVE` maps a requested m/s to a wave amplitude. It was measured once,
+at the 0.16 m stroke. Asking for 1.2 m/s on the 0.30 m build returned the
+amplitude that cruises at 1.2 m/s on the *short* build, which on the long one
+is nearer 2.9 m/s.
+
+A second curve was measured at 0.30 m and `gain_for_speed` now interpolates by
+stroke. The two curves do not scale: the ratio runs from 4.0x at the lowest
+amplitude to 1.95x at the highest, so one curve could never have been stretched
+into the other.
+
+### 13.7 What this added to the rules
+
+10. A rolling body cannot be held on a vertical wall by friction. The friction
+    that holds it also spins it, and it rolls down. Bank the surface instead.
+11. On any banked ride, the throttle and the radius are one control, not two.
+    Commanding speed the current circle cannot hold is a crash, not a gain.
+12. A normal read from a contact *point* is the rod direction, not the surface
+    normal. Read the contact frame.
+13. Calibration curves carry the build they were measured on. State it, and
+    re-measure when the build changes.
+
+---
+
+## 14. Horizontal Wall Run (Parkour Wall Run & Inertia Ride)
+
+### 14.1 The parkour move
+
+A runner sprints beside a wall, leaps at it, takes strides along it well above the ground, and pushes off before gravity collects the debt. Nothing holds them there: speed and dynamic momentum do.
+
+Friction cannot statically hold a rolling body on a vertical wall (measured in §13). So the horizontal wall run is not a static hold; it is a **controlled, dynamic momentum bounce and multi-stride roll across a vertical surface**, engineered to be compliant and soft upon entry, and explosive upon exit.
+
+### 14.2 The 10-Phase Pipeline
+
+```
+sprint ──► approach ──► crouch ──► launch ──► fly ──► ride ──► push ──► land ──► settle ──► recover
+```
+
+1. **`sprint`**: Accelerates the robot at full power (`back_gain = 5.0 - 6.0`) parallel to the wall, holding a closed-loop lane offset (`correction = (wall_dist - lane_gap) * lane_gain`) to build maximum speed ($6.5 - 7.5\text{ m/s}$) without premature drifting.
+2. **`approach`**: Angled turn-in ($28^\circ$) triggers only after linear sprint velocity is established.
+3. **`crouch`**: Brief ($0.06\text{ s}$) pre-retraction of downward rods to maximize available mechanical stroke ($0.30\text{ m}$) before takeoff.
+4. **`launch`**: Explosive push-off delivering $+5.2\text{ m/s}$ vertical lift and $+3.6\text{ m/s}$ inward thrust ($v_{\text{launch}} \ge 8.0 - 8.4\text{ m/s}$).
+5. **`fly`**: All 60 rods snap to 100% full extension ($0.30\text{ m}$ stroke), transforming the robot into a full $0.473\text{ m}$ radius open spherical cage in flight.
+6. **`ride`**: The soft end. Every rod facing or contacting the wall dynamically compresses to `reach = wall_dist / (rod . n) - foot_base` ($129 - 154\text{ mm}$ compression), yielding under core inertia and rolling along the wall without bouncing off.
+7. **`push`**: The hard end. Wall-facing rods drive back to 100% extension, providing a sharp $2.10 - 2.86\text{ m/s}$ push-off impulse.
+8. **`land`**: All 60 rods extend 100% as a protective crash cage, absorbing touchdown forces so the core never strikes the floor.
+9. **`settle`**: Compliant damping to zero velocity.
+10. **`recover`**: Steers away from the boards to re-establish lane clearance for multi-step repetitions.
+
+### 14.3 Modular Modes & Measured Results
+
+| Modality | Sprint Speed | Takeoff Speed | Peak Height ($z$) | Deepest Rod Compression | Airborne Wall Contact | Push-off Speed |
+|---|---|---|---|---|---|---|
+| **`curved`** | **$7.50\text{ m/s}$** | **$8.39\text{ m/s}$** | **$1.02\text{ m}$** | **$154\text{ mm}$ ($51\%$)** | **$100\%$ airborne ($0.15\text{ s}$, 15 rods)** | **$2.10\text{ m/s}$** |
+| **`banked`** | **$7.50\text{ m/s}$** | **$7.63\text{ m/s}$** | **$1.11\text{ m}$** | **$148\text{ mm}$ ($49\%$)** | **$100\%$ airborne ($0.15\text{ s}$, 10 rods)** | **$2.86\text{ m/s}$** |
+| **`flat_multistep`** | **$7.50\text{ m/s}$** | **$8.02\text{ m/s}$** | **$1.20\text{ m}$** | **$129\text{ mm}$ ($43\%$)** | **$100\%$ airborne ($0.16\text{ s}$, 12 rods)** | **$2.67\text{ m/s}$** |
+
+### 14.4 Rules & Physical Lessons
+
+14. **Pre-takeoff crouch doubles jump lift**: Open-loop launching from stance wastes stroke against pre-extended rods. Retracting to floor clearance immediately before explosive firing increases takeoff velocity by $>2.0\text{ m/s}$.
+15. **Per-rod dynamic reach prevents wall rebound**: Without per-rod depth clipping (`reach = wall_dist / (rod . n) - foot_base`), extending rods apply $>30\text{ N}$ inward rebound forces throwing the ball off the wall. Tracking the exact surface contour lets the core sink compliantly into its own shell.
+16. **Separate lane-sprint from angle-in approach**: Angling toward the wall too early spends lane clearance before full cruise speed is attained. Drive parallel with closed-loop lane regulation, then commit to the turn-in.
+
+---
+
+## 15. Training Cones (Slalom Weave & High-Authority Pure Pursuit)
+
+### 15.1 The slalom challenge
+
+A linear row of 10 weighted athletic training cones (35 cm tall, weighted rubber base, bright orange conical body, white reflective collar) is laid along the central $x$-axis at $y = 0.0$ with 2.40 m spacing. The robot starts from a standstill at $x = 0.0$ on the sprint runway and must weave alternating left/right between every single cone (left of Cone 1, right of Cone 2, etc.) and cross the finish gate at $x = 26.7\text{ m}$ with zero collisions.
+
+### 15.2 The physics of rolling sphere slalom
+
+On an isotropic 60-bar rolling sphere, navigating alternating S-curves introduces a dynamic turning challenge:
+1. **Rotational turning lag ($0.57\text{ s}$ per $90^\circ$)**: When commanding an alternating lateral offset, the ball takes time to re-aim its traveling wave. A standard lookahead heading $\Delta y / \Delta x$ generates only $25^\circ - 30^\circ$ heading angles, which are insufficient to reverse lateral momentum before advancing into the next cone.
+2. **High-Authority Lateral Steering**: Multiplying lateral error by an authority gain ($k_{\text{lat}} = 4.0 - 5.0$) commands sharp $60^\circ - 75^\circ$ heading vectors:
+   $$d_{\text{cmd}} = (\max(dx, 0.35),\, dy \cdot k_{\text{lat}})$$
+   $$\hat{d} = \frac{d_{\text{cmd}}}{\|d_{\text{cmd}}\|}$$
+3. **Pre-Apex Anticipation**: Waypoint transition triggers $0.40\text{ m}$ before reaching the cone ($x \ge x_k - \Delta_{\text{lead}}$), allowing the robot to initiate its turn reversal *while* sweeping past the cone apex.
+
+### 15.3 Measured Telemetry
+
+![Training Cones Slalom Progression Grid](file:///home/azureuser/.gemini/antigravity-ide/brain/cae66589-5edc-46dd-9306-d193640ffe8c/training_cones_progression_grid.png)
+
+| Parameter | Specification | Measured Outcome |
+|---|---|---|
+| **Cones on Course** | 10 athletic training cones (spacing $2.40\text{ m}$) | **10 / 10 cleared cleanly** |
+| **Cone Contacts / Collisions** | 0 required | **0 collisions** |
+| **Minimum Safe Clearance** | $\ge 0.40\text{ m}$ | **$0.489\text{ m} - 0.681\text{ m}$** |
+| **Cruise Weave Speed** | $1.10 - 1.40\text{ m/s}$ | **$1.10\text{ m/s}$ ($56.68\text{ s}$ total run)** |
+| **Lateral Weave Amplitude** | $\pm 0.80\text{ m}$ | **$+0.80\text{ m}$ (left) / $-0.85\text{ m}$ (right)** |
+| **Finish Position** | $x \ge 26.0\text{ m}$ | **$x = 26.70\text{ m}, y = +0.10\text{ m}$** |
+
+### 15.4 Physical Rules & Insights
+
+17. **Lateral turning on rolling spheres requires asymmetric error amplification**: Because forward thrust advances translation while turning lag delays rotation, pure-pursuit pursuit vectors along waypoints must scale lateral error by $k_{\text{lat}} \ge 3.5 \times$ forward error to carve sharp S-curves.
+18. **Lead-in anticipation eliminates corner-cutting**: Transitioning waypoint targets $0.40\text{ m}$ ahead of the apex prevents overshoot and ensures the robot sweeps past the cone at maximum lateral displacement.
+
+### 15.5 Uneven Spacing & Curvilinear S-Curve Generalization
+
+To test the parametric robustness of the pure-pursuit framework beyond a straight line, we generalized `slalom()` with a **2D Frenet-frame tangent/normal decomposition**:
+1. For any 2D cone sequence $\vec{c}_0, \vec{c}_1, \dots, \vec{c}_{N-1}$, compute local tangent unit vector $\hat{t}_i$ and left-normal unit vector $\hat{n}_i = (-\hat{t}_{i,y}, \hat{t}_{i,x})$.
+2. Erect alternating gate targets normal to local track curvature: $\vec{g}_i = \vec{c}_i + (-1)^i \cdot \text{lateral\_offset} \cdot \hat{n}_i$.
+3. Project position $\vec{p}$ along the local tangent to evaluate arrival $s_i = (\vec{p} - \vec{c}_i) \cdot \hat{t}_i$.
+4. Decompose steering into along-track advance $v_t = \vec{v} \cdot \hat{t}_i$ and cross-track correction $v_n = \vec{v} \cdot \hat{n}_i$, steering along:
+   $$\vec{d}_{\text{cmd}} = \max(v_t, 0.35) \hat{t}_i + (v_n \cdot k_{\text{lat}}) \hat{n}_i$$
+
+![Curved Training Cones Slalom Progression Grid](file:///home/azureuser/.gemini/antigravity-ide/brain/cae66589-5edc-46dd-9306-d193640ffe8c/curved_training_cones_progression_grid.png)
+
+#### Curvilinear Telemetry & Verification
+
+| Parameter | Curvy Course Specification | Measured Outcome |
+|---|---|---|
+| **Track Centerline** | Sinusoidal S-curve ($A = 1.50\text{ m}$, $\lambda = 18.0\text{ m}$) | **100% tracked** |
+| **Cone Spacings** | Non-uniform ($[2.4, 2.8, 2.1, 2.9, 2.3, 2.0, 2.7, 2.2, 2.6]\text{ m}$) | **All 10 uneven cones cleared** |
+| **Cone Collisions** | 0 required | **0 collisions** |
+| **Minimum Safe Clearance** | $\ge 0.40\text{ m}$ | **$0.462\text{ m}$** |
+| **Finish Position** | $x \ge 26.5\text{ m}, y \approx +0.87\text{ m}$ | **$x = 27.30\text{ m}, y = +0.87\text{ m}$** |
+
+---
+
 ## Next
 
+- Multi-obstacle parkour chain linking horizontal wall runs, uneven curvy training cone slaloms, and chimney climbs.
+- Adaptive agility controller blending slalom lateral authority automatically based on upcoming obstacle density.
 
-- Sync the launch to the gait cycle. §11 shows the take-off varies by 0.26 m
-  of peak with the gait phase, and planning around that is what caps the
-  robot at a 0.16 m obstacle. Firing in phase would raise the guarantee
-  toward the 0.61 m the mechanism already reaches on a good step.
-- A latch or spring that lets the crouch load while rolling. That is the one
-  change that would lift the height ceiling in §10.
+## 17. Stair Ascend & Descend (Giant Step Vaulting & Compliant Descent)
+
+### 17.1 What was wrong with the first version
+
+The first stairs runner looked successful because it incremented milestones
+after fixed phase durations. It could count step 2 while the robot was still
+on step 1, and its descent phases never proved that the lower support had been
+contacted. The displayed time was also doubled: the real control interval is
+`model.opt.timestep * action_repeat = 0.01 s`, not 0.02 s.
+
+### 17.2 Composition instead of a new jump
+
+The repaired skill reuses the existing, calibrated primitives:
+
+```
+move + stop → plan_standing_hop → jump_to → stop
+            → plateau move → fall_down × 3 → stop
+```
+
+- `skills/stairs.py` is a stateless dispatcher. Its `hop_*` phases delegate
+  to `jump_to`; braking delegates to `stop`; travel delegates to `move`; and
+  `edge → freefall → absorb → settle` delegates to `fall_down`.
+- `scripts/skills/run_stairs.py` owns course state. It plans from the actual
+  configured tread bounds, changes phase from live velocity/height/contact,
+  and verifies each named MuJoCo support geom.
+- A sphere's footing changes after every landing. If an orientation gives a
+  weak forward launch, the runner makes a small sideways shift to put
+  different rods under the core, returns to the planned launch x, and retries.
+
+A step counts only when the robot contacted its target geom and settled
+inside the target's x/z bounds. The test asserts the exact sequence
+`stair_0_0`, `stair_0_1`, `stair_0_2`, then `stair_1_1`, `stair_1_2`, `floor`.
+
+### 17.3 Verified telemetry
+
+| Parameter | Measured outcome (seed 42) |
+|---|---:|
+| Ascending supports | **3 / 3 verified** |
+| Descending supports | **3 / 3 verified** |
+| Peak core height | **1.602 m** |
+| Core-impact steps | **0** |
+| Jump attempts | **1, 1, 1** |
+| Finish position | **x=11.28, y=0.04, z=0.20 m** |
+| Final linear / angular speed | **0.005 m/s / 0.022 rad/s** |
+| Simulated elapsed time | **32.22 s** |
+
+### 17.4 Rules produced
+
+21. **A phase counter is not evidence of traversal.** Obstacle milestones
+    must be tied to named geometry contact and a physically valid settled pose.
+22. **Reuse the calibrated maneuver, not just its rod pattern.** The useful
+    jump primitive includes planning, live-velocity burn control, landing, and
+    orientation retries.
+23. **Descent is a complete state machine.** Every stair drop passes through
+    edge, freefall, absorption, and braking based on live height and contact.
+
+---
+
+## Next
+
+- Multi-obstacle parkour chain linking horizontal wall runs, training cone slaloms, and giant step stair flights.
+- Active diameter morphing for ultra-low tunnel squeeze exploration.

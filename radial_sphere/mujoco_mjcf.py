@@ -28,6 +28,9 @@ def build_mujoco_scene_mjcf(
     timestep: float = 0.002,
     sim2real_cfg: dict | None = None,
     appearance_theme: str = "rainbow",  # "realistic", "aerospace_white", "rainbow"
+    rod_mechanism: str = "single_stage",  # "single_stage", "multi_stage", "zip_chain"
+    kp: float = 1200.0,
+    kv: float = 22.0,
     floor_half_extent: float = 200.0,
     floor_square_m: float = 0.4,
     floor_rgb1: str = "0.42 0.45 0.51",
@@ -63,34 +66,45 @@ def build_mujoco_scene_mjcf(
     # 1. Build Robot Bars and Actuators
     bars_xml: list[str] = []
     actuators_xml: list[str] = []
+    equalities_xml: list[str] = []
 
     # Theme colors
     is_realistic = appearance_theme in ["realistic", "carbon_gunmetal"]
     is_white = appearance_theme == "aerospace_white"
 
-    # Physics parameters (Modular Sim-to-Real vs. Baseline)
+    # Physics parameters (High-Standard Sim-to-Real Benchmark)
     s2r = sim2real_cfg or {}
     enable_sim2real = bool(s2r.get("enabled", False))
-    
-    joint_damping = "0.5" if enable_sim2real else "0"
-    joint_frictionloss = "0.8" if enable_sim2real else "0"
-    
-    f_sl = float(s2r.get("rubber_friction_sliding", 0.85)) if enable_sim2real else 4.0
-    f_t = float(s2r.get("rubber_friction_torsional", 0.015)) if enable_sim2real else 0.05
-    f_r = float(s2r.get("rubber_friction_rolling", 0.005)) if enable_sim2real else 0.002
+
+    joint_damping = float(s2r.get("joint_damping", 0.35 if enable_sim2real else 0.20))
+    joint_frictionloss = float(s2r.get("joint_frictionloss", 0.08 if enable_sim2real else 0.04))
+
+    f_sl = float(s2r.get("rubber_friction_sliding", 0.95))
+    f_t = float(s2r.get("rubber_friction_torsional", 0.015))
+    f_r = float(s2r.get("rubber_friction_rolling", 0.005))
     foot_friction = f"{f_sl} {f_t} {f_r}"
-    
-    sr_time = float(s2r.get("rubber_solref_timeconst", 0.020)) if enable_sim2real else 0.005
-    sr_damp = float(s2r.get("rubber_solref_dampratio", 1.20)) if enable_sim2real else 1.0
+
+    sr_time = float(s2r.get("rubber_solref_timeconst", 0.006))
+    sr_damp = float(s2r.get("rubber_solref_dampratio", 1.10))
     foot_solref = f"{sr_time} {sr_damp}"
-    
-    foot_solimp = "0.90 0.95 0.005" if enable_sim2real else "0.95 0.99 0.001"
-    
-    max_f = float(s2r.get("actuator_force_limit", 50.0)) if enable_sim2real else 80.0
+
+    foot_solimp = "0.90 0.95 0.002"
+
+    max_f = float(s2r.get("actuator_force_limit", 120.0))
     actuator_forcerange = f"{-max_f} {max_f}"
+
+    kp_act = kp
+    kv_act = kv
+
+    sensors_xml: list[str] = [
+        '    <accelerometer name="imu_acc" site="imu_site"/>\n',
+        '    <gyro name="imu_gyro" site="imu_site"/>\n',
+        '    <framequat name="imu_quat" objtype="site" objname="imu_site"/>\n',
+    ]
 
     for k, (ux, uy, uz) in enumerate(dirs):
         u = np.array([ux, uy, uz], dtype=float)
+        u_unit = u / (np.linalg.norm(u) + 1e-12)
 
         if is_realistic:
             sleeve_rgba = "0.38 0.42 0.48 1"
@@ -107,39 +121,198 @@ def build_mujoco_scene_mjcf(
             rod_rgba = f"{rr:.3f} {gg:.3f} {bb:.3f} 1"
             foot_rgba = f"{fr:.3f} {fg:.3f} {fb:.3f} 1"
 
-        sleeve_from = (0.55 * sphere_radius) * u
-        sleeve_to = sleeve_mouth * u
-        rod_to = (tip0 - FOOT_RADIUS * 0.9) * u
-        rod_from = (tip0 - bar_length) * u
-        foot = tip0 * u
+        if rod_mechanism in ["multi_stage", "concentric_telescopic"]:
+            # 1. Multi-Stage Concentric Telescopic Nesting:
+            # Fixed outer sleeve: [0.074m, 0.156m]
+            # Intermediate collar: slides at 0.5 * extension, spans [0.072m, 0.160m]
+            # Inner rod: slides at 1.0 * extension, spans [0.076m, 0.160m]
+            # Overlap at full stroke (e=0.16m):
+            #   sleeve mouth (0.156) > stage1 base (0.152) -> +4mm overlap
+            #   stage1 tip (0.240) > inner base (0.236) -> +4mm overlap
+            # ZERO DISCONTINUITY AT ALL EXTENSIONS, and central hub r < 7.2cm is 100% CLEAR!
+            r_base = 0.493 * sphere_radius  # 0.074m
+            sleeve_from = r_base * u_unit
+            sleeve_to = sleeve_mouth * u_unit
 
-        bars_xml.append(
-            f"""
-            <geom name="sleeve_{k}" type="capsule"
-                  fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
-                          {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
-                  size="{sleeve_radius}" rgba="{sleeve_rgba}" mass="0.005"
-                  contype="0" conaffinity="0"/>
-            <body name="inner_{k}" pos="0 0 0">
-                <joint name="slide_{k}" type="slide"
-                       axis="{ux:.5f} {uy:.5f} {uz:.5f}"
-                       range="0 {max_extend}" armature="0.02" damping="{joint_damping}" frictionloss="{joint_frictionloss}"/>
-                <geom name="inner_geom_{k}" type="capsule"
-                      fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
-                              {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
-                      size="{inner_radius}" rgba="{rod_rgba}" mass="0.008"
+            st1_p1 = (r_base - 0.002) * u_unit
+            st1_p2 = tip0 * u_unit
+
+            st2_p1 = (r_base + 0.002) * u_unit
+            st2_p2 = (tip0 - FOOT_RADIUS * 0.9) * u_unit
+
+            bars_xml.append(
+                f"""
+                <!-- Fixed Outer Sleeve Guide (Mounted to Shell) -->
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius * 1.10:.5f}" rgba="{sleeve_rgba}" mass="0.004"
                       contype="0" conaffinity="0"/>
-                <geom name="foot_{k}" type="sphere"
-                      pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
-                      size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
-                      contype="1" conaffinity="2" friction="{foot_friction}" condim="4" priority="1"
-                      solref="{foot_solref}" solimp="{foot_solimp}"/>
-            </body>
-            """
-        )
+                
+                <!-- Intermediate Nested Stage Body -->
+                <body name="stage1_{k}" pos="0 0 0">
+                    <joint name="slide1_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend * 0.5}" armature="0.001"
+                           damping="{float(joint_damping)*0.5:.3f}" frictionloss="{float(joint_frictionloss)*0.5:.3f}"
+                           margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+                    <geom name="stage1_geom_{k}" type="capsule"
+                          fromto="{st1_p1[0]:.5f} {st1_p1[1]:.5f} {st1_p1[2]:.5f}
+                                  {st1_p2[0]:.5f} {st1_p2[1]:.5f} {st1_p2[2]:.5f}"
+                          size="{sleeve_radius * 0.85:.5f}" rgba="{sleeve_rgba}" mass="0.003"
+                          contype="0" conaffinity="0"/>
+                </body>
+
+                <!-- Inner Piston Stage (Connected to Actuator) -->
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.002"
+                           damping="{joint_damping}" frictionloss="{joint_frictionloss}"
+                           margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{st2_p1[0]:.5f} {st2_p1[1]:.5f} {st2_p1[2]:.5f}
+                                  {st2_p2[0]:.5f} {st2_p2[1]:.5f} {st2_p2[2]:.5f}"
+                          size="{inner_radius * 0.95:.5f}" rgba="{rod_rgba}" mass="0.004"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                          contype="1" conaffinity="2" friction="{foot_friction}" condim="4" priority="1"
+                          solref="{foot_solref}" solimp="{foot_solimp}"/>
+                    <site name="foot_site_{k}" pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="0.008" type="sphere" rgba="0 0 0 0"/>
+                </body>
+                """
+            )
+            equalities_xml.append(
+                f'<joint joint1="slide1_{k}" joint2="slide_{k}" polycoef="0 0.5 0 0 0" solref="0.004 1.0" solimp="0.95 0.99 0.001"/>'
+            )
+
+        elif rod_mechanism in ["zip_chain", "push_chain"]:
+            # 2. Interlocking Zip-Chain / Push-Chain Spool Drive:
+            # Compact peripheral nozzle at shell wall with tangential chain magazine spool.
+            # Chain column continuously extends from nozzle out to foot via coupled interlocking links.
+            # ZERO DISCONTINUITY AT ALL EXTENSIONS, and central hub is 100% CLEAR!
+            r_base = 0.493 * sphere_radius  # 0.074m
+            sleeve_from = r_base * u_unit
+            sleeve_to = sleeve_mouth * u_unit
+
+            up = np.array([0, 0, 1.0]) if abs(uz) < 0.9 else np.array([1.0, 0, 0])
+            tangent = np.cross(u_unit, up)
+            tangent /= (np.linalg.norm(tangent) + 1e-12)
+            c_p1 = (sphere_radius * 0.85) * u_unit
+            c_p2 = c_p1 + 0.038 * tangent
+
+            st1_p1 = (r_base - 0.002) * u_unit
+            st1_p2 = tip0 * u_unit
+
+            st2_p1 = (r_base + 0.002) * u_unit
+            st2_p2 = (tip0 - FOOT_RADIUS * 0.9) * u_unit
+
+            chain1_rgba = "0.70 0.73 0.80 1"
+
+            bars_xml.append(
+                f"""
+                <!-- Compact Peripheral Nozzle (Mounted at Shell Wall) -->
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius * 1.15:.5f}" rgba="{sleeve_rgba}" mass="0.003"
+                      contype="0" conaffinity="0"/>
+                <!-- Tangential Flexible Chain Spool / Magazine Housing -->
+                <geom name="cassette_{k}" type="capsule"
+                      fromto="{c_p1[0]:.5f} {c_p1[1]:.5f} {c_p1[2]:.5f}
+                              {c_p2[0]:.5f} {c_p2[1]:.5f} {c_p2[2]:.5f}"
+                      size="{sleeve_radius * 0.92:.5f}" rgba="0.45 0.48 0.55 1" mass="0.004"
+                      contype="0" conaffinity="0"/>
+                
+                <!-- Interlocking Push-Chain Base Column (Emerges at 0.5*e) -->
+                <body name="stage1_{k}" pos="0 0 0">
+                    <joint name="slide1_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend * 0.5}" armature="0.001"
+                           damping="{float(joint_damping)*0.5:.3f}" frictionloss="{float(joint_frictionloss)*0.5:.3f}"
+                           margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+                    <geom name="stage1_geom_{k}" type="capsule"
+                          fromto="{st1_p1[0]:.5f} {st1_p1[1]:.5f} {st1_p1[2]:.5f}
+                                  {st1_p2[0]:.5f} {st1_p2[1]:.5f} {st1_p2[2]:.5f}"
+                          size="{sleeve_radius * 0.85:.5f}" rgba="{chain1_rgba}" mass="0.003"
+                          contype="0" conaffinity="0"/>
+                </body>
+
+                <!-- Interlocking Push-Chain Tip Column (Reaches foot at 1.0*e) -->
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.002"
+                           damping="{joint_damping}" frictionloss="{joint_frictionloss}"
+                           margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{st2_p1[0]:.5f} {st2_p1[1]:.5f} {st2_p1[2]:.5f}
+                                  {st2_p2[0]:.5f} {st2_p2[1]:.5f} {st2_p2[2]:.5f}"
+                          size="{inner_radius * 1.05:.5f}" rgba="{rod_rgba}" mass="0.007"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                          contype="1" conaffinity="2" friction="{foot_friction}" condim="4" priority="1"
+                          solref="{foot_solref}" solimp="{foot_solimp}"/>
+                    <site name="foot_site_{k}" pos="{tip0 * ux:.5f} {tip0 * uy:.5f} {tip0 * uz:.5f}"
+                          size="0.008" type="sphere" rgba="0 0 0 0"/>
+                </body>
+                """
+            )
+            equalities_xml.append(
+                f'<joint joint1="slide1_{k}" joint2="slide_{k}" polycoef="0 0.5 0 0 0" solref="0.004 1.0" solimp="0.95 0.99 0.001"/>'
+            )
+
+        else:
+            # 3. Baseline Single-Stage Rigid Rod (pokes through center when retracted)
+            sleeve_from = (0.55 * sphere_radius) * u_unit
+            sleeve_to = sleeve_mouth * u_unit
+            rod_to = (tip0 - FOOT_RADIUS * 0.9) * u_unit
+            rod_from = (tip0 - bar_length) * u_unit
+            foot = tip0 * u_unit
+
+            bars_xml.append(
+                f"""
+                <geom name="sleeve_{k}" type="capsule"
+                      fromto="{sleeve_from[0]:.5f} {sleeve_from[1]:.5f} {sleeve_from[2]:.5f}
+                              {sleeve_to[0]:.5f}   {sleeve_to[1]:.5f}   {sleeve_to[2]:.5f}"
+                      size="{sleeve_radius}" rgba="{sleeve_rgba}" mass="0.005"
+                      contype="0" conaffinity="0"/>
+                <body name="inner_{k}" pos="0 0 0">
+                    <joint name="slide_{k}" type="slide"
+                           axis="{ux:.5f} {uy:.5f} {uz:.5f}"
+                           range="0 {max_extend}" armature="0.002"
+                           damping="{joint_damping}" frictionloss="{joint_frictionloss}"
+                           margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+                    <geom name="inner_geom_{k}" type="capsule"
+                          fromto="{rod_from[0]:.5f} {rod_from[1]:.5f} {rod_from[2]:.5f}
+                                  {rod_to[0]:.5f}   {rod_to[1]:.5f}   {rod_to[2]:.5f}"
+                          size="{inner_radius}" rgba="{rod_rgba}" mass="0.008"
+                          contype="0" conaffinity="0"/>
+                    <geom name="foot_{k}" type="sphere"
+                          pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
+                          size="{FOOT_RADIUS}" rgba="{foot_rgba}" mass="0.004"
+                          contype="1" conaffinity="2" friction="{foot_friction}" condim="4" priority="1"
+                          solref="{foot_solref}" solimp="{foot_solimp}"/>
+                    <site name="foot_site_{k}" pos="{foot[0]:.5f} {foot[1]:.5f} {foot[2]:.5f}"
+                          size="0.008" type="sphere" rgba="0 0 0 0"/>
+                </body>
+                """
+            )
+
+        # Sensors for bar k (Menagerie Standard)
+        sensors_xml.append(f'    <jointpos name="pos_{k}" joint="slide_{k}"/>\n')
+        sensors_xml.append(f'    <jointvel name="vel_{k}" joint="slide_{k}"/>\n')
+        sensors_xml.append(f'    <actuatorfrc name="frc_{k}" actuator="slide_{k}"/>\n')
+        sensors_xml.append(f'    <touch name="touch_{k}" site="foot_site_{k}"/>\n')
+
         actuators_xml.append(
             f'<general name="slide_{k}" joint="slide_{k}" '
-            f'gainprm="900 0 0" biasprm="0 -900 -22" biastype="affine" gaintype="fixed" '
+            f'gainprm="{kp_act} 0 0" biasprm="0 -{kp_act} -{kv_act}" biastype="affine" gaintype="fixed" '
             f'ctrlrange="0 {max_extend}" forcerange="{actuator_forcerange}"/>'
         )
 
@@ -147,23 +320,27 @@ def build_mujoco_scene_mjcf(
     spawn_xy = np.asarray(scenario.spawn_xy, dtype=float)[:2]
     spawn_z = rolling_radius(sphere_radius, 0.15 * max_extend) + 0.005
 
-    # 3. Maze Walls Geometry
+    # 3. Maze Walls Geometry (Flat, Curved Arcs, and Banked Walls)
     walls_xml: list[str] = []
     half_th = wall_thickness / 2.0
     half_h = wall_height / 2.0
     walls = np.asarray(scenario.walls, dtype=float).reshape(-1, 4)
+    bank_roll = float(getattr(scenario, "wall_bank_deg", 0.0))
     for idx, (x1, y1, x2, y2) in enumerate(walls):
         cx = (x1 + x2) / 2.0
         cy = (y1 + y2) / 2.0
-        dx = abs(x2 - x1)
-        dy = abs(y2 - y1)
-        # Add half_th to length so corners overlap cleanly without gaps
-        sx = max(dx / 2.0 + half_th if dx > dy else half_th, half_th)
-        sy = max(dy / 2.0 + half_th if dy >= dx else half_th, half_th)
+        dx = x2 - x1
+        dy = y2 - y1
+        length = float(np.hypot(dx, dy))
+        yaw_deg = float(np.degrees(np.arctan2(dy, dx)))
+        # Pad length slightly so segments tile and overlap cleanly without cracks
+        sx = max(length / 2.0 + half_th, half_th)
+        sy = half_th
         walls_xml.append(
             f'<geom name="wall_{idx}" type="box" pos="{cx:.4f} {cy:.4f} {half_h:.4f}" '
+            f'euler="{bank_roll:.2f} 0 {yaw_deg:.2f}" '
             f'size="{sx:.4f} {sy:.4f} {half_h:.4f}" material="wall_mat" '
-            f'friction="0.8 0.005 0.0001" condim="3"/>'
+            f'friction="1.60 0.005 0.0001" condim="3"/>'
         )
 
     # 4. Obstacle Pillars / Realistic Industrial Blockers (if any)
@@ -452,18 +629,39 @@ def build_mujoco_scene_mjcf(
                     step_h = rise * (step_i + 1)
                     step_x = start_x + (step_i + 0.5) * run
                 step_y = start_y
+                tread_mat = ("stair_tread_blue_mat"
+                             if (st_idx + step_i) % 2 == 0
+                             else "stair_tread_teal_mat")
                 walls_xml.append(
                     f'<geom name="stair_{st_idx}_{step_i}" type="box" '
                     f'pos="{step_x:.4f} {step_y:.4f} {step_h / 2.0:.4f}" '
                     f'size="{run / 2.0:.4f} {wid / 2.0:.4f} {step_h / 2.0:.4f}" '
-                    f'material="stair_tread_mat" friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+                    f'material="{tread_mat}" friction="1.35 0.02 0.005" condim="4" priority="1"/>'
                 )
-                # Safety nosing stripe on leading edge
+                # Preserve the original physical nosing exactly: even this
+                # small contact strip affects which rods support a landing.
                 walls_xml.append(
                     f'<geom name="stair_nosing_{st_idx}_{step_i}" type="box" '
                     f'pos="{step_x - run/2.0 + 0.015:.4f} {step_y:.4f} {step_h - 0.003:.4f}" '
                     f'size="0.015 {wid / 2.0 * 0.99:.4f} 0.003" '
                     f'material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+                )
+                # Add a separate, raised visual-only safety band. The larger
+                # width and offset avoid the old coplanar z-fighting, while
+                # disabled collision bits leave the calibrated physics alone.
+                walls_xml.append(
+                    f'<geom name="stair_nosing_visual_{st_idx}_{step_i}" type="box" '
+                    f'pos="{step_x - run/2.0 + 0.045:.4f} {step_y:.4f} {step_h + 0.004:.4f}" '
+                    f'size="0.045 {wid / 2.0 * 0.99:.4f} 0.004" '
+                    f'material="stair_nosing_mat" contype="0" conaffinity="0"/>'
+                )
+                # Matching vertical band makes the edge readable from the
+                # low oblique follow camera as well as from above.
+                walls_xml.append(
+                    f'<geom name="stair_riser_band_{st_idx}_{step_i}" type="box" '
+                    f'pos="{step_x - run/2.0 - 0.004:.4f} {step_y:.4f} {max(step_h - 0.045, 0.045):.4f}" '
+                    f'size="0.004 {wid / 2.0 * 0.99:.4f} {min(0.045, step_h / 2.0):.4f}" '
+                    f'material="stair_nosing_mat" contype="0" conaffinity="0"/>'
                 )
 
     # 4h. Transparent Glass Pipe / Conduit (In-Pipe Crawling Inspection)
@@ -531,6 +729,254 @@ def build_mujoco_scene_mjcf(
                 f'contype="0" conaffinity="0"/>'
             )
 
+    # 4j. Vertical Transparent Cylinders / Silos (Wall of Death / Spiral Vortex Climbing)
+    vcyls = getattr(scenario, "vertical_cylinders", None)
+    if vcyls is not None and len(vcyls) > 0:
+        for vc_idx, vc_def in enumerate(vcyls):
+            cx, cy = float(vc_def[0]), float(vc_def[1])
+            height = float(vc_def[2])
+            in_rad = float(vc_def[3])
+            out_rad = float(vc_def[4]) if len(vc_def) > 4 else in_rad + 0.02
+
+            n_facets = 24
+            facet_th = out_rad - in_rad
+            facet_w = float(2.0 * in_rad * np.tan(np.pi / n_facets) + 0.002)
+            r_mid = in_rad + facet_th / 2.0
+            cz = height / 2.0
+
+            # 24 vertical transparent glass facets forming the hollow silo
+            for fi in range(n_facets):
+                angle_rad = fi * (2.0 * np.pi / n_facets)
+                angle_deg = float(np.degrees(angle_rad))
+                fx = cx + r_mid * np.cos(angle_rad)
+                fy = cy + r_mid * np.sin(angle_rad)
+
+                # Check if this facet is at the ramp entrance doorway (x <= 0.1, y <= -in_rad * 0.7)
+                is_doorway = (fx < 0.10) and (fy < -in_rad * 0.65)
+                if is_doorway:
+                    # Doorway arch: open from z=0 to 0.70m, facet stands from z=0.70 to height
+                    arch_h = height - 0.70
+                    arch_cz = 0.70 + arch_h / 2.0
+                    walls_xml.append(
+                        f'<geom name="vcyl_facet_{vc_idx}_{fi}" type="box" '
+                        f'pos="{fx:.4f} {fy:.4f} {arch_cz:.4f}" '
+                        f'size="{facet_th / 2.0:.4f} {facet_w / 2.0:.4f} {arch_h / 2.0:.4f}" '
+                        f'euler="0 0 {angle_deg:.1f}" material="glass_pipe_mat" '
+                        f'friction="1.2 0.01 0.001" condim="3" priority="1" solref="0.012 1"/>'
+                    )
+                else:
+                    # Full vertical facet
+                    walls_xml.append(
+                        f'<geom name="vcyl_facet_{vc_idx}_{fi}" type="box" '
+                        f'pos="{fx:.4f} {fy:.4f} {cz:.4f}" '
+                        f'size="{facet_th / 2.0:.4f} {facet_w / 2.0:.4f} {height / 2.0:.4f}" '
+                        f'euler="0 0 {angle_deg:.1f}" material="glass_pipe_mat" '
+                        f'friction="1.2 0.01 0.001" condim="3" priority="1" solref="0.012 1"/>'
+                    )
+
+            # Banked entry transition curve connecting ramp into the cylinder wall
+            n_trans = 8
+            for ti in range(n_trans):
+                t_frac = (ti + 0.5) / n_trans
+                tx = -0.80 * (1.0 - t_frac)
+                ty = -in_rad + 0.12 * np.sin(t_frac * np.pi / 2.0)
+                tz = 0.24 * (1.0 - t_frac)**2 + 0.03
+                t_pitch = -16.7 * (1.0 - t_frac)
+                t_roll = 25.0 * t_frac
+                walls_xml.append(
+                    f'<geom name="vcyl_bank_trans_{vc_idx}_{ti}" type="box" '
+                    f'pos="{tx:.4f} {ty:.4f} {tz:.4f}" '
+                    f'size="0.055 0.45 0.02" '
+                    f'euler="{t_roll:.1f} {t_pitch:.1f} 0" material="ramp_mat" '
+                    f'friction="1.4 0.01 0.001" condim="4" priority="1"/>'
+                )
+
+            # Perimeter chrome reinforcement rings
+            n_rings = max(int(height / 1.0) + 1, 3)
+            for ri in range(n_rings):
+                rz = ri * (height / (n_rings - 1))
+                for rfi in range(n_facets):
+                    r_angle = rfi * (2.0 * np.pi / n_facets)
+                    r_deg = float(np.degrees(r_angle))
+                    rx = cx + (out_rad + 0.008) * np.cos(r_angle)
+                    ry = cy + (out_rad + 0.008) * np.sin(r_angle)
+                    walls_xml.append(
+                        f'<geom name="vcyl_collar_{vc_idx}_{ri}_{rfi}" type="box" '
+                        f'pos="{rx:.4f} {ry:.4f} {rz:.4f}" '
+                        f'size="0.010 {facet_w / 2.0 * 1.05:.4f} 0.025" '
+                        f'euler="0 0 {r_deg:.1f}" material="pipe_ring_mat" '
+                        f'contype="0" conaffinity="0"/>'
+                    )
+
+
+    # 4k. Authentic Wall of Death (Motordrome / Silodrome with 45-deg Base Apron Ramp)
+    motordromes = getattr(scenario, "motordromes", None)
+    if motordromes is not None and len(motordromes) > 0:
+        for md_idx, md_def in enumerate(motordromes):
+            cx, cy = float(md_def[0]), float(md_def[1])
+            floor_r = float(md_def[2])
+            wall_r = float(md_def[3])
+            apron_h = float(md_def[4])
+            total_h = float(md_def[5])
+            # Wall-of-death traction. The ball stays up only while
+            # mu * v^2 / r >= g, so this number sets the arena's size.
+            md_mu = float(md_def[6]) if len(md_def) > 6 else 1.35
+
+            # More facets makes a rounder barrel; more profile rings makes a
+            # smoother curve up the bank. Both are just geometry count.
+            n_facets = int(md_def[8]) if len(md_def) > 8 and md_def[8] else 32
+            # How far each ring's planks reach past their own segment. Some
+            # overlap is needed or the rings leave a seam the feet can catch.
+            plank_lap = float(md_def[9]) if len(md_def) > 9 and md_def[9] else 1.06
+            plank_pad = float(md_def[10]) if len(md_def) > 10 and md_def[10] is not None else 0.02
+            plank_thick = 0.015  # half-thickness
+
+            # 1. Banked transition, built from a profile of (radius, height)
+            # points. A single pair gives the old straight conical apron; a
+            # longer list gives a curved drome bowl, shallow at the bottom and
+            # steep at the top.
+            #
+            # The shape matters more than anything else in this arena. A ball
+            # cannot be held on a vertical wall by friction: the friction that
+            # holds it also spins it, so it rolls down. It CAN hold a banked
+            # circle, where the boards themselves supply the centripetal force.
+            # The bank a ball can ride follows from its speed alone,
+            # v^2 = g * r * tan(bank), so a curved bowl lets the robot settle
+            # at whatever height its current speed has earned. That is how a
+            # real drome rider climbs, and it is the only way this one can.
+            profile = md_def[7] if len(md_def) > 7 and md_def[7] is not None else None
+            if profile is None:
+                profile = [(floor_r, 0.0), (wall_r, apron_h)]
+            profile = [(float(a), float(b)) for a, b in profile]
+
+            for si in range(len(profile) - 1):
+                r1, z1 = profile[si]
+                r2, z2 = profile[si + 1]
+                seg_dr, seg_dz = r2 - r1, z2 - z1
+                seg_slant = float(np.hypot(seg_dr, seg_dz))
+                if seg_slant < 1e-4:
+                    continue
+                bank_pitch = float(np.degrees(np.arctan2(seg_dz, seg_dr)))
+                bank_rad = np.radians(bank_pitch)
+                # A flat plank must span the chord at its outer radius to tile
+                # without a gap. Anything past that overlaps its neighbours,
+                # and a foot in the overlap picks up two contacts at once.
+                # Measured: with the old fixed 20 mm pad, going from 32 to 48
+                # planks cost 0.50 m of sustained ride height.
+                seg_w = float(2.0 * max(r1, r2) * np.tan(np.pi / n_facets) + plank_pad)
+                # Drop the plank by its own thickness so the riding surface,
+                # not the box centre, follows the profile.
+                seg_r = (r1 + r2) / 2.0 + plank_thick * np.sin(bank_rad)
+                seg_z = (z1 + z2) / 2.0 - plank_thick * np.cos(bank_rad)
+
+                for fi in range(n_facets):
+                    ang_rad = fi * (2.0 * np.pi / n_facets)
+                    ang_deg = float(np.degrees(ang_rad))
+                    ax = cx + seg_r * np.cos(ang_rad)
+                    ay = cy + seg_r * np.sin(ang_rad)
+                    walls_xml.append(
+                        f'<body name="md_apron_body_{md_idx}_{si}_{fi}" '
+                        f'pos="{ax:.4f} {ay:.4f} {seg_z:.4f}" euler="0 0 {ang_deg:.1f}">'
+                        f'<geom name="md_apron_{md_idx}_{si}_{fi}" type="box" '
+                        f'size="{seg_slant / 2.0 * plank_lap:.4f} {seg_w / 2.0:.4f} {plank_thick:.4f}" '
+                        f'euler="0 {-bank_pitch:.1f} 0" material="wood_plank_mat" '
+                        f'friction="{md_mu:.2f} 0.01 0.001" condim="4" priority="1"/>'
+                        f'</body>'
+                    )
+
+            # 2. Vertical 90-degree Cylindrical Wooden Wall (z = apron_h to total_h)
+            vert_h = total_h - apron_h
+            vert_cz = apron_h + vert_h / 2.0
+            vert_w = float(2.0 * wall_r * np.tan(np.pi / n_facets) + 0.004)
+
+            for fi in range(n_facets):
+                ang_rad = fi * (2.0 * np.pi / n_facets)
+                ang_deg = float(np.degrees(ang_rad))
+                vx = cx + wall_r * np.cos(ang_rad)
+                vy = cy + wall_r * np.sin(ang_rad)
+
+                mat_choice = "wood_plank_mat" if fi % 4 != 0 else "wood_dark_mat"
+                walls_xml.append(
+                    f'<geom name="md_wall_{md_idx}_{fi}" type="box" '
+                    f'pos="{vx:.4f} {vy:.4f} {vert_cz:.4f}" '
+                    f'size="0.020 {vert_w / 2.0:.4f} {vert_h / 2.0:.4f}" '
+                    f'euler="0 0 {ang_deg:.1f}" material="{mat_choice}" '
+                    f'friction="{md_mu:.2f} 0.01 0.001" condim="4" priority="1"/>'
+                )
+
+            # 3. Perimeter Steel Tension Bands around Silo
+            n_bands = max(int(vert_h / 0.8) + 1, 4)
+            for bi in range(n_bands):
+                bz = apron_h + bi * (vert_h / (n_bands - 1))
+                for fi in range(n_facets):
+                    ang_rad = fi * (2.0 * np.pi / n_facets)
+                    ang_deg = float(np.degrees(ang_rad))
+                    bx = cx + (wall_r + 0.025) * np.cos(ang_rad)
+                    by = cy + (wall_r + 0.025) * np.sin(ang_rad)
+                    walls_xml.append(
+                        f'<geom name="md_band_{md_idx}_{bi}_{fi}" type="box" '
+                        f'pos="{bx:.4f} {by:.4f} {bz:.4f}" '
+                        f'size="0.008 {vert_w / 2.0 * 1.05:.4f} 0.020" '
+                        f'euler="0 0 {ang_deg:.1f}" material="wood_bracket_mat" '
+                        f'contype="0" conaffinity="0"/>'
+                    )
+
+            # 4. Central Stage Hub (visual only, like the booth in the photo)
+            walls_xml.append(
+                f'<geom name="md_hub_box_{md_idx}" type="box" '
+                f'pos="{cx:.4f} {cy:.4f} 0.20" '
+                f'size="0.22 0.22 0.20" material="wood_dark_mat" '
+                f'contype="0" conaffinity="0"/>'
+            )
+
+    # 4k. Athletic / Traffic Training Cones (Slalom Course)
+    cones_raw = getattr(scenario, "cones", None)
+    if cones_raw is not None and len(cones_raw) > 0:
+        cone_items = np.asarray(cones_raw, dtype=float)
+        if cone_items.ndim == 1:
+            cone_items = cone_items.reshape(1, -1)
+        for c_idx, c_item in enumerate(cone_items):
+            cx, cy = float(c_item[0]), float(c_item[1])
+            cr = float(c_item[2]) if len(c_item) > 2 else 0.12
+            cone_h = 0.35  # 35 cm tall athletic cone
+            base_w = cr * 2.3
+            base_th = 0.015
+
+            # Weighted square black rubber base plate
+            walls_xml.append(
+                f'<geom name="cone_base_{c_idx}" type="box" '
+                f'pos="{cx:.4f} {cy:.4f} {base_th / 2.0:.4f}" '
+                f'size="{base_w / 2.0:.4f} {base_w / 2.0:.4f} {base_th / 2.0:.4f}" '
+                f'rgba="0.12 0.12 0.14 1" friction="1.2 0.01 0.001" condim="4"/>'
+            )
+            # Lower bright orange cone body
+            walls_xml.append(
+                f'<geom name="cone_lower_{c_idx}" type="cylinder" '
+                f'pos="{cx:.4f} {cy:.4f} {cone_h * 0.20:.4f}" '
+                f'size="{cr * 0.90:.4f} {cone_h * 0.20:.4f}" '
+                f'rgba="1.00 0.35 0.02 1" friction="0.8 0.005 0.0001" condim="4" priority="1"/>'
+            )
+            # High-visibility reflective white collar
+            walls_xml.append(
+                f'<geom name="cone_stripe_{c_idx}" type="cylinder" '
+                f'pos="{cx:.4f} {cy:.4f} {cone_h * 0.55:.4f}" '
+                f'size="{cr * 0.62:.4f} {cone_h * 0.12:.4f}" '
+                f'rgba="0.95 0.95 0.98 1" friction="0.8 0.005 0.0001" condim="3"/>'
+            )
+            # Upper bright orange cone top
+            walls_xml.append(
+                f'<geom name="cone_upper_{c_idx}" type="cylinder" '
+                f'pos="{cx:.4f} {cy:.4f} {cone_h * 0.80:.4f}" '
+                f'size="{cr * 0.38:.4f} {cone_h * 0.12:.4f}" '
+                f'rgba="1.00 0.35 0.02 1" friction="0.8 0.005 0.0001" condim="4"/>'
+            )
+            # Smooth rounded top cap
+            walls_xml.append(
+                f'<geom name="cone_cap_{c_idx}" type="sphere" '
+                f'pos="{cx:.4f} {cy:.4f} {cone_h * 0.94:.4f}" '
+                f'size="{cr * 0.36:.4f}" '
+                f'rgba="1.00 0.35 0.02 1" friction="0.8 0.005 0.0001" condim="3"/>'
+            )
 
     # 5. Goal Marker & Pad
     gx, gy = float(scenario.goal[0]), float(scenario.goal[1])
@@ -607,7 +1053,7 @@ def build_mujoco_scene_mjcf(
         <texture name="skybox" type="skybox" builtin="gradient"
                  rgb1="0.20 0.35 0.55" rgb2="0.04 0.07 0.12" width="512" height="512"/>
         <material name="grid" texture="grid" texrepeat="{grid_repeat:.4f} {grid_repeat:.4f}" reflectance="0.08" texuniform="true"/>
-        <material name="wall_mat" rgba="0.28 0.32 0.38 1" reflectance="0.05"/>
+        <material name="wall_mat" rgba="0.68 0.64 0.58 1" specular="0.2" shininess="0.3" reflectance="0.06"/>
         <material name="goal_mat" rgba="0.0 0.85 0.90 0.60" reflectance="0.1"/>
         <material name="goal_pad_mat" rgba="0.0 0.85 0.90 0.35" reflectance="0.05"/>
         <material name="core_mat" rgba="{core_rgba}" specular="0.6" shininess="0.8" reflectance="0.12"/>
@@ -630,8 +1076,9 @@ def build_mujoco_scene_mjcf(
         <material name="pipe_ring_mat" rgba="0.18 0.20 0.24 1.0" specular="0.8" shininess="0.9"/>
         <!-- Incline Slopes & Staircase Materials -->
         <material name="ramp_mat" rgba="0.45 0.46 0.48 1.0" specular="0.3" shininess="0.4"/>
-        <material name="stair_tread_mat" rgba="0.52 0.38 0.25 1.0" specular="0.2" shininess="0.3"/>
-        <material name="stair_nosing_mat" rgba="0.96 0.78 0.08 1.0" specular="0.6" shininess="0.8"/>
+        <material name="stair_tread_blue_mat" rgba="0.10 0.28 0.58 1.0" specular="0.25" shininess="0.35"/>
+        <material name="stair_tread_teal_mat" rgba="0.05 0.48 0.58 1.0" specular="0.25" shininess="0.35"/>
+        <material name="stair_nosing_mat" rgba="1.00 0.76 0.00 1.0" emission="0.12" specular="0.5" shininess="0.7"/>
     </asset>
 
     <worldbody>
@@ -663,13 +1110,25 @@ def build_mujoco_scene_mjcf(
                   material="core_mat" mass="{core_mass}"
                   friction="0.85 0.015 0.005" condim="4"
                   contype="1" conaffinity="2"/>
+            <!-- Central Electronics & Avionics Hub (Protected Core Hub) -->
+            <geom name="avionics_hub" type="sphere" size="0.045"
+                  rgba="0.10 0.75 0.90 0.85" mass="0.10"
+                  contype="0" conaffinity="0"/>
+            <!-- Central IMU Sensor Site (At CoG) -->
+            <site name="imu_site" pos="0 0 0" size="0.01" type="sphere" rgba="0 1 1 0"/>
             {''.join(bars_xml)}
         </body>
     </worldbody>
 
+    {f'<equality>{"".join(equalities_xml)}</equality>' if equalities_xml else ''}
+
     <actuator>
         {''.join(actuators_xml)}
     </actuator>
+
+    <sensor>
+        {''.join(sensors_xml)}
+    </sensor>
 </mujoco>
 """
     return xml_str, dirs

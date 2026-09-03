@@ -1,0 +1,51 @@
+# Horizontal wall run.
+#
+# The robot sprints beside a wall, leaps at it, rides it briefly on momentum
+# alone, then pushes off and lands.
+#
+# It rides on momentum because nothing else is available. Friction cannot hold
+# a rolling body on a vertical wall: the friction that holds it also spins it,
+# so it rolls down. That was measured on the drome bowl, over wall radii from
+# 0.70 m to 1.80 m and speeds up to twice the friction limit, and it slid down
+# every time. So the wall contact here is a long, soft bounce, not a ride.
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "wall_run"
+  kind: "wall_run"
+  mode: "curved"            # Options: "curved", "banked", "flat_multistep", "flat"
+  wall_y: 1.30              # the wall runs along x at this y
+  wall_length: 62.0        # each cycle uses about 16 m; room for three
+  lane_offset: 2.60         # how far out the run-up lane sits, room to angle in
+  maze:                     # the env reads wall size from here when present
+    wall_height: 3.00       # tall enough that arriving a metre up means something
+    wall_thickness: 0.12
+
+  # Modular wall geometries.  These are not claims of indefinite adhesion:
+  # every mode remains an airborne wall touch followed by a push-off.
+  curved:
+    radius: 7.50            # plan-view radius of curvature (m)
+    arc_deg: 45.0           # arc angle (degrees)
+    wall_height: 3.00
+  banked:
+    bank_deg: 78.0          # wall angle (degrees, 90 = vertical, 78 = 12-deg bank)
+    wall_height: 3.00
+  flat_multistep:
+    n_steps: 3              # minimum conceptual contact sequence; several rods touch in practice
+    wall_height: 3.00
+
+floor:
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+  max_extend: 0.30          # long stroke: more reach at the wall, more push off it
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.60
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.004
+  actuator_force_limit: 100.0

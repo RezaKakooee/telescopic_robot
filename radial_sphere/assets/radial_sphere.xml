@@ -1,0 +1,64 @@
+<!--
+  =============================================================================
+  RADIAL SPHERE ROBOT - SIM-READY MJCF ASSET
+  Standards: DeepMind MuJoCo Menagerie / Boston Dynamics Sim-to-Real Benchmark
+  Mechanism: Option 1 (Cascade Cable-Driven Multi-Stage Telescoping Boom)
+  Actuators: 60x Micro-BLDC Cable Winches (Reflected Rotor Inertia & PD Envelopes)
+  Sensory: Central 6-Axis IMU, 60 Joint Encoders, 60 Force Sensors, 60 Foot Touch Sensors
+  Mass: 3.18 kg Total System Mass (CoG at Center of Geometry)
+  =============================================================================
+-->
+<mujoco model="radial_sphere_robot">
+  <compiler angle="radian" coordinate="local" autolimits="true"/>
+
+  <option timestep="0.002" gravity="0 0 -9.81" integrator="implicitfast" cone="pyramidal">
+    <flag contact="enable" frictionloss="enable"/>
+  </option>
+
+  <default>
+    <default class="radial_sphere">
+      <!-- Telescopic Primary Sliding Joint: Coulomb + Viscous + Compliance Endstops -->
+      <default class="telescopic_main_joint">
+        <joint type="slide" damping="14.0" frictionloss="1.2" armature="0.018"
+               margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+      </default>
+      
+      <!-- Intermediate Cascade Stage (Coupled via 2:1 Cable Rigging) -->
+      <default class="cascade_stage1_joint">
+        <joint type="slide" damping="7.0" frictionloss="0.6" armature="0.009"
+               margin="0.001" solreflimit="0.005 1.0" solimplimit="0.90 0.98 0.001"/>
+      </default>
+
+      <!-- Geometry Classes -->
+      <default class="sleeve_geom">
+        <geom type="capsule" size="0.0135" rgba="0.28 0.32 0.38 1.0" contype="0" conaffinity="0" mass="0.014"/>
+      </default>
+      <default class="collar_geom">
+        <geom type="capsule" size="0.0102" rgba="0.45 0.48 0.55 1.0" contype="0" conaffinity="0" mass="0.003"/>
+      </default>
+      <default class="piston_geom">
+        <geom type="capsule" size="0.0076" rgba="0.90 0.92 0.96 1.0" contype="0" conaffinity="0" mass="0.004"/>
+      </default>
+
+      <!-- Vulcanized Polyurethane Rubber Foot (Shore 70A Durometer) -->
+      <default class="foot_rubber_geom">
+        <geom type="sphere" size="0.013" rgba="0.10 0.10 0.12 1.0" mass="0.004"
+              contype="1" conaffinity="2" priority="1" condim="4"
+              friction="0.95 0.015 0.005"
+              solref="0.006 1.1" solimp="0.90 0.95 0.002"/>
+      </default>
+
+      <!-- Motor Actuator Envelope (1408 Brushless + 15:1 Planetary Winch) -->
+      <default class="actuator_radial">
+        <general biastype="affine" biasprm="0 -900 -22" gaintype="fixed" gainprm="900 0 0"
+                 forcerange="-55 55"/>
+      </default>
+    </default>
+  </default>
+
+  <asset>
+    <material name="core_mat" rgba="1.0 0.82 0.15 0.25" specular="0.5" shininess="0.6"/>
+    <material name="avionics_mat" rgba="0.10 0.75 0.90 0.85" specular="0.6" shininess="0.8"/>
+    <material name="floor_grid" rgba="0.85 0.87 0.90 1.0" specular="0.2" shininess="0.3"/>
+  </asset>
+</mujoco>

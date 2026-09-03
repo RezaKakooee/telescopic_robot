@@ -1,0 +1,70 @@
+# Wall of Death (motordrome) — sized from the ball's measured top speed.
+#
+# A body stays on a vertical wall only while friction beats gravity:
+#
+#     mu * v^2 / r  >=  g        ->      r  <=  mu * v^2 / g
+#
+# so the arena radius is not a free choice, it is set by how fast the ball can
+# actually go. Measured top speed on the flat, by rod stroke:
+#
+#   stroke 0.16 -> 2.77 m/s  -> max wall radius 1.25 m at mu 1.35
+#   stroke 0.22 -> 3.90 m/s  -> max wall radius 2.28 m
+#   stroke 0.26 -> 4.48 m/s  -> max wall radius 2.95 m
+#
+# The inherited arena was 2.40 m with the 0.16 m stroke: about half the speed
+# it needed, which is why the ball always slid back down to the apron.
+#
+# A vertical wall turned out to be impossible: friction is the only thing that
+# can hold a body on one, and the friction that holds a rolling ball also spins
+# it, so it rolls down. Measured over wall radii from 0.70 m to 1.80 m and
+# speeds up to twice the friction limit, every attempt slid down. So the arena
+# is a banked drome bowl, where the boards supply the inward pull themselves,
+# with the vertical wall standing above the rim.
+#
+# The plank count is not a free visual choice. Every plank overlaps its
+# neighbours, and a foot in the overlap picks up two contacts at once, so more
+# planks means a rougher ride. Measured over 150 s, at 26 rings:
+#
+#   32 planks -> holds 1.77 m, 40 laps
+#   48 planks -> holds 0.68 m, 12 laps
+#
+# Thinning the overlap does not buy the extra planks back. So the barrel stays
+# at 32, and the rings are crowded into the top curl, where nothing rides, and
+# left wide across the middle, where the robot does.
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "motordrome"
+  kind: "motordrome"
+  floor_radius: 1.10        # flat start pad, used to build the first speed
+  wall_radius: 3.50         # rim of the bowl, where the vertical wall begins
+  bowl_ride_speed: 4.20     # speed the bank carries where the ramp meets it
+  bowl_rim_speed: 5.00      # speed the bank carries at the end of the ride line
+  bowl_ride_end: 3.10       # ride line ends here; beyond it the boards curl up
+  bowl_ramp_rate: 1.50      # how fast the bank comes in off the flat floor
+  bowl_max_bank: 68         # hard ceiling on the bank, in degrees
+  bowl_blend: 0.35          # rounds off the joins between the bank pieces
+  bowl_lip_bank: 78         # boards curl to this by the rim, to meet the wall
+  bowl_segments: 26         # conical rings making the curve
+  bowl_bank_weight: 0.55    # crowds those rings into the curl, not the middle
+  bowl_facets: 32           # planks around the barrel
+  bowl_plank_lap: 1.060     # how far a plank reaches past its own ring
+  bowl_plank_pad: 0.020     # and past its own facet, in metres
+  cylinder_height: 3.90
+  wall_friction: 1.80       # boards against rubber feet
+
+floor:
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+  max_extend: 0.30          # long stroke: 5.45 m/s, against 4.55 at 0.26
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.60
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.004
+  actuator_force_limit: 100.0

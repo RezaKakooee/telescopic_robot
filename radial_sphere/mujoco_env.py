@@ -85,10 +85,13 @@ class MujocoRadialSphereEnv(gym.Env):
         """Compile MJCF XML and initialize MuJoCo Model, Data, and Geom IDs."""
         wall_h = getattr(self.cfg.scenario, "maze", self.cfg.scenario)
         wall_height = float(getattr(wall_h, "wall_height", getattr(self.cfg.scenario, "wall_height", 0.22)))
+        wall_thickness = float(getattr(wall_h, "wall_thickness",
+                                       getattr(self.cfg.scenario, "wall_thickness", 0.06)))
         sim2real_cfg = getattr(self.cfg, "sim2real", None)
         s2r_dict = dict(sim2real_cfg) if sim2real_cfg is not None else {}
         enable_sim2real = bool(s2r_dict.get("enabled", False))
         appearance_theme = str(getattr(self.cfg.robot, "appearance_theme", "realistic" if enable_sim2real else "rainbow"))
+        rod_mechanism = str(getattr(self.cfg.robot, "rod_mechanism", "single_stage"))
         floor_cfg = getattr(self.cfg, "floor", None)
         xml_str, dirs = build_mujoco_scene_mjcf(
             scenario=scenario,
@@ -97,8 +100,12 @@ class MujocoRadialSphereEnv(gym.Env):
             max_extend=self.max_extend,
             core_mass=float(getattr(self.cfg.robot, "core_mass", 0.5)),
             wall_height=wall_height,
+            wall_thickness=wall_thickness,
             sim2real_cfg=s2r_dict,
             appearance_theme=appearance_theme,
+            rod_mechanism=rod_mechanism,
+            kp=float(getattr(self.cfg.robot, "kp", 1200.0)),
+            kv=float(getattr(self.cfg.robot, "kv", 22.0)),
             floor_half_extent=float(getattr(floor_cfg, "half_extent_m", 200.0)),
             floor_square_m=float(getattr(floor_cfg, "square_m", 0.4)),
             floor_rgb1=str(getattr(floor_cfg, "rgb1", "0.42 0.45 0.51")),
@@ -127,6 +134,12 @@ class MujocoRadialSphereEnv(gym.Env):
             if sid >= 0:
                 self.sleeve_geom_ids.add(sid)
                 self.rod_geom_map[sid] = k
+
+        # Cache slide joint qpos addresses
+        self.slide_qpos_adr = np.array([
+            self.model.jnt_qposadr[mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, f"slide_{k}")]
+            for k in range(self.n_bars)
+        ], dtype=np.int32)
 
         # Wall & Obstacle geom IDs
         self.wall_geom_ids = set()
@@ -342,7 +355,7 @@ class MujocoRadialSphereEnv(gym.Env):
             self.data.qvel[0:3],       # lin_vel (3)
             self.data.qvel[3:6],       # ang_vel (3)
         ]).astype(np.float32)
-        joint_pos = self.data.qpos[7:7 + self.n_bars].astype(np.float32)
+        joint_pos = self.data.qpos[self.slide_qpos_adr].astype(np.float32)
         return self.obs_model.observe(root_state, joint_pos)
 
     def _get_info(self, wall_contact: bool = False, goal_contact: bool = False, obstacle_contact: bool = False, success: bool = False) -> dict[str, Any]:
@@ -350,7 +363,7 @@ class MujocoRadialSphereEnv(gym.Env):
         quat = self.data.qpos[3:7].copy().astype(np.float32)
         lin_vel = self.data.qvel[0:3].copy().astype(np.float32)
         ang_vel = self.data.qvel[3:6].copy().astype(np.float32)
-        joint_pos = self.data.qpos[7:7 + self.n_bars].copy().astype(np.float32)
+        joint_pos = self.data.qpos[self.slide_qpos_adr].copy().astype(np.float32)
         dist = self._nav_distance(ball_xy)
 
         return {
@@ -503,6 +516,37 @@ class MujocoRadialSphereEnv(gym.Env):
             cam.distance = 1.50      # Close macro view of the ball & rods
             cam.elevation = -28.0    # 28-degree fixed downward angle
             cam.azimuth = 45.0       # 100% Constant Fixed Azimuth: NEVER rotates or turns when robot turns!
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "stairs_side_fixed":
+            # Static full-course lateral view, raised 30 degrees above the
+            # scene. It keeps the side-on course axis while revealing tread
+            # tops and risers, and never follows the robot.
+            path = np.asarray(self.scenario.path_pts, dtype=np.float64)
+            x_lo, x_hi = float(np.min(path[:, 0])), float(np.max(path[:, 0]))
+            y_mid = 0.5 * (float(np.min(path[:, 1])) + float(np.max(path[:, 1])))
+            course_span = max(x_hi - x_lo, 1.0)
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_FREE
+            cam.lookat[:] = [0.5 * (x_lo + x_hi), y_mid, 0.65]
+            # A little closer than the 20260901_1119 reference framing while
+            # retaining both ends of the course in view.
+            cam.distance = max(8.0, course_span * 0.94)
+            cam.elevation = -30.0
+            cam.azimuth = 90.0
+            self.renderer.update_scene(self.data, camera=cam)
+            return self.renderer.render()
+
+        if camera_name == "stairs_close_30":
+            # Genuinely close stair view: translation follows the core so the
+            # robot stays large, but azimuth and elevation never rotate.
+            cam = mujoco.MjvCamera()
+            cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+            cam.trackbodyid = self.core_body_id
+            cam.distance = 3.00
+            cam.elevation = -30.0
+            cam.azimuth = 90.0
             self.renderer.update_scene(self.data, camera=cam)
             return self.renderer.render()
 

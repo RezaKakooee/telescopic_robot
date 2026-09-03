@@ -15,7 +15,8 @@ robot:                    # the telescoping sphere
   max_extend: 0.16        # max bar extension (m); action maps to [0, this]
   kp: 900.0               # actuator stiffness (position PD gain)
   kv: 22.0                # actuator damping
-  appearance_theme: rainbow # "rainbow" (prototyping debug) | "realistic" (carbon gunmetal) | "aerospace_white"
+  appearance_theme: realistic # "rainbow" (prototyping debug) | "realistic" (carbon gunmetal) | "aerospace_white"
+  rod_mechanism: multi_stage # "single_stage" (baseline) | "multi_stage" (concentric nesting) | "zip_chain" (push-chain spool)
 
 controller:               # physical peristaltic cam locomotion
   back_gain: 1.6          # push wave amplitude in rear-downward quadrant
