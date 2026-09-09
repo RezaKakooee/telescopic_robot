@@ -194,6 +194,17 @@ def follow_path(
     elif abs(curvature) >= curve_threshold:
         # Continuous road bend -> delegate to `curve`
         sub_skill = "curve"
+        # The two functions measure curvature with opposite signs: here the 2D
+        # cross product makes positive mean "the path bends left", while
+        # `curve` reads positive as a right-hand bend. Do not simply negate
+        # it. `d_target_hat` already aims at the lookahead waypoint and does
+        # the steering; because `curve` re-places its centre from the current
+        # position every step, its curvature only adds a fixed extra rotation
+        # on top. The sign therefore selects understeer or oversteer, not left
+        # or right. Measured on single-direction arcs: as written, 11.7 cm and
+        # 11.6 cm mean cross-track on left and right bends; negated, 9.0 cm and
+        # 15.8 cm. Making the conventions agree means also removing that
+        # double-counting, which needs its own tuning pass.
         targets = curve(
             quat, dirs_body, max_extend, d_target_hat,
             curvature=curvature,

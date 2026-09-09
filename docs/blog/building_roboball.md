@@ -49,11 +49,10 @@ article is written as a step-by-step tutorial. We will begin with the robot's
 rigid spherical body and telescoping rods, then gradually add the physical
 simulation and control system.
 
-At the low level, we will study the physics and actuator control: coordinate
-frames, contacts, friction, position targets, and feedback controllers such as
-PD control. Above that, the mid-level controller will provide a small library
-of primitive skills, including moving forward and backward, turning, stopping,
-jumping, and landing safely.
+We will first study geometry, contact physics, and PD actuator control.
+Above the actuators, low-level skills generate rod targets for moving,
+turning, stopping, jumping, and landing. Mid-level skills choose and combine
+those primitives to follow paths or traverse stairs.
 
 Once these primitive skills work independently, we can combine them to create
 new behaviors. For example, moving into position, stopping, jumping, and
@@ -85,29 +84,33 @@ Each new layer will solve a limitation of the previous one:
    rod-extension targets.
 5. **Low-level actuator control:** use PD feedback to make each actuator follow
    its extension target.
-6. **Primitive mid-level skills:** give reusable names to behaviors such as
-   `move`, `turn`, `stop`, `jump`, and `fall_down`.
-7. **Skill composition:** combine tested primitives into more involved
-   behaviors, using stair traversal as the main example.
+6. **Low-level skills:** generate rod targets for `move`, `turn`, `stop`,
+   `jump_up`, and `fall_down`.
+7. **Mid-level coordination:** choose and sequence primitives for path
+   following, boundary roaming, and stair traversal.
 
-The resulting control stack will look like this:
+The repository uses the following names for these layers:
 
 ```text
-Future task planner / learning system
-planning, memory, RL, and skill selection
+High-level planning — skills/high_level/ (reserved for future work)
+task state → skill name and arguments
                     ↓
-Mid-level skill library
-move, turn, stop, jump, and fall_down
+Mid-level coordination — skills/mid_level/
+follow_path, stay_in_boundary, climb_stairs
                     ↓
-Rod coordination
-requested movement → individual rod-extension targets
+Low-level skills — skills/low_level/
+move, turn, jump_up, fall_down, traverse_rough_terrain
+requested behaviour → rod-extension targets
                     ↓
-Low-level actuator control
+Actuator control
 PD feedback: extension error → actuator force
                     ↓
 MuJoCo physics
-mass, gravity, friction, collisions, and rigid-body motion
+forces and contacts → next robot state
 ```
+
+“Low-level skill” here means the lowest **skill-library** layer. PD actuator
+control sits beneath it; the two are not the same controller.
 
 The article is intended for readers who do not necessarily have a robotics
 background. Concepts such as coordinate
@@ -464,17 +467,19 @@ Create three smooth factors:
 - $s_{i,\mathrm{centre}}$ is largest near the travel centreline; and
 - $s_{i,\mathrm{down}}$ is largest at useful downward angles.
 
-Their product is
+The movement gait combines them with a drive gain $g$:
 
 $$
-w_i=s_{i,\mathrm{rear}}\,
-s_{i,\mathrm{centre}}\,
-s_{i,\mathrm{down}}.
+w_i=\mathrm{clip}\left(
+g\,s_{i,\mathrm{rear}}^{1.1}
+s_{i,\mathrm{centre}}s_{i,\mathrm{down}},\,0,\,1
+\right).
 $$
 
-Multiplication acts like a soft **AND**: the weight is high only when all three
-conditions are satisfied. Smooth factors allow one bar to fade out while the
-next fades in as the core rotates, avoiding abrupt switching.
+Multiplication acts like a soft **AND**: a bar needs useful rear, sideways,
+and downward projections. The implementation also zeros leading and upper
+sectors. Increasing $g$ changes the drive weights without reducing the
+available rod stroke.
 
 #### 3.6.3 Convert the weight into a target extension
 
@@ -482,18 +487,18 @@ The weight has no physical unit, so the actuator cannot use it directly.
 Instead, map it into the available extension range:
 
 $$
-e_i^*=e_{\min}
-+a\left(e_{\max}-e_{\min}\right)w_i.
+e_i^*=e_{\min}+\left(e_{\max}-e_{\min}\right)w_i.
 $$
 
-Here, $e_{\min}=2.5\,\text{cm}$ is the resting extension,
-$e_{\max}=16.0\,\text{cm}$ is the maximum, and $a\in[0,1]$ controls the overall
-movement strength.
+Here, $e_{\min}=2.5\,\text{cm}$ is the gait's minimum extension and
+$e_{\max}=16.0\,\text{cm}$ is the configured maximum. Push strength has
+already been included in $w_i$; `move` does not apply another amplitude
+parameter after this mapping.
 
-For example, if $a=0.8$ and $w_i=0.5$,
+For example, $w_i=0.4$ gives
 
 $$
-e_i^*=2.5+0.8(16.0-2.5)(0.5)=7.9\,\text{cm}.
+e_i^*=2.5+(16.0-2.5)(0.4)=7.9\,\text{cm}.
 $$
 
 The coordination layer has now converted one requested direction into a target
@@ -535,29 +540,34 @@ desired direction → three projections → drive weight
                   → extension target → actuator force → MuJoCo motion
 ```
 
-## 5. Primitive mid-level skills
+## 5. Motion skills and coordination
 
-Sections 3 and 4 established the lower layers: coordination chooses extension
-targets, PD control turns target errors into actuator forces, and MuJoCo
-resolves the resulting motion. Those layers still do not describe a meaningful
-action such as “go forward” or “jump.”
+Sections 3 and 4 showed how rod targets become actuator forces and physical
+motion. A skill packages the target-selection rule into a command such as
+“move in this direction” or “jump.”
 
-A **primitive mid-level skill** fills that gap. It accepts a short robot-level
-command and generates a changing pattern of bar targets. Continuous skills,
-such as moving, run until the caller changes the command; actions such as
-jumping have phases that lead toward completion. We will begin with moving,
-turning, and stopping, then introduce jumping and controlled falling, including
-their landing phases.
+The current repository separates two kinds of skills:
 
-This is *mid-level* control because it reasons in terms of robot behaviours,
-not individual actuator forces, but it does not plan an entire task. A later
-task controller can choose and sequence these skills—for example, move, stop,
-jump, and land while climbing a stair.
+- **Low-level primitives** in `skills/low_level/` generate targets for one
+  behaviour: movement, turning, jumping, falling, or terrain traversal.
+- **Mid-level coordinators** in `skills/mid_level/` choose or sequence
+  primitives: `follow_path`, `stay_in_boundary`, and `climb_stairs`.
+  High-level task planning is reserved for `skills/high_level/`.
 
-Many primitives need more than one target pattern. A jump, for example, must
-crouch before it launches, then use a different pattern in the air and during
-landing. We will describe these skills as small **state machines**: named
-phases with rules for when to move to the next phase.
+We will start with primitives, then show coordination. The article covers
+a selection of the registered skills, not the complete library.
+
+Most calls calculate one update's rod targets. Jump and fall functions
+receive a phase; their caller or runner manages transitions. Suspension
+also has explicit `SuspensionState` history, so not every skill is a
+stateless pure function.
+
+The public entry point remains `from skills import execute_skill`.
+A normal array-returning primitive produces one extension target per rod,
+in metres. With `return_metadata=True`, the dispatcher returns
+`(targets, metadata)`, including the requested name and target summary.
+Some specialized primitives return tuples natively; their dedicated
+runners handle those interfaces.
 
 ### 5.1 Moving at a chosen speed
 
@@ -1060,10 +1070,11 @@ $$
 $$
 
 The default is $u_{\min}=0.10$. Whether a selected foot actually reaches a
-platform also depends on its extension and the robot's position. The
-`gap_half_width` parameter is currently unused; it does not automatically
-adapt this selection to another trench width. Likewise, `speed` is not
-used by this implementation; `back_gain` adjusts the drive-wave strength.
+platform also depends on its extension and the robot's position.
+`straddle_gap` takes neither `gap_half_width` nor `speed`.
+Use `min_lat` to adjust the central selection window and `back_gain`
+to set drive-wave strength. Tucked rods receive a true zero target, so
+this skill has no `min_offset` parameter either.
 
 A supplied lateral offset steers the gait back toward the centreline.
 The correction is clipped to $\pm0.25$ radians (about $\pm14.3^\circ$).
@@ -1201,7 +1212,7 @@ Implementation: [jumping skills](../../skills/low_level/jumping.py).
 Now we can compose skills. Give the controller a sequence of horizontal
 waypoints, the ball's position, and its velocity. It chooses `move`,
 `turn`, `curve`, or `stop` at each update. This is a hand-written
-task-level coordinator built from the mid-level primitives.
+mid-level coordinator built from low-level primitives.
 
 The painted lane in the video helps us see the route. The controller does
 not detect that paint: it receives waypoint coordinates and simulator state.
@@ -1258,7 +1269,7 @@ about $26\,\text{cm/s}$. All four sub-skills were selected during the run.
 
 Video path for the later HTML version: `assets/follow-path-ground.mp4`.
 
-Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
+Implementation: [navigation skills](../../skills/mid_level/navigation.py).
 [Recording script](./render_path_following.py) ·
 [trajectory](./assets/follow-path-ground.csv) ·
 [summary](./assets/follow-path-ground-results.json).
@@ -1313,18 +1324,16 @@ the robot can translate during that action.
 
 Video path for the later HTML version: `assets/stay-in-boundary.mp4`.
 
-Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
+Implementation: [navigation skills](../../skills/mid_level/navigation.py).
 [Recording script](./render_stay_in_boundary.py) ·
 [trajectory](./assets/stay-in-boundary.csv) ·
 [summary](./assets/stay-in-boundary-results.json).
 
 **Circular boundary filled with rough stones.** In the next example, the
-same wall-less circular arena ($R = 2.0\,\text{m}$) is filled with 130
-procedural multi-faceted rocks, boulders, and stone slabs distributed uniformly
-inside the perimeter. RoboBall combines wall-less boundary containment with
-active suspension: underneath rods yield and open lower over stones while
-extending into gaps, and skyhook damping stabilizes core ride height throughout
-a full $120\,\text{s}$ (2-minute) roaming session without leaving the boundary.
+same wall-less circular arena ($R = 200\,\text{cm}$) contains 130
+procedural rocks and slabs. RoboBall combines boundary coordination with
+rod-support feedback. This recording demonstrates roaming over stones;
+it does not contain the recessed pits introduced in Section 5.13.
 
 In this $120\,\text{s}$ simulation over stones, maximum radius reached was
 $156.03\,\text{cm}$ (leaving a safety margin of $43.97\,\text{cm}$ to the line),
@@ -1343,166 +1352,131 @@ Video path for the later HTML version: `assets/boundary-stones.mp4`.
 
 ### 5.13 Adjusting rod support on rough terrain (`traverse_rough_terrain`)
 
-On uneven ground, the same extension can leave one foot unsupported and
-another pressed against a raised surface. This controller adds support
-adjustments to the forward gait rather than giving every rod a fixed stance.
+On uneven ground, one foot may be unsupported while another presses against
+a rock. This low-level skill combines the rolling gait with extra support,
+rear-rod drive boosting, and bounded suspension corrections.
 
-**Core-height feedback.** Downward support rods receive an extension
-correction:
+**Height and contact feedback.** The height term uses the core's world-frame
+height $z$ and vertical velocity $v_z$:
 
 $$
 \Delta e_{\mathrm{height}}=
--\left[K_p(z-z^*)+K_dv_z\right].
+\mathrm{clip}\!\left[-K_p(z-z^*)-K_dv_z,\,
+-2.5\,\text{cm},\,2.5\,\text{cm}\right].
 $$
 
-Above the requested height, rods retract; below it, they extend. Upward
-velocity also reduces extension. Because the output is a length,
-$K_p=0.75$ is dimensionless and $K_d=0.15\,\text{s}$.
-This is PD-style extension adjustment, not a force-command skyhook damper.
+Below the requested height, this increases support; upward velocity reduces
+it. $K_p$ is dimensionless and $K_d$ has units of seconds. This is an
+extension-target correction, not a force-command suspension model.
 
-$z^*$ is a world-frame height, not clearance above the local terrain, and it
-has to sit inside what the build can actually hold. The $15\,\text{cm}$ core
-with a $16\,\text{cm}$ stroke settles near $23\,\text{cm}$ in this rolling
-gait, so the recording uses $z^*=23\,\text{cm}$. A target above that range
-pins the correction at its $\pm2.5\,\text{cm}$ clip and turns the PD term
-into a constant offset.
+A contact-force term retracts a loaded rod by up to $1.2\,\text{cm}$.
+A low force alone does not trigger hole outreach: the terrain measurement
+must also indicate a depression.
 
-**Contact feedback.** The environment sums normal contact-force magnitudes
-for each rod. Above a threshold, the target yields:
+**Local terrain measurements.** `get_terrain_clearances` casts rays along
+downward rods while excluding robot geometry and decorative non-colliders.
+It returns a signed **vertical** offset from the nominal floor: negative
+for raised terrain, positive for a depression. Rays beyond the configured
+reach window—core radius plus stroke plus a $5\,\text{cm}$ margin—return
+`NaN`, meaning no usable measurement. This is a sensing window, not proof
+that a foot can support the robot at every reported point.
 
-$$
-\Delta e_{\mathrm{bump}}=-c_f\max(0,F_i-F_{\mathrm{threshold}}),
-\qquad c_f=0.18\,\text{cm/N},\quad F_{\mathrm{threshold}}=10\,\text{N}.
-$$
+The measured vertical offset is scaled and clipped into a rod-extension
+correction. That mapping is a control heuristic, not an exact inverse
+kinematic solution for an inclined rod.
 
-The threshold is a tuning parameter, not the load that every foot must carry.
-No contact can mean an airborne foot; it does not by itself identify a hole.
+**Which rods receive corrections?** The shared
+[rod-support rule](../../radial_sphere/gait.py) smoothly increases
+`support_weight` from zero near the leading sector to one farther behind.
+Downward participation is also smoothed. Leading rods are normally excluded;
+rods deliberately selected for braking can remain active. This lets support
+transfer as the sphere rolls instead of switching every correction on at once.
 
-**Terrain feedback.** `get_terrain_clearances` casts one ray along each
-downward rod and returns a **vertical** terrain height relative to the
-nominal $z=0$ floor. A rock reads negative and a pit reads positive. Two
-limits keep the reading local:
+**Keeping the commands smooth.** A persistent `SuspensionState` filters
+terrain, force, and heave measurements, then smooths and rate-limits the
+extension targets. Defaults are a $60\,\text{ms}$ filter time and a
+$45\,\text{cm/s}$ target-rate limit. At a $10\,\text{ms}$ update interval,
+a target can change by at most $0.45\,\text{cm}$ per update.
 
-* A hit past `sphere_radius + max_extend + 5 cm` is dropped as `NaN`. The rod
-  cannot touch that ground, so it must not react to it.
-* Rods that do not point downwards report zero.
+Create this state once per run, not on every update. The standard skill
+runner manages it automatically. For direct calls:
 
-The reach limit matters more than it looks. An earlier version compared the
-ray distance against the distance to a flat plane *along the rod axis*. For a
-shallow rod that reference distance grows past a metre, so a boulder $70\,
-\text{cm}$ to the side was reported as ground under the foot. The controller
-then retracted rods for terrain it was nowhere near.
+```python
+from skills import execute_skill, SuspensionGains, SuspensionState
 
-**Support pattern.** Selected rear-bottom rods receive an orientation-weighted
-minimum drive weight. The default `underbelly_stance_gain=0.42` is not a
-$42\%$ stroke floor for every bottom rod. Leading drive weights are suppressed.
+# Once after resetting the environment:
+suspension = SuspensionGains(target_ride_height=0.23)
+state = SuspensionState(targets=env.data.ctrl.copy())
 
-The suspension corrections carry the same lockout. `apply_suspension` takes a
-per-rod `support_weight`, and `traverse_rough_terrain` sets it from the travel
-heading: trailing rods get $1$, leading rods get $0$. Without that gate the
-corrections extended leading rods too, and a leading rod driven into a pit
-plants itself against the far wall and stops the robot. Over a six-pit sweep
-the gate raised completed crossings from $2/6$ to $5/6$.
+# At every control update:
+targets = execute_skill(
+    "traverse_rough_terrain",
+    env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend,
+    d_hat=[1.0, 0.0], speed=0.8,
+    lin_vel=env.data.qvel[:3].copy(),
+    core_z=float(env.data.qpos[2]), core_vz=float(env.data.qvel[2]),
+    contact_forces=env.get_rod_contact_forces(),
+    terrain_clearances=env.get_terrain_clearances(),
+    suspension=suspension, suspension_state=state,
+    control_dt=float(env.model.opt.timestep * env.action_repeat),
+)
+env.step(targets)
+```
 
-**Floor geometry.** A scenario with pits builds its walkable floor from slabs
-cut around each hole. Those slabs are solid blocks reaching below the deepest
-pit floor. A thin sheet lets a fast rod tip cross the mid-plane, after which
-the contact normal flips and pushes the rod out through the underside; the
-robot then rests on the base plane and stalls.
+`SuspensionGains` groups the height target, feedback gains, and smoothing
+limits. The example requests $23\,\text{cm}$; the class default remains
+$28\,\text{cm}$. Neither is a guaranteed ride height.
 
-**Climbing rather than steering around.** The plain rolling gait is stopped
-by a low step. Measured against a full-width wall, with the robot commanded
-straight at it:
+**Driving over an obstacle.** Rear-rod boosting and the underbelly stance
+come from the shared gait module. `back_gain` sets the initial drive
+amplitude. Unlike `move`, this terrain skill still reduces that amplitude
+on speed overshoot when velocity feedback is supplied.
 
-| Wall height | `move` | `traverse_rough_terrain` | vaulting off | drive gain 2.0 |
-| --- | --- | --- | --- | --- |
-| 4 cm | blocked | clears | clears | clears |
-| 6 cm | blocked | clears | blocked | clears |
-| 8 cm | blocked | blocked | blocked | **clears** |
-| 10 cm | blocked | blocked | blocked | blocked |
+For roaming, the mid-level `stay_in_boundary` coordinator can select this
+gait with `rough_terrain_gait=True`. Its `rough_drive_gain` is passed to
+the primitive as `back_gain`. When obstructed, it tries boosted climbing
+for `climb_patience` control updates before selecting an escape turn.
+The caller maintains the obstruction counter. These are commanded modes,
+not confirmations that a particular obstacle has been crossed.
 
-Two separate things buy those centimetres.
+**The recorded comparison.** Both panels use the same arena, seed, roaming
+policy, speed command, and drive-gain setting. One uses
+`SuspensionGains.without_feedback()`; its feedback gains are zero, but it
+retains the same filtering and rate limit. Thus “fixed stance” does not mean
+all rods are frozen.
 
-Curb vaulting multiplies the drive weight on rear rods that point down and
-back, so they press on the face of the obstacle instead of slipping along it.
-It is worth the step from 4 cm to 6 cm. The boosted sector is the one the
-original peristaltic controller used, $u_{\mathrm{long}}<-0.10$ and
-$u_z<0.10$: rods a little above the equator still bear on a tall rock.
+Both robots make decisions from their own evolving state, so they can
+choose different actions and encounter different parts of the terrain.
+The arena contains 160 boulders up to $8\,\text{cm}$, eight
+$6.5\,\text{cm}$ ledges, and eight $4\,\text{cm}$-deep pits.
 
-Drive amplitude is worth the step from 6 cm to 8 cm, and it is the part the
-speed calibration was quietly removing. `gain_for_speed(0.72)` returns about
-$1.45$, and the closed-loop speed term then scales that gain down by as much
-as $98\%$ whenever measured speed runs over the command. On rough ground the
-robot picks up speed on every flat patch, so the drive collapses in the
-moment before it meets the next rock. Passing `rough_drive_gain` commands the
-amplitude directly and skips that. The value used here, $2.0$, is the one from
-the original `rocky_mountain_terrain` controller config; on flat ground it
-cruises near $1.2\,\text{m/s}$.
+| Recorded 120-second run | Feedback off | Active suspension |
+|---|---:|---:|
+| Distance travelled | $8485\,\text{cm}$ | $9769\,\text{cm}$ |
+| Mean speed | $70.6\,\text{cm/s}$ | $81.3\,\text{cm/s}$ |
+| Time below $6\,\text{cm/s}$ | $1.6\%$ | $1.3\%$ |
+| Longest interval below that speed | $0.23\,\text{s}$ | $0.38\,\text{s}$ |
+| Control updates in climb mode | 21 | 49 |
+| Control updates in escape-turn mode | 0 | 0 |
+| Mean core height | $20.54\,\text{cm}$ | $20.53\,\text{cm}$ |
+| Core-height standard deviation | $2.09\,\text{cm}$ | $2.10\,\text{cm}$ |
+| Vertical-speed RMS | $20.68\,\text{cm/s}$ | $21.61\,\text{cm/s}$ |
 
-`stay_in_boundary` used to drive with `move` and carried an obstruction
-reflex: below $4\,\text{cm/s}$ it pivoted $65^\circ$ away. On a rocky floor
-that reflex fired constantly, and the robot read as refusing the terrain
-rather than crossing it. With `rough_terrain_gait=True` the cruise and both
-curve phases run on `traverse_rough_terrain`, arcing by steering its heading
-rather than by calling `curve`, which cannot cross a rock. An obstructed
-robot now climbs for `climb_patience` steps at `climb_drive_gain` before it
-gives up and pivots.
+The climb-mode counts are **control updates, not completed climbs**.
+The active run travelled about $15\%$ farther, but these measurements do not
+show a smoother ride: height variation is almost unchanged and vertical-speed
+RMS is slightly higher. They also do not establish which individual rocks
+or pits were crossed.
 
-**Measured result.** The recording roams the same rocky arena twice at the
-same $130\,\text{cm/s}$ command, the same drive gain and the same seed. There
-is no goal. Heading comes from `stay_in_boundary` with
-`rough_terrain_gait=True` and `rough_drive_gain=2.0`, which keeps the robot
-inside a wall-less $3.4\,\text{m}$ circle and picks its own roaming actions.
-Both panels get the same action sequence and diverge only through physics.
-Only the terrain feedback gains differ. The arena holds 160 boulders up to
-$8\,\text{cm}$, eight timber ledges $6.5\,\text{cm}$ high and eight recessed
-pits $4\,\text{cm}$ deep. Each foot is coloured by its own terrain ray, so the
-sensing is visible in the frame.
+<img src="./assets/rough-terrain-suspension-preview.png" alt="Side-by-side rough-terrain roaming with feedback off and active suspension" width="800">
 
-| Free roaming, 120 s | Fixed stance | Active suspension |
-| --- | --- | --- |
-| Distance rolled | 84.9 m | 97.7 m |
-| Mean speed | 0.71 m/s | 0.81 m/s |
-| Time below 6 cm/s | 1.6 % | 1.3 % |
-| Longest stall | 0.23 s | 0.38 s |
-| Climb-over steps | 21 | 49 |
-| Pivot-away steps | 0 | 0 |
-| Mean core height | 20.54 cm | 20.53 cm |
-| Core height std | 2.09 cm | 2.10 cm |
-
-Neither run ever turns away from an obstacle. Neither stops for longer than
-four tenths of a second. Both drive over boulders that stand more than half a
-rod stroke tall.
-
-Core height mean and spread come out the same to within a tenth of a
-millimetre, so on this course the terrain feedback buys no ride quality at
-all. What it buys is $15\%$ more ground covered.
-
-On boulders alone the benefit is small and not consistent. Measured on a
-continuous rock belt, core height std in centimetres:
-
-| Command speed | Fixed stance | Active suspension |
-| --- | --- | --- |
-| 0.50 m/s | 0.82 | 0.74 |
-| 0.62 m/s | 1.04 | 0.85 |
-| 0.80 m/s | 0.52 | 0.76 |
-| 1.00 m/s | 0.78 | 0.84 |
-
-The clear gain is crossing recessed ground, not smoothing rocks.
-
-<img src="./assets/rough-terrain-suspension-preview.png" alt="Side-by-side close-up of RoboBall roaming a rocky arena, fixed stance against active suspension" width="800">
-
-[Watch the two-minute side-by-side rough-terrain roam](./assets/rough-terrain-suspension.mp4).
+[Watch the two-minute comparison](./assets/rough-terrain-suspension.mp4).
 
 Video path for the later HTML version: `assets/rough-terrain-suspension.mp4`.
 
-The drive wave, the curb vault, the underbelly stance and the leading-rod
-lockout live in [gait](../../radial_sphere/gait.py), shared by this skill and
-the original `bar_targets` controller. They used to be two copies of the same
-arithmetic, which is how the two drifted apart.
-
-Implementation: [locomotion skills](../../skills/low_level/locomotion.py) ·
-[gait core](../../radial_sphere/gait.py) ·
+Implementation: [terrain skill](../../skills/low_level/terrain_following.py) ·
+[navigation coordinator](../../skills/mid_level/navigation.py) ·
+[shared gait](../../radial_sphere/gait.py) ·
 [suspension](../../skills/low_level/suspension.py).
 [Recording script](./render_rough_terrain.py) ·
 [trajectory](./assets/rough-terrain-suspension.csv) ·
