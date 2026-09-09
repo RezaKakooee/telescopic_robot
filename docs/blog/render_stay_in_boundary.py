@@ -35,6 +35,10 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _assets import assets_dir  # noqa: E402
+
 from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
@@ -42,7 +46,7 @@ from skills.mid_level.navigation import stay_in_boundary
 
 
 def main():
-    assets = Path(__file__).resolve().parent / "assets"
+    assets = assets_dir()
     assets.mkdir(parents=True, exist_ok=True)
 
     args = script_config("render_stay_in_boundary")

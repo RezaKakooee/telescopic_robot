@@ -17,6 +17,10 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _assets import assets_dir  # noqa: E402
+
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
@@ -25,7 +29,7 @@ from skills.runner import skill_targets
 
 
 def render_standing_jump_comparison():
-    assets = Path(__file__).resolve().parent / "assets"
+    assets = assets_dir()
     cfg = load_config("configs/rl/config.yaml")
     cfg.camera.enabled = False
     cfg.scenario.goal.x_range, cfg.scenario.goal.y_range = [0., 0.], [-400., -400.]
@@ -193,7 +197,7 @@ def render_standing_jump_comparison():
 
 
 def render_moving_jump_comparison():
-    assets = Path(__file__).resolve().parent / "assets"
+    assets = assets_dir()
     cfg = load_config("configs/rl/config.yaml")
     cfg.camera.enabled = False
     cfg.scenario.goal.x_range, cfg.scenario.goal.y_range = [0., 0.], [-400., -400.]

@@ -12,6 +12,10 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _assets import assets_dir  # noqa: E402
+
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
@@ -19,7 +23,7 @@ from skills.runner import skill_targets
 
 
 def main():
-    assets = Path(__file__).resolve().parent / "assets"
+    assets = assets_dir()
     sequence = [("STRAIGHT", 0.), ("RIGHT", 90.), ("LEFT", -90.)]
     colors = ["#48d8bb", "#ffbd59", "#c49aff"]
     cfg = load_config("configs/rl/config.yaml")

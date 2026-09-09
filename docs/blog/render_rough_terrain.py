@@ -46,6 +46,10 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _assets import assets_dir  # noqa: E402
+
 from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
@@ -229,8 +233,12 @@ def main():
     args = script_config("render_rough_terrain")
     if args.seconds <= 0:
         raise SystemExit("seconds must be positive")
+    # `output_dir` wins when it is set to something other than the default,
+    # otherwise fall back to the shared BLOG_ASSETS_DIR override.
     assets = Path(args.output_dir)
-    if not assets.is_absolute():
+    if str(args.output_dir) == "docs/blog/assets":
+        assets = assets_dir()
+    elif not assets.is_absolute():
         assets = repo_root / assets
     assets.mkdir(parents=True, exist_ok=True)
 

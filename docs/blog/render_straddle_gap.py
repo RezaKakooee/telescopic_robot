@@ -15,6 +15,10 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _assets import assets_dir  # noqa: E402
+
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
@@ -22,7 +26,7 @@ from skills import execute_skill
 
 
 def main():
-    assets = Path(__file__).resolve().parent / "assets"
+    assets = assets_dir()
     assets.mkdir(parents=True, exist_ok=True)
     
     cfg = load_config("configs/rl/gap_bridge.yaml")
@@ -44,7 +48,7 @@ def main():
     
     # Settle onto Box 1 and Box 2
     for _ in range(25):
-        t = execute_skill("straddle_gap", env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend, speed=0.0)
+        t = execute_skill("straddle_gap", env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend)
         env.step(t)
         
     start_x = float(env.data.qpos[0])
@@ -98,7 +102,7 @@ def main():
             
             targets = execute_skill(
                 "straddle_gap", quat, env.dirs_body, env.max_extend,
-                d_hat=d_fwd, speed=1.3, lateral_offset=y, centering_gain=2.2,
+                d_hat=d_fwd, lateral_offset=y, centering_gain=2.2,
             )
             env.step(targets)
             
