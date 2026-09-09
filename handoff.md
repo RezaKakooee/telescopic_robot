@@ -1,113 +1,83 @@
-# Handoff — Skill library, planners, and the pillar course
+# Handoff — current state
 
-Date: 2026-08-28. Supersedes the 2026-08-14 maze-RL handoff (that work is
-recorded in `docs/project_journey/01_*.md`; the checkpoints it names still
-exist under `storage_local/`).
+Date: 2026-09-09. Supersedes the 2026-08-28 handoff (that story is in
+`docs/project_journey/02_skill_library_and_the_skill_course.md`).
 
-Read `docs/project_journey/02_skill_library_and_the_skill_course.md` for the
-full story with numbers. This file is the short version: what exists, how to
-run it, what is open.
+A 60-rod spherical robot in MuJoCo. It moves by extending and retracting
+telescopic rods; there are no wheels and no legs. On top of that sits a
+library of motion skills, a set of demos that prove them, and an RL stack.
 
-## What exists
+## Layout
 
-A library of **parametric motion skills** for the 60-rod ball, a **planner**
-that computes jump parameters from obstacle geometry, and three courses that
-prove them.
+| Where | What |
+|---|---|
+| `radial_sphere/` | The robot and the runtime: MuJoCo env, MJCF builder, scenarios, the shared gait maths, the demo runner. |
+| `skills/low_level/` | 9 modules. State in, 60 rod targets out. One behaviour each, no branching. |
+| `skills/mid_level/` | 4 modules. Choose a low-level skill each step and delegate: `follow_path`, `stay_in_boundary`, `climb_stairs`, plus the jump planners. |
+| `skills/high_level/` | Empty. Reserved for planning and RL policies that emit skill commands. |
+| `demos/<name>/` | 16 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
+| `configs/rl/` | 45 scenario presets: arena, floor, robot, sim2real. |
+| `configs/run/` | 16 knob files, one per entry script, grouped like `scripts/`. |
+| `scripts/` | Entry points: RL training, imitation, calibration, `run_demo.py`, `run_tests.py`. |
+| `storage_local/` | All run output. Gitignored. |
 
-| Piece | Where | One line |
-|---|---|---|
-| Skills | `skills/` | Pure functions: state in, 60 rod targets out. `skills/README.md` is the API. |
-| The gait | `skills/low_level/locomotion.py: move(turn, speed)` | Radians and m/s. Every named locomotion skill is a preset of it. |
-| Aimed hop | `skills/low_level/jumping.py: jump_to(vx_target, vz_target)` | Standing jump, velocity-servoed during the burn. |
-| Hop planner | `skills/mid_level/hop_planner.py` | Pad geometry → stand point + velocity command, or `None`. |
-| Run-jump planner | `skills/mid_level/jump_planner.py` | Box geometry → run-up gain, crouch, trigger, or `None`. |
-| Calibrations | `skills/hop_calibration.json`, `skills/jump_calibration.json` | Measured over random orientations. Regenerate if the robot changes. |
-| Courses | `radial_sphere/scenario.py` | `skill_course`, `platform_course`, `pillar_course`. |
-| Drivers | `demos/course/runner.py`, `run_platforms.py`, `run_pillars.py` | Each prints per-hop results and can record video. |
-| Tests | `tests/test_skills.py` | 12 physics assertions. All pass as of this commit. |
+44 registry names reach 27 skill functions; the extras are aliases.
+`skills/README.md` is the API reference, `demos/README.md` the demo spec.
 
-## How to run
+## Running things
+
+No command-line flags anywhere. Every entry script takes `key=value`
+overrides, and `--help` prints its full knob list with current values.
 
 ```bash
-conda activate roboverse
-export MUJOCO_GL=egl PYTHONPATH=.
+PYTHONPATH=. python scripts/run_tests.py              # 82 tests, ~30 s
+PYTHONPATH=. python scripts/run_tests.py all=true     # plus the ~10 min drivers
 
-python tests/test_skills.py                                  # ~10 min
-python demos/pillars/runner.py seed=2 video=true        # pillar ladder
-python demos/platforms/runner.py video=true               # platform course
-python demos/course/runner.py video=true                  # sketched circuit
-python demos/parametric/runner.py video=true         # move(turn, speed)
-python scripts/skills/calibrate_hop.py                       # rebuild hop table (~15 min)
+PYTHONPATH=. python scripts/run_demo.py list=true     # what demos exist
+PYTHONPATH=. python scripts/run_demo.py demo=gap
+PYTHONPATH=. python scripts/run_demo.py demo=all video=false
+
+python scripts/rl/train_rl.py kind=maze rl.n_envs=8   # script knob + scenario override
 ```
 
-Videos land in `storage_local/<run id>/renders/`. One env step is 0.01 s of
-simulated time; the drivers record every 4th step at 25 fps = real time.
+Environment: the `roboverse` conda env, `MUJOCO_GL=egl`, run from the repo
+root with `PYTHONPATH=.`.
 
-EGL prints a harmless `EGLError ... EGL_NOT_INITIALIZED` traceback at exit.
-Pipe through `2>/dev/null` or ignore it.
+Blog videos regenerate into a scratch directory rather than over the
+published ones:
 
-## Results as of this commit
+```bash
+BLOG_ASSETS_DIR=$PWD/regen_check python docs/blog/render_wall_push.py
+```
 
-| Course | Result |
-|---|---|
-| Skill course (sketched circuit) | goal reached, both jumps clean |
-| Platform course (5 boxes) | 5/5 jumps |
-| Pillar course, 14 random orientations, stand-off 0.24 m | 14/14 |
-| Pillar course, 6 random orientations, stand-off 0.45 m | 6/6 |
+## State
 
-## RESOLVED: the fall skill pole-vault bug is fixed
+`main` is at `f43f2c8` and pushed. Working tree clean. 82 tests pass.
 
-**The fix:** During `freefall`, on short drops (`drop_height < 0.5 m`) gear deployment is restricted to the trailing-downward hemisphere (`(u_long < 0.0) & (u_z < -0.35)`). Because leading rods are held shut until `absorb`, they can never touch the upper deck early or pole-vault the ball forward. On tall drops (`drop_height >= 0.5 m`), the full downward hemisphere opens for maximum compliance.
+## Open
 
-**Verification:**
-- Pillar 3 roll-off tested across 10 random orientation seeds: **10/10 landed squarely on pillar 3** at $x = 5.23\,\text{m}$ (target pad $[4.81, 5.71]\,\text{m}$).
-- Added dedicated test `test_fall_down_pillar_rolloff()` to `tests/test_skills.py` (all 13 physics tests passing).
+- **`boundary-stones` demo fails containment.** The robot leaves its 2.0 m
+  circle by 78 cm. It used to pass, but only because a terrain-sensor bug was
+  holding it to 0.30 m/s against a commanded 0.75. With the sensor fixed it
+  reaches its commanded speed and `safety_margin=0.65` is too small. Scaling
+  the margin with speed made the overshoot worse, so the demo needs real
+  retuning. `regen_check/README.md` has the numbers.
+- **`demos/chimney` fails its climb.** Peak 0.82 m, lip not cleared. Predates
+  this work.
+- **`scratch/`** is 331 tracked files that are gitignored. Untrack with
+  `git rm -r --cached scratch/` when convenient.
+- **`docs/backflip_skill.md`** documents code that no longer exists. It has a
+  banner saying so; delete the file if you do not want the record.
+- **`skills/high_level/`** is empty, with the contract written in its
+  `__init__.py`.
 
+## Things worth knowing before changing code
 
-## Chimney: rebuilt on real physics (2026-08-28, late)
-
-The inherited `run_chimney.py` pinned the ball's orientation every step and
-never descended. Rebuilt: `chimney_climb` has `launch` / `push` / `fly` /
-`hold` / `descend` phases; the driver's state machine reads position and
-velocity. The ball wall-jumps up a 0.40 m shaft, bursts out over the LOWER
-of the two walls (4.0 m / 3.3 m — a push cannot clear a lip level with the
-wall it pushed off), lands on the box top and stops. 6/6 seeds; gentle mode
-`--push-frac 0.7` 3/3; `--target 3.0` does hold-and-descend instead.
-
-Measured and closed: there is **no smooth static climb** for radial
-position-controlled rods (five inchworm variants, all creep down; see doc
-§12.9). Do not spend time on it again without a different actuator.
-
-## Other open items
-
-- **Probe-abort rate.** With `PROBE_TRUST = 1.0` the planner assumes the
-  mean take-off; about a third of launches are aborted and re-dealt. Lower
-  the constant to stand closer with fewer aborts.
-- **Unrecoverable misses.** A ball that lands hung on a lip, or on the floor
-  between pillars where it cannot line up, ends the run. The side-lane
-  recovery only handles the floor beside the pillars.
-- **Run-jump calibration is stale-prone.** `jump_calibration.json` was
-  measured on the standard 0.16 m stroke; `pillar_course.yaml` uses 0.26 m.
-  The pillar course uses `hop_calibration.json` (measured at 0.26 m), so this
-  is fine today, but do not mix them.
-- **RL.** This was the goal of making the skills parametric. The action
-  space is ready: `move(turn, speed)`, `stop(stop_distance)`,
-  `jump_to(vx, vz)`, `fall_down(drop_height)`. Nothing has been trained on
-  it yet.
-
-## Things that will bite you
-
-- **Calibration jitter must rotate the ball.** Extra settle steps do not.
-  Randomize the quaternion (`calibrate_hop.py` does).
-- **Lift-off is the vz peak.** Not the phase switch.
-- **A leading rod on a rolling ball is a brake.** Used on purpose in
-  `stop`; it wrecked the running jump until masked (§8 of the doc).
-- **The ball pins itself on any wall within 0.41 m** (its rod reach). That
-  is why the pillar corridor is 2.8 m wide.
-- **Model extent drives camera clipping.** The MJCF pins
-  `<statistic extent="4">`; without it a big floor deletes the robot from
-  close-up cameras.
-- **Cameras inside walls render nothing.** `pillar_side` sits at 1.3 m for
-  that reason.
-- **Two renders in one minute share a run dir** unless the tag differs.
-  `run_pillars.py` puts the seed in the tag.
+- A tuning number is declared once. `SuspensionGains` holds the nine
+  suspension gains; passing one as a keyword raises `TypeError` on purpose.
+- `mid_level` may import `low_level`, never the reverse.
+  `tests/test_skill_levels.py` enforces it.
+- A module is never named after a skill. `skills.slalom` used to resolve to
+  the function while `skills.stairs` resolved to the module.
+- Demo `expect:` bounds are regression guards measured from a real run, not
+  physical ideals. Each demo's yaml records its reference numbers.
