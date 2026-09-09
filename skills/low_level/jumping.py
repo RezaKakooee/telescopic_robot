@@ -15,8 +15,13 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import STANCE_HEIGHT
+
 from radial_sphere.geometry import quat_to_rotmat
 
+
+#: Standoff the downward rods hold while coming down, in metres.
+LANDING_STANDOFF = 0.055
 
 # Calibration curves: (power_scale, rise_cm) measured with 16 cm stroke
 # multi-stage concentric rods on flat ground (seed 42).
@@ -80,8 +85,8 @@ def jump_up(
     phase: str = "stand",
     jump_height_cm: float | None = None,
     power: float | None = None,
-    stance_height: float = 0.045,
-    landing_standoff: float = 0.055,
+    stance_height: float = STANCE_HEIGHT,
+    landing_standoff: float = LANDING_STANDOFF,
 ) -> np.ndarray:
     """Stationary vertical jump.
 
@@ -135,8 +140,8 @@ def jump_forward_while_stopped(
     phase: str = "stand",
     jump_height_cm: float | None = None,
     power: float | None = None,
-    stance_height: float = 0.045,
-    landing_standoff: float = 0.055,
+    stance_height: float = STANCE_HEIGHT,
+    landing_standoff: float = LANDING_STANDOFF,
     rollout_gain: float = 0.12,
 ) -> np.ndarray:
     """Forward-biased jump from standstill.
@@ -208,7 +213,7 @@ def jump_forward_while_moving(
     phase: str = "sprint",
     jump_height_cm: float | None = None,
     power: float | None = None,
-    landing_standoff: float = 0.055,
+    landing_standoff: float = LANDING_STANDOFF,
     rollout_gain: float = 0.10,
 ) -> np.ndarray:
     """Running hurdle leap — explosive launch while already sprinting.
@@ -289,7 +294,7 @@ def jump_to(
     servo_band: float = 0.30,
     wall_lock: bool = False,
     drop_height: float | None = None,
-    stance_height: float = 0.045,
+    stance_height: float = STANCE_HEIGHT,
     landing_standoff: float = 0.060,
 ) -> np.ndarray:
     """Standing jump aimed by TAKE-OFF VELOCITY, not by a fixed impulse.

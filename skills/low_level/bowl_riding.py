@@ -46,6 +46,12 @@ from radial_sphere.geometry import quat_to_rotmat
 from .locomotion import surface_drive, speed_range
 
 
+#: Control interval the radius schedule integrates over, in seconds.
+CONTROL_DT = 0.01
+#: Contact force below which a normal reading is treated as noise, in newtons.
+MIN_CONTACT_FORCE = 0.001
+
+
 G = 9.81
 
 #: Distance from the core centre to a foot's outer surface at zero stroke:
@@ -187,7 +193,7 @@ def advance_radius(
     speed: float,
     bowl: Bowl,
     *,
-    dt: float = 0.01,
+    dt: float = CONTROL_DT,
     open_rate: float = 0.10,
     close_rate: float = 0.35,
     lead: float = 0.25,
@@ -226,7 +232,7 @@ def descend_radius(
     speed: float,
     bowl: Bowl,
     *,
-    dt: float = 0.01,
+    dt: float = CONTROL_DT,
     close_rate: float = 0.09,
     aim: float | None = None,
     lag_band: float = 0.35,

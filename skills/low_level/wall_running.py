@@ -46,6 +46,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET
+
 from radial_sphere.geometry import quat_to_rotmat
 
 from .locomotion import move, stop
@@ -114,7 +116,7 @@ def wall_run(
     push_frac: float = 1.00,
     along_drive: float = 0.55,
     upward_bias: float = 0.35,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """One step of a horizontal wall run. Returns (n_bars,) rod targets.
 

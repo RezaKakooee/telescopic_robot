@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET
+
 from .locomotion import move, stop
 
 
@@ -25,7 +27,7 @@ def slalom(
     lateral_offset: float = 0.80,
     lead_distance: float = 0.40,
     lateral_gain: float = 5.0,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     back_gain: float | None = None,
 ) -> np.ndarray:
     """Steer through arbitrary 2D linear or curvy cones in an alternating slalom weave.

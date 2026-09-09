@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET
+
 from radial_sphere.geometry import quat_to_rotmat
 
 from ..low_level.locomotion import (MAX_SPEED, MIN_SPEED, _rotate, curve, move, stop,
@@ -40,7 +42,7 @@ def follow_path(
     return_metadata: bool = False,
     rod_mechanism: str | None = None,
     curve_rod_mechanism: str | None = "multi_stage",
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray | tuple[np.ndarray, dict]:
     """Autonomous closed-loop ground path tracking via skill orchestration.
 
@@ -242,7 +244,7 @@ def stay_in_boundary(
     safety_margin: float = 0.60,
     step_count: int | None = None,
     rod_mechanism: str | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     core_z: float | None = None,
     core_vz: float | None = None,
     contact_forces: np.ndarray | None = None,

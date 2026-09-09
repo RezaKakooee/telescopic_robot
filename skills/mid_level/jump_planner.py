@@ -39,6 +39,10 @@ from pathlib import Path
 
 import numpy as np
 
+#: Vertical clearance kept over an obstacle's lip, in metres.
+CLEARANCE_MARGIN = 0.03
+
+
 # Underside of the ball while airborne: core radius plus the tucked rod.
 BALL_UNDERSIDE = 0.165
 
@@ -116,7 +120,7 @@ def _descent_distance(row: dict, height: float) -> float | None:
 
 
 def plan_jump(height: float, half_depth: float, *, mode: str = "over",
-              margin: float = 0.03, calibration=None,
+              margin: float = CLEARANCE_MARGIN, calibration=None,
               underside: float = BALL_UNDERSIDE,
               from_height: float = 0.0, gap: float = 0.0) -> JumpPlan | None:
     """Plan a jump over, or onto, a box of the given size.
@@ -201,7 +205,7 @@ def plan_jump(height: float, half_depth: float, *, mode: str = "over",
     return None if best is None else best[1]
 
 
-def max_clearable(mode: str = "over", margin: float = 0.03,
+def max_clearable(mode: str = "over", margin: float = CLEARANCE_MARGIN,
                   calibration=None, underside: float = BALL_UNDERSIDE) -> float:
     """Tallest obstacle of negligible depth this robot can guarantee.
 

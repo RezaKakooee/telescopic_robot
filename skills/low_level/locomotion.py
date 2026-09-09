@@ -24,8 +24,13 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET
+
 from radial_sphere.geometry import quat_to_rotmat
 
+
+#: Cruise speed a skill assumes when the caller does not say.
+DEFAULT_SPEED = 1.2
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -169,9 +174,9 @@ def move(
     max_extend: float,
     d_hat: np.ndarray,
     *,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     turn: float = 0.0,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     back_gain: float | None = None,
     lin_vel: np.ndarray | None = None,
     cross_track_error: float = 0.0,
@@ -275,12 +280,12 @@ def turn(
     d_hat: np.ndarray,
     *,
     angle_deg: float = 0.0,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     lin_vel: np.ndarray | None = None,
     cross_track_error: float = 0.0,
     rod_mechanism: str | None = None,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive at a signed angle relative to d_hat: positive right, negative left.
 
@@ -304,9 +309,9 @@ def move_forward(
     max_extend: float,
     d_hat: np.ndarray,
     *,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     lin_vel: np.ndarray | None = None,
     cross_track_error: float = 0.0,
     rod_mechanism: str | None = None,
@@ -331,9 +336,9 @@ def move_right(
     max_extend: float,
     d_hat: np.ndarray,
     *,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive a quarter turn clockwise of *d_hat*.
 
@@ -353,9 +358,9 @@ def move_left(
     max_extend: float,
     d_hat: np.ndarray,
     *,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive a quarter turn anticlockwise of *d_hat*.
 
@@ -462,7 +467,7 @@ def go_fast(
     *,
     speed: float = 2.25,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive along *d_hat* at 2.25 m/s, near the gait's ceiling.
 
@@ -484,7 +489,7 @@ def go_slow(
     *,
     speed: float = 0.45,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive along *d_hat* at 0.45 m/s, near the gait's floor.
 
@@ -504,9 +509,9 @@ def reverse(
     max_extend: float,
     d_hat: np.ndarray,
     *,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drive back along *d_hat*.
 
@@ -533,7 +538,7 @@ def circle(
     clockwise: bool = False,
     lookahead: float = 0.25,
     radial_gain: float = 2.0,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     back_gain: float | None = None,
 ) -> np.ndarray:
     """Drive continuously in a circular orbit of specified radius.
@@ -598,7 +603,7 @@ def curve(
     d_hat: np.ndarray,
     *,
     radius: float = 2.0,
-    speed: float = 1.2,
+    speed: float = DEFAULT_SPEED,
     direction: str = "right",
     curvature: float | None = None,
     ball_xy: np.ndarray | None = None,
@@ -606,7 +611,7 @@ def curve(
     lookahead: float = 0.35,
     radial_gain: float = 2.5,
     back_gain: float | None = None,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     rod_mechanism: str | None = None,
 ) -> np.ndarray:
     """Carve a smooth, continuous curve or arc with commandable radius or curvature.
@@ -793,8 +798,8 @@ def surface_drive(
     normal: np.ndarray,
     along: np.ndarray,
     *,
-    speed: float = 1.2,
-    min_offset: float = 0.025,
+    speed: float = DEFAULT_SPEED,
+    min_offset: float = MIN_OFFSET,
     back_gain: float | None = None,
     press: float = 0.0,
     brake: float = 0.0,

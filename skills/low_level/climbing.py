@@ -13,7 +13,19 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET, STANCE_HEIGHT
+
 from radial_sphere.geometry import quat_to_rotmat
+
+
+#: Bracing geometry, shared by all three chimney phases. A rod counts as a
+#: clamp rod when it points far enough sideways and stays near the waist.
+CLAMP_LAT = 0.70
+CLAMP_Z = 0.50
+#: Fraction of full stroke the clamp rods hold against the walls.
+CLAMP_GEAR = 0.50
+#: Everything not clamping tucks to this, so nothing catches on the way up.
+CHIMNEY_TUCK = 0.010
 
 
 # ---------------------------------------------------------------------------
@@ -27,8 +39,8 @@ def push_against_wall(
     wall_normal: np.ndarray,
     *,
     push_strength: float = 0.85,
-    min_offset: float = 0.025,
-    stance_height: float = 0.045,
+    min_offset: float = MIN_OFFSET,
+    stance_height: float = STANCE_HEIGHT,
 ) -> np.ndarray:
     """Extend rods on the side facing the wall to brace/push against it.
 
@@ -97,14 +109,14 @@ def chimney_climb(
     push_lat: float = 0.45,
     push_z_lo: float = 0.20,
     push_z_hi: float = 0.85,
-    clamp_lat: float = 0.70,
-    clamp_z: float = 0.50,
-    gear: float = 0.5,
+    clamp_lat: float = CLAMP_LAT,
+    clamp_z: float = CLAMP_Z,
+    gear: float = CLAMP_GEAR,
     near_floor: bool = False,
     push_frac: float = 1.0,
     x_off: float = 0.0,
-    tuck: float = 0.010,
-    stance_height: float = 0.045,
+    tuck: float = CHIMNEY_TUCK,
+    stance_height: float = STANCE_HEIGHT,
 ) -> np.ndarray:
     """Climb a chimney -- two facing walls a little wider than the ball.
 
@@ -185,11 +197,11 @@ def chimney_friction_servo(
     kp: float = 0.050,
     ki: float = 0.002,
     integral_err: float = 0.0,
-    clamp_lat: float = 0.70,
-    clamp_z: float = 0.50,
+    clamp_lat: float = CLAMP_LAT,
+    clamp_z: float = CLAMP_Z,
     near_floor: bool = False,
-    gear: float = 0.50,
-    tuck: float = 0.010,
+    gear: float = CLAMP_GEAR,
+    tuck: float = CHIMNEY_TUCK,
 ) -> tuple[np.ndarray, float, float]:
     """Closed-loop active friction PI servo for smooth, controlled chimney descent.
 
@@ -238,12 +250,12 @@ def chimney_step_down(
     push_lat: float = 0.50,
     push_z_lo: float = 0.25,
     push_z_hi: float = 0.80,
-    clamp_lat: float = 0.70,
-    clamp_z: float = 0.50,
+    clamp_lat: float = CLAMP_LAT,
+    clamp_z: float = CLAMP_Z,
     clamp_ext: float = 0.088,
     near_floor: bool = False,
-    gear: float = 0.50,
-    tuck: float = 0.010,
+    gear: float = CLAMP_GEAR,
+    tuck: float = CHIMNEY_TUCK,
 ) -> np.ndarray:
     """Alternating S-curve stepping descent down between two walls.
 
@@ -300,7 +312,7 @@ def cylinder_spiral_climb(
     pitch_angle_deg: float = 25.0,
     speed: float = 2.0,
     radial_brace_gain: float = 0.50,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Helical vortex climbing inside a vertical hollow cylinder.
 

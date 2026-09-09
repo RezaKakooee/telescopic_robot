@@ -28,6 +28,12 @@ from .geometry import quat_to_rotmat
 LEADING_LOCKOUT = -0.05
 #: Rods above this never extend. They cannot reach the ground.
 TOP_LOCKOUT = 0.10
+#: Baseline retracted rod length, in metres. Eleven skills defaulted to this
+#: number independently. `stop` is the deliberate exception: it retracts every
+#: rod but its stance cluster to a true zero.
+MIN_OFFSET = 0.025
+#: Ground-stance extension a skill holds when it is not driving.
+STANCE_HEIGHT = 0.045
 
 
 def travel_frame(quat, dirs_body, d_hat):

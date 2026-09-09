@@ -12,7 +12,16 @@ from __future__ import annotations
 
 import numpy as np
 
+from radial_sphere.gait import MIN_OFFSET, STANCE_HEIGHT
+
 from radial_sphere.geometry import quat_to_rotmat
+
+
+#: Fraction of full stroke the underneath rods hold as landing gear, so the
+#: ball comes down on rods and the actuators take the hit.
+LANDING_GEAR = 0.5
+#: Everything above tucks to this, so nothing catches the lip on the way out.
+FALL_TUCK = 0.015
 
 
 # ---------------------------------------------------------------------------
@@ -27,13 +36,13 @@ def fall_down(
     *,
     phase: str = "edge",
     edge_speed: float = 0.45,
-    tuck: float = 0.015,
+    tuck: float = FALL_TUCK,
     absorb: float = 0.075,
     drop_height: float | None = None,
-    gear: float = 0.5,
+    gear: float = LANDING_GEAR,
     brace_front: float = 0.0,
-    stance_height: float = 0.045,
-    min_offset: float = 0.025,
+    stance_height: float = STANCE_HEIGHT,
+    min_offset: float = MIN_OFFSET,
 ) -> np.ndarray:
     """Drop off a ledge in the direction *d_hat*.
 

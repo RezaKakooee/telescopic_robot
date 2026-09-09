@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import numpy as np
 
-from radial_sphere.gait import (curb_vault, drive_wave, lock_out_leading,
-                                support_weight, underbelly_stance)
+from radial_sphere.gait import (MIN_OFFSET, curb_vault, drive_wave,
+                                lock_out_leading, support_weight,
+                                underbelly_stance)
 from radial_sphere.geometry import quat_to_rotmat
 
 from .locomotion import gain_for_speed
@@ -29,7 +30,7 @@ def traverse_rough_terrain(
     d_hat: np.ndarray = np.array([1.0, 0.0], dtype=np.float32),
     *,
     speed: float = 1.2,
-    min_offset: float = 0.025,
+    min_offset: float = MIN_OFFSET,
     back_gain: float | None = None,
     lin_vel: np.ndarray | None = None,
     core_z: float | None = None,
