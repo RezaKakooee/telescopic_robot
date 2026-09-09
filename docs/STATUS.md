@@ -62,17 +62,17 @@ controller moves the 60 bars. See `docs/ENV_OVERVIEW.md` for the env details.
 ## How to run
 
     # scripted baseline (fails in the maze — expected)
-    python scripts/heuristic/heuristic_agent.py --kind maze
+    python scripts/heuristic/heuristic_agent.py kind=maze
 
     # train (SLURM; log → storage_local/sci_out/<run id>.out)
     sbatch ops/sb_train.sh train_rl "" --kind maze --steps 150000
     # GPU variant (rtx4090): sbatch ops/sb_train_gpu.sh ... rl.device=cuda
 
     # evaluate a trained run with videos
-    python scripts/rl/eval_rl.py --run storage_local/<train run dir> --kind maze
+    python scripts/rl/eval_rl.py run=storage_local/<train run dir> kind=maze
 
     # any config value can be overridden:  key=value  (Hydra dotlist)
-    python scripts/rl/train_rl.py --kind maze rl.total_steps=3e5 rl.n_envs=8
+    python scripts/rl/train_rl.py kind=maze rl.total_steps=3e5 rl.n_envs=8
 
 ## New server setup
 

@@ -8,7 +8,7 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.geometry import quat_to_rotmat
-from skills.wall_run import FOOT_BASE, _frame, get_wall_frame, wall_reach
+from skills.wall_running import FOOT_BASE, _frame, get_wall_frame, wall_reach
 from skills.locomotion import move, stop
 
 def test_extended_runway(mode="curved", app_len=10.0, back_gain=6.0, launch_up=5.5, launch_in=3.8, approach_angle=20.0):

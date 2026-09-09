@@ -1,0 +1,14 @@
+# Knobs for scripts/skills/calibrate_hop.py.
+# Override on the command line, for example:
+#     python scripts/skills/calibrate_hop.py config=<value>
+
+config: "configs/rl/pillar_course.yaml"
+
+repeats: 10
+
+#: burn with the leading sector shut (course mode)
+wall_lock: true
+
+vz_grid: [3.0, 3.6, 4.2, 4.8]
+
+vx_grid: [0.6, 0.9, 1.2]

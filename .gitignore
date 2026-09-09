@@ -226,3 +226,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# One-off experiments and debugging scripts. Kept on disk, not in history.
+scratch/

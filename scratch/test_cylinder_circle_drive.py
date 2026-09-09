@@ -10,7 +10,7 @@ from radial_sphere.scenario import generate_scenario
 from radial_sphere.run_id import build_run_id
 from radial_sphere.snapshot import make_run_dir
 from skills.locomotion import circle, move
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from omegaconf import OmegaConf
 
 def main():

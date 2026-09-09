@@ -15,12 +15,13 @@ Usage (from the repo root):
 """
 from __future__ import annotations
 
+from radial_sphere.config import script_config
+
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
-import argparse
 from pathlib import Path
 
 import rootutils
@@ -67,25 +68,10 @@ def make_env(cfg, kind: str, rank: int, run_dir, seed: int, max_steps: int):
 
 
 def main():
-    p = argparse.ArgumentParser(description="PPO training for RadialSphere steering")
-    p.add_argument("--kind", choices=TRAIN_KINDS, default="goal")
-    p.add_argument("--steps", type=int, default=None,
-                   help="total PPO timesteps (default: config rl.total_steps)")
-    p.add_argument("--n-envs", type=int, default=None,
-                   help="parallel envs (default: config rl.n_envs)")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--resume", default=None,
-                   help="prior run directory or PPO checkpoint to resume")
-    p.add_argument("--config", default=None,
-                   help="path to a config.yaml (default: configs/rl/config.yaml)")
-    p.add_argument("--config-name", "-cn", dest="config_name", default=None,
-                   help="config variant name under configs/rl/")
-    p.add_argument("overrides", nargs="*",
-                   help="config overrides as key=value (Hydra dotlist)")
-    args = p.parse_args()
+    args = script_config("train_rl", passthrough=True)
 
     cfg = load_config_cli(path=args.config, name=args.config_name,
-                          overrides=args.overrides)
+                          overrides=args.scenario_overrides)
     rl = cfg.rl
     # training-time overrides (shorter episodes / settle)
     cfg.env.n_settle_steps = int(getattr(rl, "n_settle_steps", cfg.env.n_settle_steps))

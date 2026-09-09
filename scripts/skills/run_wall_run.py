@@ -14,7 +14,6 @@ Run::
 """
 from __future__ import annotations
 
-import argparse
 import os
 
 os.environ.setdefault("MUJOCO_GL", "egl")
@@ -26,13 +25,12 @@ import mujoco
 import numpy as np
 from omegaconf import OmegaConf
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
-from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
-from radial_sphere.snapshot import make_run_dir
-from skills.overlay import annotate
-from skills.wall_run import FOOT_BASE, get_wall_frame, next_phase, wall_run
+from radial_sphere.demo import Recorder
+from radial_sphere.overlay import annotate
+from skills.wall_running import FOOT_BASE, get_wall_frame, next_phase, wall_run
 
 
 def run(
@@ -90,13 +88,11 @@ def run(
         frame_every = 1
         fps = max(int(100 / slowmo), 1)
 
-    writer = out_video = None
-    if record_video:
-        vid_title = video_name or f"wall_run_{wall_mode}"
-        run_dir = make_run_dir(build_run_id("wall_run", wall_mode))
-        out_video = Path(run_dir) / "renders" / f"{vid_title}.mp4"
-        out_video.parent.mkdir(parents=True, exist_ok=True)
-        writer = imageio.get_writer(str(out_video), fps=fps, codec="libx264")
+    # Shared plumbing; the ten-phase machine below stays this script's own.
+    recorder = Recorder(env, "wall_run", tag=wall_mode, enabled=record_video,
+                        fps=fps, every=frame_every,
+                        out_name=video_name or f"wall_run_{wall_mode}")
+    out_video = recorder.video
 
     phase = "sprint"
     phase_started = 0.0
@@ -194,14 +190,12 @@ def run(
         hist.append((float(pos_now[0]), float(pos_now[1]), float(pos_now[2]), phase,
                      float(np.dot(vel_now, n_now))))
 
-        if writer is not None and i % frame_every == 0:
-            writer.append_data(_frame(env, phase, pos_now, vel_now, gap_now,
-                                      slowmo, wall_mode=wall_mode,
-                                      turns=per_run[-1]["roll_rad"] / (2.0 * np.pi), n_hat=n_now,
-                                      compress_mm=compress_mm))
-
-    if writer is not None:
-        writer.close()
+        if recorder.due(i):
+            recorder.add(_frame(env, phase, pos_now, vel_now, gap_now,
+                                slowmo, wall_mode=wall_mode,
+                                turns=per_run[-1]["roll_rad"] / (2.0 * np.pi), n_hat=n_now,
+                                compress_mm=compress_mm))
+    recorder.close()
     env.close()
 
     peak_z = max(h[2] for h in hist)
@@ -344,31 +338,7 @@ def _frame(env, phase, pos, vel, wall_dist, slowmo=1, wall_mode="curved", turns=
 
 
 def main():
-    p = argparse.ArgumentParser(description="Horizontal wall run (Modular Modes)")
-    p.add_argument("--mode", type=str, default="curved",
-                   choices=["curved", "banked", "flat_multistep", "flat", "all"],
-                   help="wall run mode to execute")
-    p.add_argument("--seconds", type=float, default=12.0)
-    p.add_argument("--seed", type=int, default=3)
-    p.add_argument("--speed", type=float, default=7.5)
-    p.add_argument("--approach-angle", type=float, default=28.0)
-    p.add_argument("--launch-gap", type=float, default=None,
-                   help="takeoff distance to the wall (mode-tuned by default)")
-    p.add_argument("--launch-in", type=float, default=3.6)
-    p.add_argument("--launch-up", type=float, default=5.2)
-    p.add_argument("--give", type=float, default=0.13)
-    p.add_argument("--squash-span", type=float, default=0.26)
-    p.add_argument("--cushion-max", type=float, default=0.025)
-    p.add_argument("--push-frac", type=float, default=1.00)
-    p.add_argument("--along-drive", type=float, default=0.55)
-    p.add_argument("--upward-bias", type=float, default=0.35)
-    p.add_argument("--min-turns", type=float, default=0.25,
-                   help="minimum true wall-roll turns before push-off")
-    p.add_argument("--target-distance", type=float, default=1.0)
-    p.add_argument("--slowmo", type=int, default=1)
-    p.add_argument("--repeats", type=int, default=1)
-    p.add_argument("--video", action="store_true", default=False)
-    a = p.parse_args()
+    a = script_config("run_wall_run")
 
     if a.mode == "all":
         for m in ["curved", "banked", "flat_multistep"]:

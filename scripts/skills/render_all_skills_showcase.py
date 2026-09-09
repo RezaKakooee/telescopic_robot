@@ -43,7 +43,7 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import Scenario, generate_scenario, skill_course_platform
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from skills.runner import skill_targets
 from skills.locomotion import move, move_right, move_left, stop, go_fast
 from skills.jumping import jump_forward_while_moving

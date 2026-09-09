@@ -36,7 +36,9 @@ def slalom(
     dirs_body : (60, 3) rod direction vectors in body frame.
     max_extend : maximum rod extension (m).
     ball_xy : (2,) current world (x, y) position of the ball center.
-    lin_vel : (3,) linear velocity vector (optional).
+    lin_vel : (2,) or (3,) measured world velocity, forwarded to `move` for
+        speed correction and lateral damping. It used to be accepted and
+        then dropped, so passing it had no effect at all.
     cones : (N, 3) or (N, 2) cone positions (x, y, [radius]).
     speed : target forward speed in m/s (default 1.1).
     lateral_offset : lateral weave amplitude perpendicular to track (default 0.80 m).
@@ -48,7 +50,8 @@ def slalom(
     n_cones = len(c_arr)
 
     if n_cones == 0:
-        return move(quat, dirs_body, max_extend, np.array([1.0, 0.0]), speed=speed)
+        return move(quat, dirs_body, max_extend, np.array([1.0, 0.0]), speed=speed,
+                    lin_vel=lin_vel, min_offset=min_offset, back_gain=back_gain)
 
     # 1. Compute local Frenet tangent and normal for each cone
     tangents = np.zeros((n_cones, 2), dtype=np.float64)
@@ -112,6 +115,7 @@ def slalom(
         quat, dirs_body, max_extend,
         d_hat=d_hat,
         speed=speed,
+        lin_vel=lin_vel,
         min_offset=min_offset,
         back_gain=back_gain,
     )

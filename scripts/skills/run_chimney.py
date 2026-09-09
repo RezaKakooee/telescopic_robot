@@ -10,7 +10,6 @@ Nothing is pinned or teleported; the ball rotates and drifts as physics says.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,14 +20,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import mujoco
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
-from radial_sphere.snapshot import make_run_dir
+from radial_sphere.demo import Recorder
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 AXIS = np.array([0.0, 1.0])
 
@@ -181,25 +180,7 @@ def climb_chimney(env, *, target_z=None, top=None, box_y=(0.20, 0.70), low_sign=
 
 
 def main():
-    p = argparse.ArgumentParser(description="Chimney climb, up and down")
-    p.add_argument("--config", default="configs/rl/chimney.yaml")
-    p.add_argument("--target", type=float, default=None,
-                   help="hold at this height and slide back down instead of "
-                        "climbing out onto a box top")
-    p.add_argument("--seed", type=int, default=None)
-    p.add_argument("--push-frac", type=float, default=1.0,
-                   help="push stroke fraction; smaller = gentler, smaller hops")
-    p.add_argument("--trace", action="store_true")
-    p.add_argument("--exit-band", type=float, nargs=3, default=[0.45, 0.20, 0.85],
-                   metavar=("LAT", "ZLO", "ZHI"),
-                   help="rod band for the last push; the normal band gives the "
-                        "most lift, steeper bands measured LESS")
-    p.add_argument("--exit-from", type=float, default=0.02,
-                   help="arm the exit push this far ABOVE the low lip")
-    p.add_argument("--video", action="store_true")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    args = p.parse_args()
+    args = script_config("run_chimney")
 
     cfg = load_config(args.config)
     scenario = generate_scenario("chimney", cfg, seed=1)
@@ -215,12 +196,10 @@ def main():
     for _ in range(40):
         env.step(np.zeros(60, dtype=np.float32))
 
-    recorder = None
-    if args.video:
-        run_dir = make_run_dir(build_run_id("run_chimney", f"chimney_seed{args.seed}"))
-        out = Path(run_dir) / "renders" / "chimney_climb.mp4"
-        out.parent.mkdir(parents=True, exist_ok=True)
-        recorder = VideoRecorder(out, fps=args.fps)
+    # Shared plumbing; the climb phase machine below stays this script's own.
+    recorder = Recorder(env, "run_chimney", tag=f"chimney_seed{args.seed}",
+                        enabled=args.video, fps=args.fps, every=1,
+                        out_name="chimney_climb")
 
     def render_pair():
         if env.renderer is None:
@@ -244,7 +223,8 @@ def main():
                  "fly_out": "over the low box", "land": "land on the box, brake",
                  "hold": "clamp both walls, hang", "descend": "friction slide down",
                  "stand": "stopped on top"}.get(state, state)
-        recorder.add(annotate(render_pair(), f"chimney_climb [{state}]",
+        if recorder.enabled:
+            recorder.add(annotate(render_pair(), f"chimney_climb [{state}]",
                               [label, f"height {z:5.2f} m   vz {vz:+4.1f} m/s",
                                f"y {y:+.2f} m",
                                f"t {step * 0.01:5.1f}s"]))
@@ -281,8 +261,8 @@ def main():
         ok = r["reached"] and r["landed"] and abs(float(env.data.qpos[1])) < 0.15
     print(f"  final  : x {float(env.data.qpos[0]):+.2f} y {float(env.data.qpos[1]):+.2f} "
           f"z {float(env.data.qpos[2]):.2f} -> {'SUCCESS' if ok else 'FAILED'}")
-    if recorder is not None:
-        recorder.close()
+    recorder.close()
+    if recorder.enabled:
         print(f"video: {recorder.path}  ({recorder.n_frames / args.fps:.1f}s)")
     env.close()
 

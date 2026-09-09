@@ -1,0 +1,43 @@
+description: Weave through cones set along a winding curved track.
+
+scenario:
+  kind: curved_training_cones
+  config: configs/rl/curved_training_cones.yaml
+  seed: 42
+
+skill:
+  name: slalom
+  args:
+    speed: 1.1
+    lateral_offset: 0.80
+    lead_distance: 0.40
+    lateral_gain: 5.0
+  args_from_scenario:
+    cones: cones
+  feedback:
+    ball_xy: ball_xy
+    lin_vel: lin_vel
+
+steps: 3500
+# The old runner finished within 0.60 m of the goal, OR past its x line.
+stop_when_any:
+  - goal_distance: {max: 0.60}
+  - ball_x: {min: 27.3}
+
+video:
+  fps: 25
+  every: 4
+  panes:
+    - camera: chase
+      title: "SKILL: slalom (curved_training_cones)"
+      lines:
+        - "x = {ball_x:.2f} m   y = {ball_y:+.2f} m"
+        - "speed = {speed:.2f} m/s"
+        - "t = {time:.1f} s"
+
+# Regression guards from a measured run, not physical ideals.
+# Reference: stops at step 2607, x = 27.32 m, y = 0.70 m, no core contact.
+expect:
+  final_x: {min: 26.5}
+  core_impacts: {max: 2}
+  steps_run: {max: 3000}

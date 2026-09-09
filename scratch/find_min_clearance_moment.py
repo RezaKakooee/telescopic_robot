@@ -5,7 +5,7 @@ import numpy as np
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.slalom import slalom
+from skills.cone_courses import slalom
 from scripts.skills.run_training_cones import _cone_contact
 
 cfg = load_config("configs/rl/training_cones.yaml")

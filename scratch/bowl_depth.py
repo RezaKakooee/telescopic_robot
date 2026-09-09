@@ -3,7 +3,7 @@ from omegaconf import OmegaConf
 import numpy as np
 from radial_sphere.config import load_config
 from radial_sphere.scenario import generate_scenario
-from skills.wall_of_death import Bowl
+from skills.bowl_riding import Bowl
 import scripts.skills.run_motordrome_wall_of_death as R
 import tempfile, yaml, pathlib
 base=pathlib.Path("configs/rl/motordrome.yaml").read_text()

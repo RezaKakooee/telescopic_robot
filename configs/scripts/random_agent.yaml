@@ -1,0 +1,31 @@
+# Knobs for scripts/heuristic/random_agent.py.
+# Override on the command line, for example:
+#     python scripts/heuristic/random_agent.py episodes=<value>
+
+episodes: 1
+
+seed: 0
+
+#: episode cap (default 400 — random rollouts are just a sanity check; pass 0 to use env.max_steps from config)
+max_steps: 400
+
+#: capture one frame every N env steps (default: config video.frame_every)
+frame_every: null
+
+#: video playback fps (default: config video.fps)
+fps: null
+
+#: path to a config.yaml (default: project config.yaml)
+config: null
+
+#: path to a scenario JSON (from scenario_generator.py)
+scenario: null
+
+#: generate a scenario of this kind instead (path|goal)
+kind: null
+
+#: disable video saving (on by default)
+video: true
+
+#: config variant name under configs/rl/
+config_name: null

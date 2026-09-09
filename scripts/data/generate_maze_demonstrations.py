@@ -8,7 +8,8 @@ Generates reproducible expert trajectories across:
 """
 from __future__ import annotations
 
-import argparse
+from radial_sphere.config import script_config
+
 import concurrent.futures
 import json
 import logging
@@ -328,13 +329,7 @@ def generate_demonstrations_parallel(
 
 
 def main():
-    p = argparse.ArgumentParser(description="Generate Maze Demonstration Dataset for Imitation Learning")
-    p.add_argument("--episodes", "-n", type=int, default=1000, help="Number of demonstration episodes")
-    p.add_argument("--out-dir", default="datasets/maze_demos", help="Output directory")
-    p.add_argument("--seed-offset", type=int, default=5000, help="Starting random seed")
-    p.add_argument("--max-steps", type=int, default=1500, help="Max steps per episode")
-    p.add_argument("--workers", "-w", type=int, default=8, help="Parallel worker processes")
-    args = p.parse_args()
+    args = script_config("generate_maze_demonstrations")
 
     generate_demonstrations_parallel(
         output_dir=Path(args.out_dir),

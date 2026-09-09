@@ -11,7 +11,6 @@ navigation rather than rolling on an empty floor.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
@@ -29,7 +28,7 @@ from radial_sphere.scenario import (generate_scenario, skill_course_hurdle,
                                     skill_course_platform, skill_course_route)
 from radial_sphere.snapshot import make_run_dir
 from skills.jump_planner import plan_jump
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from skills.runner import skill_targets
 
 # Sub-legs of the route, as (route index from, route index to, split fraction,
@@ -127,35 +126,7 @@ def build_plan(route):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Navigate the skill course")
-    p.add_argument("--config", default="configs/rl/skill_course.yaml")
-    p.add_argument("--video", action="store_true")
-    p.add_argument("--camera", default="course_dual")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4,
-                   help="record one frame every N env steps. One env step is\n0.01 s of simulated time, so --frame-every 4 at --fps 25 plays back in real time")
-    p.add_argument("--lookahead", type=float, default=0.85)
-    p.add_argument("--reach", type=float, default=0.45, help="waypoint capture radius (m)")
-    p.add_argument("--max-steps-per-leg", type=int, default=4000)
-    p.add_argument("--debug-jump", action="store_true")
-    p.add_argument("--max-legs", type=int, default=None)
-    p.add_argument("--dip-at", type=float, default=None)
-    p.add_argument("--box-height", type=float, default=None)
-    p.add_argument("--box-depth", type=float, default=None)
-    p.add_argument("--plat-height", type=float, default=None)
-    p.add_argument("--plat-depth", type=float, default=None)
-    p.add_argument("--plat-gain", type=float, default=None)
-    p.add_argument("--plat-dip-at", type=float, default=None)
-    p.add_argument("--box-gain", type=float, default=None)
-    p.add_argument("--box-dip-at", type=float, default=None)
-    p.add_argument("--launch-steps", type=int, default=None)
-    p.add_argument("--dip-steps", type=int, default=None)
-    p.add_argument("--approach-gain", type=float, default=None)
-    p.add_argument("--wall-height", type=float, default=0.55,
-                   help="0.22 m walls vanish on a 34 m course seen from above")
-    p.add_argument("--floor-square", type=float, default=0.9,
-                   help="finer squares turn the map view into visual noise")
-    args = p.parse_args()
+    args = script_config("run_course")
 
     cfg = load_config(args.config)
     cfg.scenario.maze.wall_height = args.wall_height

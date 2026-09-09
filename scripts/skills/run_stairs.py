@@ -1,7 +1,6 @@
 """Traverse configured stairs by composing calibrated jump, stop, and fall skills."""
 from __future__ import annotations
 
-import argparse
 import os
 os.environ.setdefault("MUJOCO_GL", "egl")
 
@@ -10,17 +9,16 @@ import imageio
 import mujoco
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
-from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario, stairs_course_geometry
-from radial_sphere.snapshot import make_run_dir
+from radial_sphere.demo import Recorder
 from skills import execute_skill
 from skills.hop_planner import (
     PROBE_VX_STEP, PROBE_VZ_STEP, ROLL_RADIUS, STAND_EDGE,
     plan_standing_hop,
 )
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 FORWARD = np.array([1.0, 0.0], dtype=np.float32)
 CROUCH_STEPS = 22
@@ -46,14 +44,11 @@ def run(
     env.reset(seed=seed)
     dt = float(env.model.opt.timestep * env.action_repeat)
 
-    run_dir = make_run_dir(build_run_id("skills", "stairs")) if record_video else None
-    out_video = run_dir / "renders" / f"{video_name}.mp4" if run_dir else None
-    writer = None
-    if out_video is not None:
-        out_video.parent.mkdir(parents=True, exist_ok=True)
-        writer = imageio.get_writer(
-            str(out_video), fps=max(1, int(25 * slowmo)), codec="libx264", quality=9,
-        )
+    # Run dir, writer and frame capture are shared plumbing; the phase machine
+    # below is this script's own and stays here. See radial_sphere.demo.
+    recorder = Recorder(env, "skills", tag="stairs", enabled=record_video,
+                        fps=max(1, int(25 * slowmo)), every=3, out_name=video_name)
+    run_dir, out_video = recorder.run_dir, recorder.video
 
     geom_ids = {
         name: mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_GEOM, name)
@@ -106,9 +101,9 @@ def run(
             "vx": float(vel[0]), "vy": float(vel[1]), "vz": float(vel[2]),
             "core_contact": hit,
         })
-        if writer is not None and tick % 3 == 0:
+        if recorder.due(tick):
             frame = env.render(camera_name="stairs_close_30")
-            writer.append_data(np.array(annotate(frame, "Verified Composed Stair Skill", [
+            recorder.add(np.array(annotate(frame, "Verified Composed Stair Skill", [
                 f"phase       {phase}",
                 f"target      {target_name or '-'}",
                 f"position    x {pos[0]:5.2f}  y {pos[1]:+5.2f}  z {pos[2]:5.2f} m",
@@ -116,7 +111,7 @@ def run(
                 f"verified    up {len(climb_results)}/{geo['n_steps']}  "
                 f"down {len(descent_results)}/{geo['n_steps']}",
                 f"core contact steps {core_impact_steps}",
-            ], margin=14), copy=True))
+            ], margin=14)))
 
     def stairs_targets(phase: str, **kwargs) -> np.ndarray:
         return execute_skill(
@@ -355,8 +350,7 @@ def run(
 
     end_pos = env.data.qpos[:3].copy()
     end_vel = env.data.qvel[:6].copy()
-    if writer is not None:
-        writer.close()
+    recorder.close()
     env.close()
 
     all_climbs = len(climb_results) == geo["n_steps"] and all(x["verified"] for x in climb_results)
@@ -387,12 +381,8 @@ def run(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Verified composed stair traversal")
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--slowmo", type=int, default=1)
-    parser.add_argument("--no-video", action="store_true")
-    args = parser.parse_args()
-    run(seed=args.seed, slowmo=args.slowmo, record_video=not args.no_video)
+    args = script_config("run_stairs")
+    run(seed=args.seed, slowmo=args.slowmo, record_video=args.video)
 
 
 if __name__ == "__main__":

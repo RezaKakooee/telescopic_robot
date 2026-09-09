@@ -27,7 +27,7 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary")
 
 
 
@@ -1896,6 +1896,79 @@ def curved_training_cones_scenario(cfg, *, rng=None, name: str = "curved_trainin
     )
 
 
+def boundary_scenario(
+    cfg=None,
+    *,
+    rng=None,
+    name: str = "stay_in_boundary",
+    radius: float = 2.0,
+    n_segments: int = 64,
+    stones: list | None = None,
+    n_stones: int = 0,
+    max_stone_size: float = 0.055,
+) -> Scenario:
+    """Wall-less open arena with a painted circular boundary ring on the floor.
+
+    Zero physical walls: all boundary markings are purely visual floor decals
+    (yardlines with contype=0, conaffinity=0) so containment is entirely up
+    to the robot's active control.
+    Can be configured with procedural stones/boulders inside the circle.
+    """
+    spawn = np.array([0.20, 0.15], dtype=np.float32)
+    goal = np.array([0.0, 0.0], dtype=np.float32)
+
+    # Waypoints around boundary perimeter for geometry reference
+    thetas = np.linspace(0, 2 * np.pi, 128, endpoint=False)
+    pts = np.column_stack([radius * np.cos(thetas), radius * np.sin(thetas)]).astype(np.float32)
+
+    yardlines = []
+    # Center origin reference dot
+    yardlines.append([0.0, 0.0, 0.035, 0.035, "0.40 0.80 0.95 0.50"])
+
+    # Circular boundary ring (64 oriented tangent box decals)
+    seg_arc = 2 * np.pi * radius / n_segments
+    half_len = seg_arc / 2.0 * 1.05
+    half_wid = 0.025
+
+    for k in range(n_segments):
+        th = 2 * np.pi * k / n_segments
+        xk = radius * np.cos(th)
+        yk = radius * np.sin(th)
+        yaw_deg = float(np.degrees(th + np.pi / 2.0))
+        # High-visibility neon amber / orange alternating markings
+        color = "0.98 0.68 0.08 0.95" if k % 2 == 0 else "0.95 0.38 0.10 0.90"
+        yardlines.append([xk, yk, half_len, half_wid, color, yaw_deg])
+
+    # Inward warning tick-marks every 8th segment pointing towards center
+    for k in range(0, n_segments, max(1, n_segments // 8)):
+        th = 2 * np.pi * k / n_segments
+        tick_r = radius - 0.075
+        xt = tick_r * np.cos(th)
+        yt = tick_r * np.sin(th)
+        yaw_radial = float(np.degrees(th))
+        yardlines.append([xt, yt, 0.06, 0.015, "0.98 0.85 0.15 0.85", yaw_radial])
+
+    # Procedural stones scattered inside the circle
+    if stones is None and n_stones > 0:
+        # Circular stone distribution: [cx, cy, radius_x, radius_y, n_stones, max_sz, is_circle=True]
+        stones = [[0.0, 0.0, radius * 0.88, radius * 0.88, n_stones, max_stone_size, True]]
+
+    sc = Scenario(
+        kind="boundary",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=pts,
+        markers=np.empty((0, 2), dtype=np.float32),
+        path_length=float(2 * np.pi * radius),
+        walls=np.empty((0, 4), dtype=np.float32),
+        yardlines=yardlines,
+        stones=stones,
+    )
+    sc.has_goal = False
+    return sc
+
+
 _GENERATORS = {
     "path": path_scenario, "goal": goal_scenario,
     "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
@@ -1917,15 +1990,16 @@ _GENERATORS = {
     "motordrome": motordrome_scenario, "wall_of_death": motordrome_scenario, "silodrome": motordrome_scenario,
     "training_cones": training_cones_scenario, "cones": training_cones_scenario, "slalom": training_cones_scenario,
     "curved_cones": curved_training_cones_scenario, "curved_training_cones": curved_training_cones_scenario, "uneven_slalom": curved_training_cones_scenario,
+    "boundary": boundary_scenario, "stay_in_boundary": boundary_scenario, "circular_boundary": boundary_scenario,
 }
 
 
 
 
 
-def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None) -> Scenario:
+def generate_scenario(kind: str, cfg, *, seed=None, name: str | None = None, **kwargs) -> Scenario:
     """Generate a scenario of the given ``kind``."""
     if kind not in _GENERATORS:
         raise ValueError(f"unknown scenario kind {kind!r}; expected one of {KINDS}")
     rng = np.random.default_rng(seed)
-    return _GENERATORS[kind](cfg, rng=rng, name=name or kind)
+    return _GENERATORS[kind](cfg, rng=rng, name=name or kind, **kwargs)

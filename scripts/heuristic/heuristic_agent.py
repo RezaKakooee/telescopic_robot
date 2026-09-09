@@ -15,12 +15,13 @@ Usage (from the repo root):
 """
 from __future__ import annotations
 
+from radial_sphere.config import script_config
+
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
-import argparse
 
 import numpy as np
 import rootutils
@@ -68,31 +69,10 @@ def run_episode(env, *, seed=None, recorder=None, frame_every=3):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Heuristic (scripted-controller) agent for RadialSphere")
-    p.add_argument("--episodes", type=int, default=1)
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--max-steps", type=int, default=None,
-                   help="override env.max_steps from config.yaml")
-    p.add_argument("--frame-every", type=int, default=None,
-                   help="capture one frame every N env steps (default: config video.frame_every)")
-    p.add_argument("--fps", type=int, default=None,
-                   help="video playback fps (default: config video.fps)")
-    p.add_argument("--config", default=None,
-                   help="path to a config.yaml (default: project config.yaml)")
-    p.add_argument("--scenario", default=None,
-                   help="path to a scenario JSON (from scenario_generator.py)")
-    p.add_argument("--kind", default=None,
-                   help="generate a scenario of this kind instead (path|goal)")
-    p.add_argument("--no-video", dest="video", action="store_false",
-                   help="disable video saving (on by default)")
-    p.add_argument("--config-name", "-cn", dest="config_name", default=None,
-                   help="config variant name under configs/rl/")
-    p.add_argument("overrides", nargs="*",
-                   help="config overrides as key=value (Hydra dotlist)")
-    args = p.parse_args()
+    args = script_config("heuristic_agent", passthrough=True)
 
     cfg = load_config_cli(path=args.config, name=args.config_name,
-                          overrides=args.overrides)
+                          overrides=args.scenario_overrides)
     video_cfg = getattr(cfg, "video", None)
     frame_every = args.frame_every if args.frame_every is not None \
         else int(getattr(video_cfg, "frame_every", 3))

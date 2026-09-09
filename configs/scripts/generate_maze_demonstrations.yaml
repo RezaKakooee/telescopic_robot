@@ -1,0 +1,18 @@
+# Knobs for scripts/data/generate_maze_demonstrations.py.
+# Override on the command line, for example:
+#     python scripts/data/generate_maze_demonstrations.py episodes=<value>
+
+#: Number of demonstration episodes
+episodes: 1000
+
+#: Output directory
+out_dir: "datasets/maze_demos"
+
+#: Starting random seed
+seed_offset: 5000
+
+#: Max steps per episode
+max_steps: 1500
+
+#: Parallel worker processes
+workers: 8

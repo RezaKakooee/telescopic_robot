@@ -116,7 +116,46 @@ def wall_run(
     upward_bias: float = 0.35,
     min_offset: float = 0.025,
 ) -> np.ndarray:
-    """One step of a horizontal wall run. Returns (n_bars,) rod targets."""
+    """One step of a horizontal wall run. Returns (n_bars,) rod targets.
+
+    The ten phases are described in this module's own docstring. This is the
+    knob list; every default was tuned against the measured run.
+
+    Parameters
+    ----------
+    phase : which of :data:`PHASES` to run this step. The caller sequences
+        them; :func:`next_phase` holds the order.
+    wall_normal : unit vector pointing away from the wall, into the lane.
+    wall_dist : distance from the core to the wall surface, in metres.
+    travel : world-frame direction of travel along the wall.
+    lin_vel : measured world velocity. The launch servo and `settle` use it.
+    speed : sprint and approach speed in m/s.
+    recover_speed : speed used to drive back into the lane afterwards.
+    approach_angle : degrees the heading is turned toward the wall during
+        `approach`, and away from it during `recover`.
+    lane_gap : the wall distance `sprint` tries to hold. None disables the
+        lane hold, and the sprint then drifts by roughly a metre before the
+        commanded turn-in.
+    lane_gain : proportional gain on the lane error. The correction is clipped
+        to +/- 0.40 of the wall normal.
+    launch_in, launch_up : target inward and upward speed at takeoff, m/s.
+    back_gain : drive amplitude for the `sprint` and `approach` moves, passed
+        straight to :func:`~skills.locomotion.move`.
+    servo_band : speed shortfall, in m/s, over which the launch push scales
+        from nothing to full stroke.
+    give : extra retraction while the robot is barely touching the wall, so
+        first contact is soft.
+    squash_span : contact depth, in metres, over which the ride blends from
+        `give` to `cushion_max`.
+    cushion_max : extra extension once the shell is fully squashed.
+    push_frac : fraction of full stroke the `push` phase commands on the rods
+        facing the wall.
+    along_drive : along-wall propulsion added to trailing rods during `ride`,
+        as a fraction of stroke.
+    upward_bias : lift added to the lower rods during `ride`, as a fraction of
+        stroke, which is what keeps the run high.
+    min_offset : baseline retracted rod length.
+    """
     vel = np.asarray(lin_vel, dtype=np.float64)
     dirs_world, n, t = _frame(quat, dirs_body, wall_normal, travel)
     u_n = dirs_world @ n

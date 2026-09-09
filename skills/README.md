@@ -18,7 +18,84 @@ projection, the scoring windows, the leading-sector mask, and why the jump
 skills are phase machines — see
 [`docs/project_journey/02_skill_library_and_the_skill_course.md`](../docs/project_journey/02_skill_library_and_the_skill_course.md) §2.
 
-## One gait, and presets of it
+## One movement skill controlled by speed
+
+Use `move` for normal, faster, slower, and reverse travel. Keep `d_hat` fixed
+and change only `speed` (in m/s):
+
+```python
+run_skill(env, "move", d_hat=[1, 0], speed=0.6)  # 60 cm/s
+run_skill(env, "move", d_hat=[1, 0], speed=1.2)  # 120 cm/s
+run_skill(env, "move", d_hat=[1, 0], speed=2.0)  # 200 cm/s
+run_skill(env, "move", d_hat=[1, 0], speed=-1.2) # reverse at 120 cm/s
+run_skill(env, "move", d_hat=[1, 0], speed=0.0)  # stop
+```
+
+```bash
+PYTHONPATH=. python scripts/skills/run_skill.py skill=move speed=0.6 open_arena=--steps 500
+```
+
+Positive speed follows the reference, negative speed opposes it, and zero
+uses the stop controller. The sign applies after any requested turn. The
+reference stays fixed during a command; reversing does not mutate it.
+For direct calls, measure `cross_track_error` left of the resulting travel
+direction, including the speed sign. The runner handles this automatically.
+
+The older names `move_forward`, `go_fast`, `go_slow`, and `reverse` remain available for
+existing callers; new examples use `move` with an explicit speed.
+
+### Forward movement with feedback
+
+For the current antenna-style robot, use `skills.runner.run_skill` to supply
+live velocity and the configured rod mechanism automatically. During `move`
+and `move_forward`, it also measures sideways displacement from the line
+through the starting position in the requested direction:
+
+```python
+from skills.runner import run_skill
+run_skill(env, "move", steps=600, d_hat=[1, 0], speed=1.2)
+```
+
+Direct calls can pass `lin_vel`, `cross_track_error` (signed metres left of
+the requested line), and `rod_mechanism`. Velocity enables speed correction
+and sideways damping; the distance error adds line restoration. The single-step
+`skill_targets` helper supplies velocity but needs a caller-provided distance
+error for line restoration. Without these inputs, direct calls retain the
+existing feedforward behavior. Explicit `back_gain` bypasses the new calibration
+and motion corrections, preserving manually tuned composed skills.
+
+The 16 cm `multi_stage` build has a separate calibration, reproducible with
+`PYTHONPATH=. python scripts/skills/calibrate_move.py`. Other builds keep their
+existing curves. In the six-second blog run, the corrected 120 cm/s command
+averages 121.4 cm/s over seconds 4–6 and ends 6.1 cm off the starting line.
+These are flat-ground measurements, not guarantees for different surfaces.
+
+The older tables below describe the original feedforward presets, not fresh
+antenna-model measurements.
+
+### One signed-angle turn skill
+
+`turn` accepts `angle_deg`: positive degrees turn right, negative degrees turn
+left, and zero continues straight relative to `d_hat`, viewed from above.
+
+```python
+run_skill(env, "turn", steps=400, d_hat=[1, 0], angle_deg=+30)
+run_skill(env, "turn", steps=400, d_hat=[1, 0], angle_deg=-30)
+```
+
+Both examples use the same world +x reference. Hold that reference fixed
+throughout a command; the angle is a heading offset, not a per-step rotation.
+The runner supplies velocity feedback and line tracking automatically.
+
+```bash
+PYTHONPATH=. python scripts/skills/run_skill.py skill=turn angle_deg=30 open_arena=--steps 400
+```
+
+The existing `move_left` and `move_right` presets remain compatible. The lower
+level `move(turn=...)` API still uses counter-clockwise radians; the new `turn`
+skill converts the user-facing clockwise-positive degrees internally.
+
+### Parametric gait
 
 There is a single locomotion skill. It takes two continuous numbers in
 physical units, which together are a complete action for this robot:
@@ -164,20 +241,20 @@ convention, state machine, telemetry, and acceptance criteria.
 
 ```bash
 # list all skills
-python scripts/skills/run_skill.py --list
+python scripts/skills/run_skill.py list=true
 
 # run one skill
-python scripts/skills/run_skill.py --skill go_fast --steps 200 --video
+python scripts/skills/run_skill.py skill=go_fast steps=200 video=true
 
 # the 7 ground skills as ONE continuous labelled take (best for comparing them)
-python scripts/skills/run_skill.py --combo --video --camera fixed_close_dual
+python scripts/skills/run_skill.py combo=--video camera=fixed_close_dual
 
 # run all 11 in sequence, one 30 s video per skill
-python scripts/skills/run_skill.py --demo --seconds 30 --video --per-skill \
+python scripts/skills/run_skill.py demo=--seconds 30 video=--per-skill \
     --camera fixed_close_dual
 
 # push against the nearest maze wall (lidar finds it)
-python scripts/skills/run_skill.py --skill push_against_wall --kind maze \
+python scripts/skills/run_skill.py skill=push_against_wall kind=maze \
     --config configs/rl/config.yaml --seed 3 --seconds 30 --video --per-skill
 
 # physics-verified rightward, counter-clockwise backflip
@@ -256,13 +333,135 @@ run_program(env, [
 ])
 ```
 
+## Running a skill as a demo
+
+A demo is a yaml, not a script. `configs/demos/<name>.yaml` names the
+scenario, the skill, how long to run, which cameras to record, and what
+counts as success. One runner executes all of them:
+
+    python scripts/run_demo.py demo=gap
+    python scripts/run_demo.py demo=all video=false
+    python scripts/run_demo.py list=true
+
+Each demo's `expect` block turns it into a regression test, and
+`tests/test_demos.py` runs every one. See `configs/demos/README.md`.
+
+Demos whose control flow is the point stay as scripts under
+`scripts/skills/`: the course state machines, the phase machines and the
+calibration sweeps.
+
+## Writing a skill
+
+The package holds to a few conventions. `tests/test_skill_interface.py`
+enforces the ones a machine can check.
+
+1. **Signature.** Start with `(quat, dirs_body, max_extend, ...)`. Every one of
+   the 30 motion skills does. Everything after that is keyword-only.
+2. **Return.** A `(n_bars,)` array of rod extensions in metres, inside
+   `[min_offset, max_extend]`. Return `(targets, meta)` only if the skill has
+   telemetry worth reporting; `execute_skill` supplies a generic summary for
+   the rest, so callers never have to know which kind they are holding.
+3. **Docstring.** One full sentence on the first line. A skill with eight or
+   more options needs a `Parameters` section, or a `Phases` section if it is a
+   phase machine and explains its options there.
+4. **Shared names keep shared meanings.** `min_offset` is 0.025 everywhere,
+   except in `stop`, which has no `min_offset` at all: it holds its stance on
+   `stance_height` and retracts every other rod to zero. Passing `min_offset`
+   to `stop` raises `TypeError`, which is how `follow_path` used to crash on a
+   single-waypoint path.
+   `rod_mechanism` defaults to `None`, meaning the generic speed calibration.
+   `back_gain` overrides the speed lookup. Do not invent a different default
+   for one skill: `curve` used to default `rod_mechanism` to `"multi_stage"`,
+   which quietly drove it about 15 % softer than its neighbours.
+5. **Register it.** Add the name to `SKILL_REGISTRY` in `skills/__init__.py`,
+   otherwise `execute_skill` cannot reach it and the runner cannot drive it.
+
+## Every name in the registry
+
+`execute_skill` accepts all of these. Aliases exist because callers and
+older scripts spell the same skill differently; they take identical
+arguments and run identical code. `meta["skill"]` always reports the
+function that actually ran, and `meta["requested_as"]` the name you used.
+
+| Skill | Also answers to | Module |
+| --- | --- | --- |
+| `move` | — | `locomotion.py` |
+| `turn` | — | `locomotion.py` |
+| `move_forward` | — | `locomotion.py` |
+| `move_right` | — | `locomotion.py` |
+| `move_left` | — | `locomotion.py` |
+| `stop` | — | `locomotion.py` |
+| `go_fast` | — | `locomotion.py` |
+| `go_slow` | — | `locomotion.py` |
+| `reverse` | — | `locomotion.py` |
+| `circle` | — | `locomotion.py` |
+| `curve` | `curved_movement` | `locomotion.py` |
+| `straddle_gap` | `straddle` | `locomotion.py` |
+| `surface_drive` | `wall_ride` | `locomotion.py` |
+| `wall_of_death` | `motordrome` | `bowl_riding.py` |
+| `wall_run` | `horizontal_wall_run` | `wall_running.py` |
+| `slalom` | `training_cones`, `curved_slalom`, `curved_training_cones` | `cone_courses.py` |
+| `follow_path` | `track_path` | `navigation.py` |
+| `traverse_rough_terrain` | `rough_terrain`, `active_suspension` | `terrain_following.py` |
+| `stay_in_boundary` | `stay_within_boundary`, `boundary_containment` | `navigation.py` |
+| `push_against_wall` | — | `climbing.py` |
+| `chimney_climb` | `chimney`, `vertical_climb` | `climbing.py` |
+| `jump_up` | — | `jumping.py` |
+| `jump_forward_while_stopped` | — | `jumping.py` |
+| `jump_forward_while_moving` | — | `jumping.py` |
+| `jump_to` | — | `jumping.py` |
+| `climb_stairs` | `stairs`, `step_vault` | `stair_climbing.py` |
+| `fall_down` | — | `falling.py` |
+
+Public skill functions that are **not** in the registry, so
+`execute_skill` cannot reach them:
+
+- `chimney_friction_servo` in `climbing.py`
+- `chimney_step_down` in `climbing.py`
+- `cylinder_spiral_climb` in `climbing.py`
+
 ## Verify
+
+```bash
+PYTHONPATH=. python scripts/run_tests.py          # fast suite, about 20 s
+PYTHONPATH=. python scripts/run_tests.py all=true    # plus the long drivers
+PYTHONPATH=. python scripts/run_tests.py list=true   # what would run
+```
+
+The fast suite is everything `unittest discover` collects under `tests/`.
+Modules written as plain functions opt in through `tests/_function_suite.py`;
+without that hook `discover` walks past them and reports a green run having
+executed none of them.
+
+The long drivers stay runnable on their own:
 
 ```bash
 MUJOCO_GL=egl PYTHONPATH=. python tests/test_skills.py
 ```
 
-Runs the named skills in MuJoCo and asserts the expected motion.
+Runs the named skills in MuJoCo and asserts the expected motion. About ten
+minutes.
+
+## Boundary containment (wall-less arena)
+
+`stay_in_boundary` confines the robot inside an open circular boundary marked purely
+on the floor with ZERO physical walls. Inside the arena, it roams slowly, alternating
+between diverse exploratory maneuvers (`move`, `curve`, `turn`, and `stop`). As it
+approaches the boundary line, active vector-field deflection blends the perimeter
+tangent with the inward normal and regulates speed to ensure zero boundary breaches:
+
+```python
+targets, meta = execute_skill(
+    "stay_in_boundary", quat, dirs_body, max_extend,
+    ball_xy=env.data.qpos[:2],
+    lin_vel=env.data.qvel[:2],
+    boundary_radius=2.0,
+    speed=0.45,
+    safety_margin=0.50,
+    step_count=step,
+    return_metadata=True,
+)
+```
 
 ## The pillar course (standing hops)
 
@@ -292,7 +491,11 @@ be seen.
 
 Three steps.
 
-1. Write the function in `locomotion.py`, `interaction.py`, or `jumping.py`.
+1. Write the function in the module for its family: `locomotion.py`,
+   `navigation.py`, `terrain_following.py`, `climbing.py`, `jumping.py`,
+   `falling.py`, `stair_climbing.py`, `cone_courses.py`, `wall_running.py`
+   or `bowl_riding.py`. Never name a module after a skill: see
+   `test_no_module_is_named_after_a_skill`.
    Keep the contract: state in, `(n_bars,)` targets out.
 2. Add one line to `SKILL_REGISTRY` in `__init__.py`.
 3. If it needs state beyond `quat`/`dirs_body`/`max_extend`, add its name to

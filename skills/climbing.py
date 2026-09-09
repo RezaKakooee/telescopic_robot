@@ -1,4 +1,9 @@
-"""Environment interaction skills: wall pushing, bracing, surface contact.
+"""Climbing skills: chimney shafts, vertical cylinders, and wall bracing.
+
+Everything here works by pressing outwards against something, rather than
+by rolling along the floor. The chimney skills brace on two facing walls and
+inchworm up the gap; the cylinder climb spirals inside a shaft; and
+`push_against_wall` shoves off a single surface.
 
 Every function follows the same contract:
     Input:  robot state (quat, dirs_body, max_extend) + skill params.

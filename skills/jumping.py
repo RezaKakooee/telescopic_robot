@@ -18,6 +18,56 @@ import numpy as np
 from radial_sphere.geometry import quat_to_rotmat
 
 
+# Calibration curves: (power_scale, rise_cm) measured with 16 cm stroke
+# multi-stage concentric rods on flat ground (seed 42).
+JUMP_HEIGHT_CURVES: dict[str, tuple[tuple[float, float], ...]] = {
+    "jump_up": (
+        (0.35, 5.0),
+        (0.45, 9.0),
+        (0.55, 17.0),
+        (0.58, 20.0),
+        (0.65, 26.0),
+        (0.74, 35.0),
+        (0.85, 43.0),
+        (0.94, 50.0),
+        (1.00, 54.0),
+    ),
+    "jump_forward_while_stopped": (
+        (0.35, 5.0),
+        (0.45, 8.0),
+        (0.55, 11.0),
+        (0.60, 14.4),
+        (0.65, 19.2),
+        (0.70, 21.9),
+        (0.75, 26.4),
+        (0.80, 29.8),
+        (0.85, 34.0),
+        (0.90, 38.5),
+        (0.95, 44.0),
+        (1.00, 48.0),
+    ),
+    "jump_forward_while_moving": (
+        (0.35, 5.0),
+        (0.45, 8.0),
+        (0.55, 13.0),
+        (0.60, 20.0),
+        (0.70, 27.0),
+        (0.82, 35.0),
+        (0.90, 42.0),
+        (1.00, 50.8),
+    ),
+}
+
+
+def power_for_jump_height(jump_height_cm: float, jump_type: str = "jump_up") -> float:
+    """Return stroke scaling power in [0, 1] for a requested jump height in cm."""
+    curve = JUMP_HEIGHT_CURVES.get(jump_type, JUMP_HEIGHT_CURVES["jump_up"])
+    powers = [p for p, _ in curve]
+    heights = [h for _, h in curve]
+    h_clamped = float(np.clip(jump_height_cm, heights[0], heights[-1]))
+    return float(np.interp(h_clamped, heights, powers))
+
+
 # ---------------------------------------------------------------------------
 # 9. jump_up  (stationary vertical jump)
 # ---------------------------------------------------------------------------
@@ -28,6 +78,8 @@ def jump_up(
     max_extend: float,
     *,
     phase: str = "stand",
+    jump_height_cm: float | None = None,
+    power: float | None = None,
     stance_height: float = 0.045,
     landing_standoff: float = 0.055,
 ) -> np.ndarray:
@@ -37,7 +89,7 @@ def jump_up(
     ------
     "stand"    : Stable resting posture (z ~ 0.21m).
     "crouch"   : Deep retraction of all rods to store kinematic stroke (z → 0.16m).
-    "takeoff"  : Simultaneous 100% impulse on all downward rods (vz ≈ +3.3 m/s).
+    "takeoff"  : Simultaneous impulse on all downward rods (vz ≈ +3.3 m/s at full stroke).
     "airborne" : Mid-air tuck holding compact spherical profile.
     "landing"  : Compliant touchdown suspension to absorb impact.
     """
@@ -50,8 +102,13 @@ def jump_up(
     if phase == "crouch":
         targets[:] = 0.00
     elif phase == "takeoff":
+        scale = 1.0
+        if jump_height_cm is not None:
+            scale = power_for_jump_height(jump_height_cm, "jump_up")
+        elif power is not None:
+            scale = float(np.clip(power, 0.0, 1.0))
         ground_mask = u_z < 0.10
-        targets[ground_mask] = max_extend
+        targets[ground_mask] = max_extend * scale
         targets[u_z > 0.15] = 0.0
     elif phase == "airborne":
         targets[:] = 0.015
@@ -76,7 +133,8 @@ def jump_forward_while_stopped(
     d_hat: np.ndarray,
     *,
     phase: str = "stand",
-    power: float = 1.0,
+    jump_height_cm: float | None = None,
+    power: float | None = None,
     stance_height: float = 0.045,
     landing_standoff: float = 0.055,
     rollout_gain: float = 0.12,
@@ -86,7 +144,10 @@ def jump_forward_while_stopped(
     The takeoff impulse is rear-biased so the ball launches both upward
     and forward simultaneously.
 
-    `power` scales the take-off stroke, from a full-effort leap at 1.0 down to
+    `jump_height_cm` commands physical jump height directly in centimeters,
+    mapping to stroke scaling via the measured calibration curve.
+
+    `power` scales the take-off stroke directly, from a full-effort leap at 1.0 down to
     a short hop. Unlike the locomotion gait -- where cutting the stroke stops
     the rods reaching the ground at all -- here they start fully crouched, so
     a partial extension still pushes off; it just pushes off less. That makes
@@ -96,7 +157,7 @@ def jump_forward_while_stopped(
     ------
     "stand"    : Stable resting posture.
     "crouch"   : Deep retraction to store stroke.
-    "takeoff"  : Rear-biased 100% impulse (vx ≈ +0.4 m/s, vz ≈ +2.6 m/s).
+    "takeoff"  : Rear-biased impulse (vx ≈ +0.4 m/s, vz ≈ +2.6 m/s at full stroke).
     "airborne" : Mid-air tuck.
     "landing"  : Compliant touchdown with forward rollout torque.
     """
@@ -113,7 +174,9 @@ def jump_forward_while_stopped(
     elif phase == "takeoff":
         ground_mask = u_z < 0.10
         forward_bias = np.clip(1.0 - 0.85 * np.maximum(u_long, -0.3), 0.35, 1.0)
-        scale = float(np.clip(power, 0.0, 1.0))
+        scale = 1.0 if power is None else float(np.clip(power, 0.0, 1.0))
+        if jump_height_cm is not None:
+            scale = power_for_jump_height(jump_height_cm, "jump_forward_while_stopped")
         targets[ground_mask] = max_extend * forward_bias[ground_mask] * scale
         targets[u_long > 0.15] = 0.0
         targets[u_z > 0.15] = 0.0
@@ -143,19 +206,24 @@ def jump_forward_while_moving(
     d_hat: np.ndarray,
     *,
     phase: str = "sprint",
+    jump_height_cm: float | None = None,
+    power: float | None = None,
     landing_standoff: float = 0.055,
     rollout_gain: float = 0.10,
 ) -> np.ndarray:
     """Running hurdle leap — explosive launch while already sprinting.
 
     This is the proven high-speed forward jump that produces
-    vx ≈ +2.5 m/s, vz ≈ +2.6 m/s and flies +1.1m in mid-air.
+    vx ≈ +2.5 m/s, vz ≈ +2.6 m/s and flies +1.1m in mid-air at full stroke.
+
+    `jump_height_cm` commands physical jump height directly in centimeters,
+    mapping to launch stroke scaling via the measured calibration curve.
 
     Phases
     ------
     "sprint"   : High-speed rear-pusher drive building vx ~ 2.0 m/s.
     "dip"      : Kinematic pre-leap dip — all rods retract to 0 to store stroke.
-    "launch"   : Full-cluster explosive impulse on all downward rods.
+    "launch"   : Explosive impulse on ground-facing rods (scaled by jump_height_cm / power).
     "airborne" : Mid-air tuck for hurdle clearance.
     "landing"  : Compliant touchdown with forward rollout.
     """
@@ -178,15 +246,15 @@ def jump_forward_while_moving(
         targets[:] = 0.00
     elif phase == "launch":
         # Explosive impulse on the ground-facing rods, biased to the rear and
-        # with the leading sector held shut. A leading rod that extends while
-        # the ball is rolling acts as a kickstand: it brakes the run-up and
-        # converts forward speed into vertical speed, so the ball takes off
-        # nearly stationary and drops onto the obstacle instead of over it.
-        # Same masking as the standing forward jump, which is the strongest
-        # take-off the 60 rods can produce while keeping forward carry.
+        # with the leading sector held shut.
         ground_mask = u_z < 0.10
         forward_bias = np.clip(1.0 - 0.85 * np.maximum(u_long, -0.3), 0.35, 1.0)
-        targets[ground_mask] = max_extend * forward_bias[ground_mask]
+        scale = 1.0
+        if jump_height_cm is not None:
+            scale = power_for_jump_height(jump_height_cm, "jump_forward_while_moving")
+        elif power is not None:
+            scale = float(np.clip(power, 0.0, 1.0))
+        targets[ground_mask] = max_extend * forward_bias[ground_mask] * scale
         targets[u_long > 0.15] = 0.0
         targets[u_z > 0.15] = 0.0
     elif phase == "airborne":

@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.wall_of_death import Bowl, advance_radius, wall_of_death, surface_frame
+from skills.bowl_riding import Bowl, advance_radius, wall_of_death, surface_frame
 
 def run(steps=4000, seed=1, verbose=False, open_rate=0.10, steer_gain=0.55,
         max_steer=0.35, lat=4.5, **over):

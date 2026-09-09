@@ -1,0 +1,50 @@
+description: Straddle a central trench, riding the two side ledges.
+
+scenario:
+  kind: gap_bridge
+  config: configs/rl/gap_bridge.yaml
+  seed: 42
+
+# Start on the line, resting across both boxes.
+spawn: {x: 0.0, y: 0.0, z: 0.44}
+settle: 25
+
+skill:
+  name: straddle_gap
+  args:
+    d_hat: [1.0, 0.0]
+  feedback:
+    # Steer back to the centreline from the measured y offset.
+    lateral_offset: ball_y
+
+steps: 750
+stop_when:
+  ball_x: {min: 5.0}
+
+video:
+  fps: 25
+  every: 4
+  panes:
+    - camera: fixed_angle_close_3d
+      title: "SKILL: straddle_gap (dual-flank outrigger gait)"
+      lines:
+        - "Progress:   x = {ball_x:.2f} m / 5.00 m"
+        - "Centering:  y = {ball_y:+.3f} m"
+        - "Core:       z = {ball_z:.3f} m"
+        - "Speed:      {speed:.2f} m/s"
+        - "Time:       {time:.1f} s"
+    - tracking: {distance: 1.85, elevation: -14.0, azimuth: 0.0}
+      title: "CHASM VIEW (central hole underneath)"
+      lines:
+        - "Core height: z = {ball_z:.3f} m"
+        - "Centering:   y = {ball_y:+.1f} cm"
+        - "Speed:       {speed:.2f} m/s"
+
+# Regression guards from a measured run, not physical ideals.
+# Reference: stops at step 510, x = 5.04 m, 5 steps of core contact while
+# settling onto the two boxes at the start.
+expect:
+  final_x: {min: 4.80}
+  distance_x: {min: 4.70}
+  core_impacts: {max: 12}
+  steps_run: {max: 600}

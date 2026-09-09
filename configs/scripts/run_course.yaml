@@ -1,0 +1,56 @@
+# Knobs for scripts/skills/run_course.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_course.py config=<value>
+
+config: "configs/rl/skill_course.yaml"
+
+video: false
+
+camera: "course_dual"
+
+fps: 25
+
+#: record one frame every N env steps. One env step is
+#  0.01 s of simulated time, so --frame-every 4 at --fps 25 plays back in real time
+frame_every: 4
+
+lookahead: 0.85
+
+#: waypoint capture radius (m)
+reach: 0.45
+
+max_steps_per_leg: 4000
+
+debug_jump: false
+
+max_legs: null
+
+dip_at: null
+
+box_height: null
+
+box_depth: null
+
+plat_height: null
+
+plat_depth: null
+
+plat_gain: null
+
+plat_dip_at: null
+
+box_gain: null
+
+box_dip_at: null
+
+launch_steps: null
+
+dip_steps: null
+
+approach_gain: null
+
+#: 0.22 m walls vanish on a 34 m course seen from above
+wall_height: 0.55
+
+#: finer squares turn the map view into visual noise
+floor_square: 0.9

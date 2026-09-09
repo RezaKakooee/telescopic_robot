@@ -77,6 +77,16 @@ SPEED_CURVE_LONG = (
     (4.00, 5.46),
 )
 
+# Current antenna mechanism, 16 cm stroke, default config, flat ground,
+# seed 42: mean forward speed during seconds 4--6 of each six-second run.
+# Reproduce with scripts/skills/calibrate_move.py. Keep the older curves for
+# other mechanisms and strokes; they are also used by existing skill presets.
+SPEED_CURVE_MULTI_STAGE = (
+    (1.00, 0.46714), (1.15, 0.61039), (1.30, 0.79409),
+    (1.60, 1.14873), (2.00, 1.55258), (2.40, 1.89108),
+    (2.80, 2.22560), (3.20, 2.59613), (4.00, 3.18586),
+)
+
 #: The strokes those two curves were measured at.
 CURVE_STROKES = (0.16, 0.30)
 
@@ -92,6 +102,11 @@ MAX_SPEED = float(_SPEEDS[-1])
 # The relation is not exactly coast ~ 1/gain (the wave clips at full stroke),
 # so this constant is a least-squares fit over 0.25-1.0 m rather than a law.
 # Expect the achieved distance to be within about 0.1 m of the request.
+#: Drive amplitude for `straddle_gap`. Tuned, not derived from a speed
+#: request: the load rides on two narrow flank strips and needs the
+#: traction. `speed_for_gain` puts it near 2.7 m/s on flat ground.
+STRADDLE_GAIN = 3.8
+
 COAST_PER_SPEED = 0.62
 MAX_BRAKE_GAIN = 3.0
 
@@ -158,6 +173,9 @@ def move(
     turn: float = 0.0,
     min_offset: float = 0.025,
     back_gain: float | None = None,
+    lin_vel: np.ndarray | None = None,
+    cross_track_error: float = 0.0,
+    rod_mechanism: str | None = None,
 ) -> np.ndarray:
     """Roll at `speed` m/s, in the direction `d_hat` rotated by `turn` radians.
 
@@ -171,11 +189,20 @@ def move(
     turn : radians to rotate that reference by. 0 drives along it, +pi/2 a
         quarter turn anticlockwise, pi drives back along it. Continuous --
         the right angles are not special, they are just the ones with names.
-    speed : desired cruise speed in m/s, clamped to
-        [``MIN_SPEED``, ``MAX_SPEED``] = [0.33, 2.80]. Converted to a wave
-        amplitude by the measured :data:`SPEED_CURVE`.
+    speed : signed speed in m/s. Positive follows the rotated reference;
+        negative travels opposite it. Zero delegates to stop (active braking
+        when lin_vel is supplied). Nonzero magnitude is clamped to the
+        selected calibration's range and converted to push strength.
     back_gain : escape hatch. Set it to drive the amplitude directly and
-        ignore `speed`.
+        override nonzero speed magnitude; the direction still follows its sign.
+    lin_vel : optional measured world velocity. Enables speed correction and
+        lateral velocity damping. Omit to retain the feedforward gait.
+    cross_track_error : signed distance (m) left of the actual requested travel
+        direction, after applying turn and the sign of speed.
+        Used with lin_vel to steer back toward that line. The caller owns
+        the line origin; zero provides velocity damping only.
+    rod_mechanism : pass the actual mechanism to select its calibration.
+        The multi_stage table is measured at 0.16 m stroke only.
 
     Notes
     -----
@@ -188,7 +215,40 @@ def move(
     it directly.
     """
     heading = _rotate(d_hat, turn) if turn else np.asarray(d_hat, dtype=np.float64)
-    gain = float(back_gain) if back_gain is not None else gain_for_speed(speed, max_extend)
+    heading_norm = float(np.linalg.norm(heading))
+    if heading.shape != (2,) or not np.isfinite(heading).all() or heading_norm < 1e-9:
+        raise ValueError("d_hat must be a finite nonzero horizontal 2-vector")
+    heading = heading / heading_norm
+    if not np.isfinite(speed):
+        raise ValueError("speed must be finite")
+    if speed == 0:
+        return stop(quat, dirs_body, max_extend, lin_vel=lin_vel)
+    if speed < 0:
+        heading = -heading
+    magnitude = abs(float(speed))
+    gain = float(back_gain) if back_gain is not None else gain_for_speed(magnitude, max_extend)
+    if back_gain is None:
+        curve = speed_curve(max_extend)
+        if rod_mechanism == "multi_stage" and np.isclose(max_extend, 0.16):
+            curve = np.array([v for _, v in SPEED_CURVE_MULTI_STAGE])
+        desired_speed = float(np.clip(magnitude, curve[0], curve[-1]))
+        gain = float(np.interp(desired_speed, curve, _GAINS))
+        if lin_vel is not None:
+            velocity = np.asarray(lin_vel, dtype=float)[:2]
+            if velocity.shape != (2,) or not np.isfinite(velocity).all():
+                raise ValueError("lin_vel must contain finite horizontal velocity")
+            if not np.isfinite(cross_track_error):
+                raise ValueError("cross_track_error must be finite")
+            sideways = np.array([-heading[1], heading[0]])
+            forward_speed = float(velocity @ heading)
+            lateral_speed = float(velocity @ sideways)
+            # Bounded proportional speed correction around the calibrated gain.
+            gain = float(np.clip(gain + 2.0 * (desired_speed - forward_speed), 0.5, 4.0))
+            # Position restores the requested line; velocity damps sideways motion.
+            correction = np.clip(-4.0 * lateral_speed - 4.0 * cross_track_error,
+                                 -0.6 * desired_speed, 0.6 * desired_speed)
+            heading = heading * desired_speed + sideways * correction
+            heading /= np.linalg.norm(heading)
 
     _, u_long, u_lat, u_z = _decompose(quat, dirs_body, heading)
 
@@ -208,6 +268,36 @@ def move(
 # 1. move_forward  (preset)
 # ---------------------------------------------------------------------------
 
+def turn(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    d_hat: np.ndarray,
+    *,
+    angle_deg: float = 0.0,
+    speed: float = 1.2,
+    lin_vel: np.ndarray | None = None,
+    cross_track_error: float = 0.0,
+    rod_mechanism: str | None = None,
+    back_gain: float | None = None,
+    min_offset: float = 0.025,
+) -> np.ndarray:
+    """Drive at a signed angle relative to d_hat: positive right, negative left.
+
+    angle_deg is a heading offset in degrees, not an angular velocity or an
+    extra rotation applied each update. Hold d_hat fixed during this command.
+    Internally move retains its established counter-clockwise radians API.
+    cross_track_error is measured left of the resulting requested heading.
+    """
+    if not np.isfinite(angle_deg):
+        raise ValueError("angle_deg must be finite")
+    return move(quat, dirs_body, max_extend, d_hat,
+                turn=-float(np.deg2rad(angle_deg)), speed=speed,
+                lin_vel=lin_vel, cross_track_error=cross_track_error,
+                rod_mechanism=rod_mechanism, back_gain=back_gain,
+                min_offset=min_offset)
+
+
 def move_forward(
     quat: np.ndarray,
     dirs_body: np.ndarray,
@@ -217,13 +307,18 @@ def move_forward(
     speed: float = 1.2,
     back_gain: float | None = None,
     min_offset: float = 0.025,
+    lin_vel: np.ndarray | None = None,
+    cross_track_error: float = 0.0,
+    rod_mechanism: str | None = None,
 ) -> np.ndarray:
     """Drive along *d_hat* at `speed` m/s. Default 1.2 m/s.
 
     A preset of :func:`move`. Ask `move` for any other heading or speed.
     """
     return move(quat, dirs_body, max_extend, d_hat, speed=speed,
-                turn=0.0, back_gain=back_gain, min_offset=min_offset)
+                turn=0.0, back_gain=back_gain, min_offset=min_offset,
+                lin_vel=lin_vel, cross_track_error=cross_track_error,
+                rod_mechanism=rod_mechanism)
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +588,109 @@ def circle(
 
 
 # ---------------------------------------------------------------------------
+# 14b. curve (continuous curved path / arc / winding street navigation)
+# ---------------------------------------------------------------------------
+
+def curve(
+    quat: np.ndarray,
+    dirs_body: np.ndarray,
+    max_extend: float,
+    d_hat: np.ndarray,
+    *,
+    radius: float = 2.0,
+    speed: float = 1.2,
+    direction: str = "right",
+    curvature: float | None = None,
+    ball_xy: np.ndarray | None = None,
+    center_xy: np.ndarray | tuple[float, float] | None = None,
+    lookahead: float = 0.35,
+    radial_gain: float = 2.5,
+    back_gain: float | None = None,
+    min_offset: float = 0.025,
+    rod_mechanism: str | None = None,
+) -> np.ndarray:
+    """Carve a smooth, continuous curve or arc with commandable radius or curvature.
+
+    Unlike `turn` -- which commands a discrete polygonal heading change --
+    `curve` steers continuously along a curved path of radius `radius` (or
+    curvature `curvature = 1 / radius`), ideal for city streets, winding roads,
+    roundabouts, and S-curves.
+
+    Parameters
+    ----------
+    d_hat : (2,) current travel heading vector.
+    radius : curve radius in metres (default 2.0 m). If negative, inverts direction.
+    speed : cruising speed in m/s (default 1.2 m/s).
+    direction : "right" (clockwise) or "left" (counter-clockwise).
+    curvature : signed path curvature in 1/m (e.g. +0.5 for R=2.0m right, -0.5 for R=2.0m left).
+        If provided, overrides `radius` and `direction`.
+    ball_xy : (2,) world-frame xy position of the ball. If provided, enables
+        closed-loop arc tracking with dynamic understeer compensation.
+    center_xy : optional explicit center of curvature. If None, established
+        instantaneously from ball_xy and d_hat.
+    lookahead : lookahead arc distance along the curve (default 0.35 m).
+    radial_gain : feedback stiffness to suppress outward centripetal drift (default 2.5).
+    rod_mechanism : "multi_stage" or "single_stage". Defaults to None,
+        the generic calibration, like every other skill here. It used to
+        default to "multi_stage", which asks for about 15 % less drive
+        gain at the same commanded speed than the generic curve, so a
+        caller on a single-stage build was quietly under-driven.
+    """
+    if curvature is not None:
+        if abs(curvature) > 1e-6:
+            radius = 1.0 / abs(curvature)
+            direction = "right" if curvature > 0 else "left"
+        else:
+            # Zero curvature is straight motion
+            return move(quat, dirs_body, max_extend, d_hat=d_hat, speed=speed,
+                        turn=0.0, back_gain=back_gain, min_offset=min_offset,
+                        rod_mechanism=rod_mechanism)
+
+    if radius < 0:
+        radius = abs(radius)
+        direction = "left" if direction == "right" else "right"
+
+    d_norm = float(np.linalg.norm(d_hat))
+    d_unit = np.asarray(d_hat, dtype=np.float64) / max(d_norm, 1e-6)
+
+    # Inward normal pointing toward center of curvature:
+    if direction == "right":
+        n_inward = np.array([d_unit[1], -d_unit[0]], dtype=np.float64)
+        rot_dir = -1.0  # clockwise
+    else:
+        n_inward = np.array([-d_unit[1], d_unit[0]], dtype=np.float64)
+        rot_dir = +1.0  # counter-clockwise
+
+    if ball_xy is not None:
+        p = np.asarray(ball_xy, dtype=np.float64)[:2]
+        c = np.asarray(center_xy, dtype=np.float64)[:2] if center_xy is not None else p + n_inward * radius
+        rel = p - c
+        curr_r = float(np.linalg.norm(rel))
+        th_now = float(np.arctan2(rel[1], rel[0]))
+
+        d_th = rot_dir * (lookahead / max(radius, 0.4))
+        th_target = th_now + d_th
+
+        # Feedforward understeer offset to counteract centripetal acceleration (v^2 / R)
+        lead_offset = min(0.20, 0.10 * (speed ** 2) / max(radius, 0.5))
+        nominal_r = max(0.2, radius - lead_offset)
+        r_target = max(0.2, nominal_r - radial_gain * (curr_r - radius))
+        p_target = c + r_target * np.array([np.cos(th_target), np.sin(th_target)])
+
+        heading_vec = p_target - p
+        h_norm = float(np.linalg.norm(heading_vec))
+        d_cmd = heading_vec / max(h_norm, 1e-6)
+    else:
+        # Open-loop heading rate steering
+        d_th = rot_dir * (speed / max(radius, 0.4)) * 0.01
+        d_cmd = _rotate(d_unit, d_th)
+
+    return move(quat, dirs_body, max_extend, d_hat=d_cmd, speed=speed,
+                turn=0.0, back_gain=back_gain, min_offset=min_offset,
+                rod_mechanism=rod_mechanism)
+
+
+# ---------------------------------------------------------------------------
 # 15. straddle_gap (dual-flank outrigger locomotion across a central hole/trench)
 # ---------------------------------------------------------------------------
 
@@ -502,10 +700,7 @@ def straddle_gap(
     max_extend: float,
     d_hat: np.ndarray | None = None,
     *,
-    gap_half_width: float = 0.11,
-    speed: float = 1.3,
     min_lat: float = 0.10,
-    min_offset: float = 0.025,
     back_gain: float | None = None,
     lateral_offset: float = 0.0,
     centering_gain: float = 1.8,
@@ -525,14 +720,27 @@ def straddle_gap(
     dirs_body : (60, 3) body-frame rod unit vectors.
     max_extend : float, maximum rod extension in metres.
     d_hat : (2,) reference forward heading along the gap (default [1.0, 0.0]).
-    gap_half_width : half-width of the central hole/gap in metres (default 0.11 m).
-    speed : commanded cruise speed in m/s (default 1.3 m/s).
     min_lat : minimum lateral coordinate (|u_lat|) to activate flank pusher (default 0.10).
+        This is a direction cosine, not a width in metres. It is what sets how
+        wide the central tuck is; there is no separate gap-width parameter.
+    back_gain : drive amplitude. Defaults to `STRADDLE_GAIN`.
     lateral_offset : measured y-offset from the gap centerline for active centering.
     centering_gain : proportional heading gain to steer back to gap centerline (default 1.8).
+
+    Notes
+    -----
+    Unlike the rolling skills, this one takes no `speed`. It drives at a fixed
+    amplitude, because the whole load rides on two narrow flank strips and the
+    traction there is what decides whether the robot crosses at all. Override
+    it with `back_gain` if you need to. `STRADDLE_GAIN` is 3.8, which the
+    speed calibration puts near 2.7 m/s on flat ground.
+
+    It also takes no `min_offset`. Tucked rods are commanded to a true zero,
+    not to the usual retracted baseline, so nothing reaches into the void or
+    catches an inner lip.
     """
     heading = np.asarray(d_hat, dtype=np.float64) if d_hat is not None else np.array([1.0, 0.0])
-    gain = float(back_gain) if back_gain is not None else 3.8
+    gain = float(back_gain) if back_gain is not None else STRADDLE_GAIN
 
     # Active heading centering
     turn_angle = float(np.clip(-centering_gain * lateral_offset, -0.25, 0.25))

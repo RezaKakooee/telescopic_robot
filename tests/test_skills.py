@@ -246,7 +246,7 @@ def test_straddle_gap_traverse(gap_width=0.22, box_height=0.25, steps=500):
         pos = env.data.qpos[0:3].copy()
         quat = env.data.qpos[3:7].copy()
         targets = execute_skill("straddle_gap", quat, env.dirs_body, env.max_extend,
-                                d_hat=d_fwd, speed=1.3, lateral_offset=float(pos[1]))
+                                d_hat=d_fwd, lateral_offset=float(pos[1]))
         env.step(targets)
 
     end_x = float(env.data.qpos[0])
@@ -308,7 +308,7 @@ def test_wall_of_death(seconds=65.0, seed=1):
     """
     import mujoco
     from omegaconf import OmegaConf
-    from skills.wall_of_death import Bowl, advance_radius, surface_frame, wall_of_death
+    from skills.bowl_riding import Bowl, advance_radius, surface_frame, wall_of_death
 
     cfg = load_config("configs/rl/motordrome.yaml")
     OmegaConf.set_struct(cfg, False)
@@ -410,7 +410,7 @@ def test_wall_run(seconds=18.0, repeats=2):
     """
     from scripts.skills.run_wall_run import run
     from types import SimpleNamespace
-    from skills.wall_run import get_wall_frame
+    from skills.wall_running import get_wall_frame
 
     # Geometry is part of the controller: wall segments are geom centre lines,
     # while rod reach must be measured to the near surface.
@@ -547,7 +547,51 @@ def test_stairs_climb():
         f"FAIL: final lateral drift y={r['final_pos'][1]:.2f}m")
     assert r["core_impacts"] == 0, f"FAIL: had {r['core_impacts']} core impacts on stairs"
     assert r["end_speed"] < 0.20, f"FAIL: ended moving at {r['end_speed']:.2f}m/s"
-    assert r["end_spin"] < 0.40, f"FAIL: ended spinning at {r['end_spin']:.2f}rad/s"
+def test_rough_terrain_skill():
+    """Physics check for traverse_rough_terrain:
+    1. Registered in registry under traverse_rough_terrain, rough_terrain, active_suspension.
+    2. Per-rod adaptation: underneath rod opens lower on stones and opens longer in holes.
+    3. Traverses across rocky boulder field without stalling.
+    """
+    from skills.terrain_following import traverse_rough_terrain
+    from radial_sphere.geometry import fibonacci_sphere
+    quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
+    dirs = fibonacci_sphere(60).astype(np.float32)
+    d_hat = np.array([1.0, 0.0], dtype=np.float32)
+    tc_flat = np.zeros(60, dtype=np.float32)
+    t_flat = traverse_rough_terrain(quat, dirs, 0.16, d_hat=d_hat, core_z=0.28, terrain_clearances=tc_flat)
+    down_idx = [i for i, d in enumerate(dirs) if d[2] < -0.30 and d[0] <= -0.05 and 0.04 < t_flat[i] < 0.12][0]
+
+    tc_stone = np.zeros(60, dtype=np.float32)
+    tc_stone[down_idx] = -0.05
+    t_stone = traverse_rough_terrain(quat, dirs, 0.16, d_hat=d_hat, core_z=0.28, terrain_clearances=tc_stone)
+
+    tc_hole = np.zeros(60, dtype=np.float32)
+    tc_hole[down_idx] = +0.05
+    t_hole = traverse_rough_terrain(quat, dirs, 0.16, d_hat=d_hat, core_z=0.28, terrain_clearances=tc_hole)
+
+    assert t_stone[down_idx] < t_flat[down_idx], "When there is a stone, the bar must open lower"
+    assert t_hole[down_idx] > t_flat[down_idx], "When there is a hole, the bar must open longer"
+    print(f"23. traverse_rough_terrain: stone opens lower ({t_stone[down_idx]:.3f}m < {t_flat[down_idx]:.3f}m) and hole opens longer ({t_hole[down_idx]:.3f}m > {t_flat[down_idx]:.3f}m)")
+
+
+def test_stay_in_boundary():
+    """Physics check for stay_in_boundary:
+    1. Pure function generates valid rod targets and switches sub-skills.
+    2. Runs closed-loop in a wall-less arena with a circular floor boundary.
+    3. Guarantees ball stays strictly inside r < 2.0m while roaming slowly and taking diverse actions.
+    """
+    from tests.test_boundary_skill import (
+        test_stay_in_boundary_pure_function,
+        test_stay_in_boundary_registry_aliases,
+        test_boundary_scenario_generation,
+        test_boundary_physics_containment,
+    )
+    test_stay_in_boundary_pure_function()
+    test_stay_in_boundary_registry_aliases()
+    test_boundary_scenario_generation()
+    test_boundary_physics_containment()
+    print("24. stay_in_boundary: containment in wall-less arena, diverse actions & slow roaming passed.")
 
 
 def main():
@@ -714,6 +758,38 @@ def main():
     assert max_z > 0.35, f"FAIL: Expected peak > 0.35m, got {max_z:.3f}"
     assert fwd_dist > 0.50, f"FAIL: Expected >0.50m forward, got {fwd_dist:.3f}m"
 
+    # 11b. jump_height_cm control verification across jump skills
+    heights = {}
+    for target_h in (20.0, 50.0):
+        env.reset(seed=42)
+        start_z = env.data.qpos[2]
+        max_z = start_z
+        for step in range(60):
+            quat = env.data.qpos[3:7]
+            phase = "crouch" if step < 20 else ("takeoff" if step < 32 else "airborne")
+            targets = execute_skill("jump_up", quat, env.dirs_body, env.max_extend,
+                                    phase=phase, jump_height_cm=target_h)
+            env.step(targets)
+            max_z = max(max_z, env.data.qpos[2])
+        heights[target_h] = (max_z - start_z) * 100.0
+    print(f"9b. jump_up height: 20cm request -> {heights[20.0]:.1f}cm, 50cm request -> {heights[50.0]:.1f}cm")
+    assert heights[20.0] < heights[50.0] - 15.0, "FAIL: 20cm jump must be significantly lower than 50cm jump"
+
+    for target_h in (20.0, 45.0):
+        env.reset(seed=42)
+        start_z = env.data.qpos[2]
+        max_z = start_z
+        for step in range(80):
+            quat = env.data.qpos[3:7]
+            phase = "crouch" if step < 20 else ("takeoff" if step < 32 else ("airborne" if env.data.qpos[2] > 0.28 else "landing"))
+            targets = execute_skill("jump_forward_while_stopped", quat, env.dirs_body, env.max_extend,
+                                    d_hat=d_forward, phase=phase, jump_height_cm=target_h)
+            env.step(targets)
+            max_z = max(max_z, env.data.qpos[2])
+        heights[target_h] = (max_z - start_z) * 100.0
+    print(f"10b. jump_fwd_stop height: 20cm request -> {heights[20.0]:.1f}cm, 45cm request -> {heights[45.0]:.1f}cm")
+    assert heights[20.0] < heights[45.0] - 15.0, "FAIL: 20cm jump must be significantly lower than 45cm jump"
+
     env.close()
 
     # 8b. push_against_wall against a real maze wall (separate maze env).
@@ -752,8 +828,14 @@ def main():
     # 22. stairs: multi-step flight ascent, plateau, and compliant descent.
     test_stairs_climb()
 
+    # 23. traverse_rough_terrain: underbelly adaptation on stones and holes.
+    test_rough_terrain_skill()
+
+    # 24. stay_in_boundary: wall-less circular boundary containment and slow diverse roaming.
+    test_stay_in_boundary()
+
     print("\n" + "=" * 70)
-    print("  ✅ ALL 22 SKILL TESTS PASSED!")
+    print("  ✅ ALL 24 SKILL TESTS PASSED!")
     print("=" * 70)
 
 

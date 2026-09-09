@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.wall_of_death import Bowl, advance_radius, surface_frame, wall_of_death
+from skills.bowl_riding import Bowl, advance_radius, surface_frame, wall_of_death
 import scripts.skills.run_motordrome_wall_of_death as R
 S="/tmp/claude-1000/-home-azureuser-telescopic-robot/4f64cce2-bbc9-4914-8de7-37c3bd38fa98/scratchpad"
 cfg=load_config("configs/rl/motordrome.yaml"); OmegaConf.set_struct(cfg,False)

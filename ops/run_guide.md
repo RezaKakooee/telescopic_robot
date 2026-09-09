@@ -18,7 +18,7 @@ export MUJOCO_GL=egl                     # or osmesa for headless video renderin
 wandb login                              # or add rl.wandb=false to commands
 
 # smoke test (no camera, fast), then a real run:
-python scripts/rl/train_rl.py --kind maze --steps 2000 --n-envs 1 rl.wandb=false
+python scripts/rl/train_rl.py kind=maze steps=2000 n_envs=1 rl.wandb=false
 sbatch ops/sb_train.sh train_rl "" --kind maze --steps 150000
 ```
 
@@ -69,7 +69,7 @@ One run id (see `radial_sphere/run_id.py`) names three things identically:
 
 ```bash
 # login node has a 10 GB per-user memory cap: keep --n-envs 1
-python scripts/rl/train_rl.py --kind maze --steps 50000 --n-envs 1 rl.wandb=false
+python scripts/rl/train_rl.py kind=maze steps=50000 n_envs=1 rl.wandb=false
 ```
 
 ## Monitor
@@ -88,7 +88,7 @@ obstacle/goal: ~13). `ep_len_mean` should fall as the policy gets faster.
 
 ```bash
 # uses checkpoints/final.zip + vecnormalize.pkl from the training run dir
-python scripts/rl/eval_rl.py --run storage_local/<train run dir> --kind maze --episodes 3
+python scripts/rl/eval_rl.py run=storage_local/<train run dir> kind=maze episodes=3
 
 # mid-training checkpoints work too (each ppo_<N>_steps.zip has a matching
 # ppo_vecnormalize_<N>_steps.pkl saved next to it)
@@ -102,10 +102,10 @@ checkpoint or start a fresh run.
 
 ```bash
 # RL policy video (bird view sees the whole maze; config: camera.view)
-python scripts/rl/eval_rl.py --run storage_local/<run> --kind maze
+python scripts/rl/eval_rl.py run=storage_local/<run> kind=maze
 
 # scripted baseline for comparison (fails in maze/obstacle — expected)
-python scripts/heuristic/heuristic_agent.py --kind maze
+python scripts/heuristic/heuristic_agent.py kind=maze
 
 # scene previews without an episode (PNG per scenario)
 python scripts/env/scenario_generator.py --kind maze

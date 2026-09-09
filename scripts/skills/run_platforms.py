@@ -14,7 +14,6 @@ rather than driving into the box.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -24,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
@@ -32,7 +31,7 @@ from radial_sphere.scenario import generate_scenario, platform_course_boxes
 from radial_sphere.snapshot import make_run_dir
 from skills import execute_skill
 from skills.jump_planner import plan_jump
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 FORWARD = np.array([1.0, 0.0])
 SETTLE_STEPS = 70      # brake and steady up on a deck after landing
@@ -169,14 +168,7 @@ def fall_off(env, from_height, on_frame, label, note, max_steps=2500):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Run the platform course")
-    p.add_argument("--config", default="configs/rl/skill_course.yaml")
-    p.add_argument("--video", action="store_true")
-    p.add_argument("--camera", default="fixed_angle_side_close")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    p.add_argument("--margin", type=float, default=0.03)
-    args = p.parse_args()
+    args = script_config("run_platforms")
 
     cfg = load_config(args.config)
     cfg.floor.square_m = 0.5

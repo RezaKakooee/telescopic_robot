@@ -1,0 +1,31 @@
+# Knobs for scripts/rl/train_mujoco_rl.py.
+# Override on the command line, for example:
+#     python scripts/rl/train_mujoco_rl.py kind=<value>
+
+kind: "maze"
+
+#: RL algorithm: ppo | sac (default: ppo)
+algo: "ppo"
+
+#: control mode: steering (3D action) | lowlevel (60D slide actions)
+mode: null
+
+#: total RL timesteps (default: from config)
+steps: null
+
+#: parallel envs (default: from config)
+n_envs: null
+
+seed: 42
+
+#: path to a config.yaml
+config: null
+
+#: config variant name under configs/rl/
+config_name: "maze_level3_random_endpoints"
+
+#: torch device: cpu | cuda (default: from config)
+device: null
+
+#: path to a run directory or model checkpoint to resume from
+resume: null

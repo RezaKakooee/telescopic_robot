@@ -1,0 +1,18 @@
+# Knobs for scripts/imitation/train_bc.py.
+# Override on the command line, for example:
+#     python scripts/imitation/train_bc.py data_dir=<value>
+
+#: Demonstrations directory
+data_dir: "datasets/maze_demos"
+
+#: Model checkpoint directory
+out_dir: "storage_local/20260822_1617__imitation_models"
+
+#: Training epochs
+epochs: 50
+
+#: Mini-batch size
+batch_size: 512
+
+#: Learning rate
+lr: 0.001

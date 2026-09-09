@@ -12,7 +12,7 @@ skills. It does not maintain a second, stair-specific jump implementation.
 | Cross the plateau | `move` + `stop` | `plateau`, `poise` |
 | Step down | `fall_down` | `edge`, `freefall`, `absorb`, `settle` |
 
-`skills/stairs.py` is the stateless dispatcher. The course-level state machine
+`skills/stair_climbing.py` is the stateless dispatcher. The course-level state machine
 is in `scripts/skills/run_stairs.py`; it reads geometry from
 `configs/rl/stairs_course.yaml` through `stairs_course_geometry()`.
 
@@ -72,7 +72,7 @@ remain fixed, keeping the robot and nearby tread edges large and readable.
 ## Run and test
 
 ```bash
-MUJOCO_GL=egl PYTHONPATH=. python scripts/skills/run_stairs.py --no-video
+MUJOCO_GL=egl PYTHONPATH=. python scripts/skills/run_stairs.py video=false
 MUJOCO_GL=egl PYTHONPATH=. python scripts/skills/run_stairs.py
 MUJOCO_GL=egl PYTHONPATH=. python tests/test_skills.py
 ```

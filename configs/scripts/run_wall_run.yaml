@@ -1,0 +1,44 @@
+# Knobs for scripts/skills/run_wall_run.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_wall_run.py mode=<value>
+
+#: wall run mode to execute
+mode: "curved"
+
+seconds: 12.0
+
+seed: 3
+
+speed: 7.5
+
+approach_angle: 28.0
+
+#: takeoff distance to the wall (mode-tuned by default)
+launch_gap: null
+
+launch_in: 3.6
+
+launch_up: 5.2
+
+give: 0.13
+
+squash_span: 0.26
+
+cushion_max: 0.025
+
+push_frac: 1.0
+
+along_drive: 0.55
+
+upward_bias: 0.35
+
+#: minimum true wall-roll turns before push-off
+min_turns: 0.25
+
+target_distance: 1.0
+
+slowmo: 1
+
+repeats: 1
+
+video: false

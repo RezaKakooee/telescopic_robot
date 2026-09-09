@@ -11,8 +11,8 @@ from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import Scenario, generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from radial_sphere.run_id import build_run_id
-from skills.overlay import annotate
-from skills.wall_run import FOOT_BASE, next_phase, _frame
+from radial_sphere.overlay import annotate
+from skills.wall_running import FOOT_BASE, next_phase, _frame
 from scratch.test_wall_run_upward_bias import wall_run_enhanced
 
 def create_wall_run_ledge_scenario(cfg):

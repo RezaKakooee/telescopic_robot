@@ -9,7 +9,6 @@ Usage:
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,13 +20,13 @@ import imageio
 import mujoco
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
-from skills.interaction import cylinder_spiral_climb
-from skills.overlay import annotate
+from skills.climbing import cylinder_spiral_climb
+from radial_sphere.overlay import annotate
 
 
 from omegaconf import OmegaConf
@@ -188,12 +187,7 @@ def render_frame(env, writer, phase_label, z, v_tan, pitch_deg, r):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--target-z", type=float, default=3.50)
-    parser.add_argument("--pitch", type=float, default=26.0)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--video", action="store_true", default=True)
-    args = parser.parse_args()
+    args = script_config("run_vertical_cylinder")
 
     run_vertical_cylinder(
         target_z=args.target_z,

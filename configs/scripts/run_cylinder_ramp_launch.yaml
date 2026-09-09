@@ -1,0 +1,9 @@
+# Knobs for scripts/skills/run_cylinder_ramp_launch.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_cylinder_ramp_launch.py target_z=<value>
+
+target_z: 3.5
+
+seed: 42
+
+video: true

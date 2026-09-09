@@ -11,7 +11,7 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from scripts.skills.run_curved_training_cones import draw_curved_slalom_minimap
 from scripts.skills.run_training_cones import _cone_contact
 

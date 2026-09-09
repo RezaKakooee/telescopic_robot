@@ -9,7 +9,6 @@ Usage:
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -21,13 +20,13 @@ import imageio
 import mujoco
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
-from skills.interaction import chimney_friction_servo, chimney_step_down
-from skills.overlay import annotate
+from skills.climbing import chimney_friction_servo, chimney_step_down
+from radial_sphere.overlay import annotate
 
 AXIS = np.array([0.0, 1.0])
 
@@ -203,13 +202,7 @@ def render_frame(env, writer, mode, phase_label, z, vz, clamp_cmd):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=["servo", "step"], default="servo")
-    parser.add_argument("--v-target", type=float, default=-0.50)
-    parser.add_argument("--start-z", type=float, default=3.50)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--video", action="store_true", default=True)
-    args = parser.parse_args()
+    args = script_config("run_chimney_descend")
 
     run_descent(
         mode=args.mode,

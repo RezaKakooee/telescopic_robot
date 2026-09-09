@@ -16,7 +16,7 @@ go of speed as fast as the robot can shed it. So the descent asks for less
 speed than the circle can hold and uses the leading-sector kickstand from
 :func:`~skills.locomotion.stop` to get rid of the rest.
 
-The physics is in :mod:`skills.wall_of_death`; this file only drives it and
+The physics is in :mod:`skills.bowl_riding`; this file only drives it and
 draws the picture. The two calls that matter are per step:
 
     r_cmd = advance_radius(r_cmd, r, speed, bowl)     # how wide to circle
@@ -28,7 +28,6 @@ the robot's speed turns out to be.
 """
 from __future__ import annotations
 
-import argparse
 import os
 
 os.environ.setdefault("MUJOCO_GL", "egl")
@@ -40,14 +39,13 @@ import mujoco
 import numpy as np
 from omegaconf import OmegaConf
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
-from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
-from radial_sphere.snapshot import make_run_dir
-from skills.overlay import annotate
+from radial_sphere.demo import Recorder
+from radial_sphere.overlay import annotate
 from skills.locomotion import stop as stop_skill
-from skills.wall_of_death import (
+from skills.bowl_riding import (
     Bowl, advance_radius, descend_radius, surface_frame, wall_of_death,
 )
 
@@ -90,12 +88,11 @@ def run(
     print(f"  robot     stroke {env.max_extend:.2f} m")
     print(f"  the bank carries {bowl.hold_speed(rim_r):.2f} m/s at the rim")
 
-    writer = out_video = None
-    if record_video:
-        run_dir = make_run_dir(build_run_id("motordrome", "wall_of_death"))
-        out_video = Path(run_dir) / "renders" / "motordrome_wall_of_death.mp4"
-        out_video.parent.mkdir(parents=True, exist_ok=True)
-        writer = imageio.get_writer(str(out_video), fps=fps, codec="libx264")
+    # Shared plumbing; the ride schedule below stays this script's own.
+    recorder = Recorder(env, "motordrome", tag="wall_of_death", enabled=record_video,
+                        fps=fps, every=frame_every,
+                        out_name="motordrome_wall_of_death")
+    out_video = recorder.video
 
     steps = int(seconds * 100)
     descend_step = int(descend_after * 100) if descend_after else None
@@ -156,16 +153,14 @@ def run(
         peak_v = max(peak_v, info["speed"])
         hist.append((info["z"], info["speed"], info["r"], float(vel[2]), phase))
 
-        if writer is not None and i % frame_every == 0:
-            writer.append_data(_frame(env, info, th, abs(laps), bowl,
-                                      camera, rim_r, wall_top, pos))
+        if recorder.due(i):
+            recorder.add(_frame(env, info, th, abs(laps), bowl,
+                                camera, rim_r, wall_top, pos))
         if i % 500 == 0:
             print(f"  t={i/100:5.1f}s [{phase:7s}] r={info['r']:4.2f}  cmd={r_cmd:4.2f}  "
                   f"z={info['z']:4.2f}  v={info['speed']:4.2f}  "
                   f"bank={info['bank_deg']:4.1f}deg  holds={info['hold_speed']:4.2f}")
-
-    if writer is not None:
-        writer.close()
+    recorder.close()
     env.close()
 
     tail = hist[-800:]
@@ -291,27 +286,7 @@ def _frame(env, info, theta, laps, bowl, mode, rim_r, wall_top, ball_pos):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Wall of Death benchmark")
-    p.add_argument("--seconds", type=float, default=60.0)
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--config", type=str, default="configs/rl/motordrome.yaml")
-    p.add_argument("--open-rate", type=float, default=0.10)
-    p.add_argument("--steer-gain", type=float, default=0.30)
-    p.add_argument("--max-steer", type=float, default=0.35)
-    p.add_argument("--camera", type=str, default="rim",
-                   choices=("rim", "rim_fixed", "orbit"),
-                   help="rim: mounted on the top edge, aim follows the robot. "
-                        "rim_fixed: same mount, aim never moves. "
-                        "orbit: outside the drome, swinging round.")
-    p.add_argument("--descend-after", type=float, default=None,
-                   help="seconds of riding before winding the spiral back down")
-    p.add_argument("--close-rate", type=float, default=0.20,
-                   help="metres of radius per second on the way down")
-    p.add_argument("--brake-gain", type=float, default=1.5)
-    p.add_argument("--descend-speed", type=float, default=0.80,
-                   help="fraction of the bank's hold speed to aim for on the way down")
-    p.add_argument("--video", action="store_true", default=False)
-    args = p.parse_args()
+    args = script_config("run_motordrome_wall_of_death")
     run(seconds=args.seconds, seed=args.seed, config=args.config,
         open_rate=args.open_rate, steer_gain=args.steer_gain,
         max_steer=args.max_steer, record_video=args.video, camera=args.camera,

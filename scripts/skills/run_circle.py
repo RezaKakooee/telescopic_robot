@@ -6,7 +6,6 @@ a high-contrast side-by-side composite video (3D Perspective View + Top-Down Ove
 """
 from __future__ import annotations
 
-import argparse
 import os
 os.environ["MUJOCO_GL"] = "egl"
 from pathlib import Path
@@ -14,14 +13,14 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
-from radial_sphere.snapshot import make_run_dir
+from radial_sphere.demo import Recorder
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 
 
@@ -83,29 +82,18 @@ def draw_trajectory_minimap(
 
 
 def main():
-    p = argparse.ArgumentParser(description="Demonstrate circular locomotion skill")
-    p.add_argument("--config", default="configs/rl/circle_track.yaml")
-    p.add_argument("--radius", type=float, default=1.8, help="Circle radius in metres")
-    p.add_argument("--speed", type=float, default=1.2, help="Cruise speed in m/s")
-    p.add_argument("--laps", type=float, default=2.5, help="Number of complete circular laps")
-    p.add_argument("--clockwise", action="store_true", help="Drive clockwise instead of CCW")
-    p.add_argument("--video", action="store_true", default=True, help="Record composite video")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    args = p.parse_args()
+    args = script_config("run_circle")
 
     cfg = load_config(args.config)
     scenario = generate_scenario("circle_track", cfg, seed=42)
     env = MujocoRadialSphereEnv(cfg, scenario=scenario, randomize=False, max_steps=100_000)
     obs, info = env.reset(seed=42)
 
-    run_dir = make_run_dir(build_run_id("run_circle", f"r{args.radius:.1f}_v{args.speed:.1f}"))
-
-    out_video = Path(run_dir) / "renders" / "circle_skill_composite.mp4"
-    out_video.parent.mkdir(parents=True, exist_ok=True)
-
-    import imageio
-    writer = imageio.get_writer(str(out_video), fps=args.fps, codec="libx264") if args.video else None
+    # Shared plumbing; the minimap and lap logic below stay this script's own.
+    recorder = Recorder(env, "run_circle", tag=f"r{args.radius:.1f}_v{args.speed:.1f}",
+                        enabled=args.video, fps=args.fps, every=args.frame_every,
+                        out_name="circle_skill_composite")
+    run_dir, out_video = recorder.run_dir, recorder.video
 
     traj_history = []
     r_history = []
@@ -169,8 +157,12 @@ def main():
         )
         env.step(targets)
 
+        # A metric, not a drawing detail: the progress print below needs it
+        # whether or not this step is being recorded.
+        r_err = curr_r - args.radius
+
         # Record video frames
-        if writer is not None and (step % args.frame_every == 0):
+        if recorder.due(step):
             # 1. 3D Close Tracking Perspective
             f_3d = env.render(camera_name="fixed_angle_close_3d")
 
@@ -182,7 +174,6 @@ def main():
             f_top_resized = cv2.resize(f_top, (w, h))
 
             # Render live HUD on 3D view
-            r_err = curr_r - args.radius
             f_3d_annotated = annotate(
                 f_3d,
                 f"SKILL: circle  (Lap {laps_done:.2f} / {args.laps:.1f})",
@@ -224,7 +215,7 @@ def main():
             # Paste minimap in the top-right corner of the composite
             composite[14:14+mh, composite.shape[1] - mw - 14 : composite.shape[1] - 14] = minimap
 
-            writer.append_data(composite)
+            recorder.add(composite)
 
         if step % 100 == 0:
             print(f"Step {step:4d}: Lap {laps_done:.2f} | r = {curr_r:.3f}m (err {r_err*100:+.1f}cm) | v = {curr_spd:.2f}m/s | dist = {distance_traveled:.1f}m")
@@ -233,8 +224,7 @@ def main():
             print(f"  🏁 Reached target laps ({laps_done:.2f} >= {args.laps}) at step {step}!")
             break
 
-    if writer is not None:
-        writer.close()
+    recorder.close()
     env.close()
 
     r_arr = np.array(r_history)

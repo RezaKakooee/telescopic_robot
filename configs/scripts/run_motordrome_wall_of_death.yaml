@@ -1,0 +1,31 @@
+# Knobs for scripts/skills/run_motordrome_wall_of_death.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_motordrome_wall_of_death.py seconds=<value>
+
+seconds: 60.0
+
+seed: 42
+
+config: "configs/rl/motordrome.yaml"
+
+open_rate: 0.1
+
+steer_gain: 0.3
+
+max_steer: 0.35
+
+#: rim: mounted on the top edge, aim follows the robot. rim_fixed: same mount, aim never moves. orbit: outside the drome, swinging round.
+camera: "rim"
+
+#: seconds of riding before winding the spiral back down
+descend_after: null
+
+#: metres of radius per second on the way down
+close_rate: 0.2
+
+brake_gain: 1.5
+
+#: fraction of the bank's hold speed to aim for on the way down
+descend_speed: 0.8
+
+video: false

@@ -19,6 +19,7 @@ Both return an ``omegaconf.DictConfig`` (attribute access: ``cfg.robot.n_bars``)
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
@@ -89,3 +90,90 @@ def load_config_cli(path: str | Path | None = None,
     if chosen.exists():
         os.environ.setdefault("RADIAL_SPHERE_CONFIG", str(chosen.resolve()))
     return cfg
+
+
+def script_config(script: str,
+                  argv: list[str] | None = None,
+                  *,
+                  passthrough: bool = False,
+                  config_dir: str | Path | None = None) -> DictConfig:
+    """Compose an entry script's own knobs, plus ``key=value`` CLI overrides.
+
+    Entry scripts used to parse flags with `argparse`, which meant every knob
+    was declared twice: once in the parser and once in whatever yaml the run
+    also loaded. A script's knobs now live in ``configs/scripts/<script>.yaml``
+    and the command line takes Hydra's dotlist overrides::
+
+        python docs/blog/render_rough_terrain.py seconds=30 speed=0.9
+        python scripts/skills/run_gap.py steps=800 video=false
+
+    Because the yaml can carry a ``defaults:`` list, a script config can pull
+    in a scenario preset from ``configs/rl/`` and override parts of it in the
+    same file.
+
+    A key the script does not declare is an error, so a typo or a stale flag
+    name is reported instead of being silently ignored. Scripts that also feed
+    scenario overrides to :func:`load_config_cli` pass ``passthrough=True``;
+    for those, unknown keys are collected into ``cfg.scenario_overrides`` and
+    one command line can carry both::
+
+        python scripts/rl/train_rl.py seed=7 rl.n_steps=512
+
+    ``--help`` prints the composed config, which is the full list of knobs.
+    Nothing here touches the working directory or the run directory: those
+    stay under the caller's control, which is why this composes by hand
+    instead of using ``@hydra.main``.
+    """
+    from hydra import compose, initialize_config_dir
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    root = Path(config_dir) if config_dir else (_ROOT / "configs" / "scripts")
+    path = root / f"{script}.yaml"
+    if not path.exists():
+        raise SystemExit(f"no config for {script!r}; expected {path}")
+
+    if any(a in ("-h", "--help") for a in argv):
+        cfg = _compose_script(compose, initialize_config_dir, root, script, [])
+        print(f"{script}: knobs from {path}\n")
+        print(OmegaConf.to_yaml(cfg))
+        print("Override any of them on the command line as key=value, "
+              "for example:\n"
+              f"    python <this script> {_example_override(cfg)}")
+        raise SystemExit(0)
+
+    bad = [a for a in argv if "=" not in a]
+    if bad:
+        raise SystemExit(
+            f"unexpected argument(s) {bad}. This script takes key=value "
+            f"overrides, not flags. Run with --help to list the knobs.")
+
+    # Split the command line: keys this script declares are its own knobs,
+    # anything else is a scenario override bound for `load_config_cli`. That
+    # lets one command line carry both, e.g.
+    #     python scripts/rl/train_rl.py seed=7 rl.n_steps=512
+    known = set(_compose_script(compose, initialize_config_dir, root, script, []).keys())
+    mine = [a for a in argv if a.split("=", 1)[0].lstrip("+~").split(".")[0] in known]
+    theirs = [a for a in argv if a not in mine]
+    if theirs and not passthrough:
+        raise SystemExit(
+            f"{script}: unknown knob(s) {[t.split('=')[0] for t in theirs]}. "
+            f"This script accepts: {', '.join(sorted(known))}. "
+            f"Run with --help to see the current values.")
+    cfg = _compose_script(compose, initialize_config_dir, root, script, mine)
+    OmegaConf.set_struct(cfg, False)
+    cfg.scenario_overrides = theirs
+    return cfg
+
+
+def _compose_script(compose, initialize_config_dir, root, script, overrides):
+    with initialize_config_dir(config_dir=str(Path(root).resolve()),
+                               version_base=None):
+        return compose(config_name=script, overrides=list(overrides))
+
+
+def _example_override(cfg: DictConfig) -> str:
+    """Pick one leaf key so --help can show a runnable example."""
+    for key, value in cfg.items():
+        if not isinstance(value, DictConfig):
+            return f"{key}={value!r}" if isinstance(value, str) else f"{key}={value}"
+    return "key=value"

@@ -14,7 +14,6 @@ build in `configs/rl/pillar_course.yaml`.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -24,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
@@ -33,7 +32,7 @@ from radial_sphere.snapshot import make_run_dir
 from skills import execute_skill
 from skills.hop_planner import (PROBE_VX_STEP, PROBE_VZ_STEP, ROLL_RADIUS,
                                 STAND_EDGE, plan_standing_hop)
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 FORWARD = np.array([1.0, 0.0])
 CROUCH_STEPS = 22
@@ -41,22 +40,7 @@ MAX_BURN = 45
 
 
 def main():
-    p = argparse.ArgumentParser(description="Hop the pillar course")
-    p.add_argument("--config", default="configs/rl/pillar_course.yaml")
-    p.add_argument("--video", action="store_true")
-    p.add_argument("--camera", default="pillar_side")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    p.add_argument("--seed", type=int, default=None,
-                   help="randomize the ball's starting orientation")
-    p.add_argument("--max-probes", type=int, default=5)
-    p.add_argument("--max-restarts", type=int, default=2)
-    p.add_argument("--gear", type=float, default=0.5,
-                   help="landing-gear extension (fraction of stroke) while falling")
-    p.add_argument("--demo-recovery", action="store_true",
-                   help="after the second pillar, shove the ball off sideways on "
-                        "purpose so the side-lane recovery can be seen")
-    args = p.parse_args()
+    args = script_config("run_pillars")
 
     cfg = load_config(args.config)
     cfg.floor.square_m = 0.5

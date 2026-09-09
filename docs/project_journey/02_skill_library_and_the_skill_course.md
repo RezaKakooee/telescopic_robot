@@ -400,7 +400,7 @@ It was not. From a standstill `move_forward` and `reverse` look identical.
 Added `--combo`: all seven ground skills run back to back in one take with
 **no reset**, so each inherits the momentum the last one left. Every frame
 is stamped with the active skill, live speed, vx, vy and distance
-(`skills/overlay.py`).
+(`radial_sphere/overlay.py`).
 
 Two arena bugs surfaced immediately and are worth recording:
 
@@ -1325,7 +1325,7 @@ move + stop → plan_standing_hop → jump_to → stop
             → plateau move → fall_down × 3 → stop
 ```
 
-- `skills/stairs.py` is a stateless dispatcher. Its `hop_*` phases delegate
+- `skills/stair_climbing.py` is a stateless dispatcher. Its `hop_*` phases delegate
   to `jump_to`; braking delegates to `stop`; travel delegates to `move`; and
   `edge → freefall → absorb → settle` delegates to `fall_down`.
 - `scripts/skills/run_stairs.py` owns course state. It plans from the actual

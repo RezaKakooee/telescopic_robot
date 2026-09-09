@@ -7,7 +7,6 @@ dual-flank peristaltic pushing waves on both ledges to smoothly propel forward.
 """
 from __future__ import annotations
 
-import argparse
 import os
 os.environ["MUJOCO_GL"] = "egl"
 from pathlib import Path
@@ -16,25 +15,18 @@ import imageio
 import numpy as np
 import mujoco
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from skills import execute_skill
-from skills.overlay import annotate
+from skills.locomotion import STRADDLE_GAIN, speed_for_gain
+from radial_sphere.overlay import annotate
 
 
 def main():
-    p = argparse.ArgumentParser(description="Demonstrate straddle_gap skill over central chasm from start")
-    p.add_argument("--config", default="configs/rl/gap_bridge.yaml")
-    p.add_argument("--gap-width", type=float, default=0.22, help="Gap width in metres")
-    p.add_argument("--box-height", type=float, default=0.25, help="Height of Box 1 and Box 2 in metres")
-    p.add_argument("--speed", type=float, default=1.3, help="Commanded speed in m/s")
-    p.add_argument("--video", action="store_true", default=True, help="Record composite video")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    args = p.parse_args()
+    args = script_config("run_gap")
 
     cfg = load_config(args.config)
     scenario = generate_scenario("gap_bridge", cfg, seed=42)
@@ -51,12 +43,13 @@ def main():
     # Let the ball settle onto Box 1 and Box 2 at the start line
     for _ in range(25):
         t = execute_skill("straddle_gap", env.data.qpos[3:7].copy(), env.dirs_body, env.max_extend,
-                          speed=0.0)
+                          )
         env.step(t)
 
     run_dir = make_run_dir(build_run_id("run_gap", f"start_w{args.gap_width:.2f}_h{args.box_height:.2f}"))
     out_video = Path(run_dir) / "renders" / "gap_straddle_composite.mp4"
-    out_video.parent.mkdir(parents=True, exist_ok=True)
+    if args.video:
+        out_video.parent.mkdir(parents=True, exist_ok=True)
 
     writer = imageio.get_writer(str(out_video), fps=args.fps, codec="libx264") if args.video else None
 
@@ -70,7 +63,9 @@ def main():
     print(f"  - Platform Setup: Box 1 (Left) & Box 2 (Right)")
     print(f"  - Central Gap:    Width = {args.gap_width * 100:.0f} cm, Depth = {args.box_height * 100:.0f} cm")
     print(f"  - Target Course:  x = 0.0 -> 5.0 m")
-    print(f"  - Commanded Speed:{args.speed:.2f} m/s")
+    gain = args.drive_gain if args.drive_gain is not None else STRADDLE_GAIN
+    print(f"  - Drive amplitude:{gain:.2f} "
+          f"(~{speed_for_gain(gain, env.max_extend):.2f} m/s on flat ground)")
 
     for step in range(1, max_steps + 1):
         pos = env.data.qpos[0:3].copy()
@@ -89,7 +84,7 @@ def main():
         targets = execute_skill(
             "straddle_gap", quat, env.dirs_body, env.max_extend,
             d_hat=d_fwd,
-            speed=args.speed,
+            back_gain=args.drive_gain,
             lateral_offset=y_err,
         )
         env.step(targets)
@@ -168,8 +163,11 @@ def main():
     print(f"  - Total Distance Moved:  {total_distance:.2f} m")
     print(f"  - Void Traversed:        100% on top of Box 1 & Box 2 without dropping")
     print(f"  - Result:                {'✅ SUCCESS — traversed entire course from start' if success else '❌ FAILED'}")
-    print(f"  - Video Output:          {out_video}")
+    print(f"  - Video Output:          {out_video if args.video else '(video=false)'}")
     print("=" * 70)
+
+    if not args.video:
+        return
 
     # Save keyframe preview
     r = imageio.get_reader(str(out_video))

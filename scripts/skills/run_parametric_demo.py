@@ -19,7 +19,6 @@ Three parts.
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -29,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
@@ -42,14 +41,7 @@ X = np.array([1.0, 0.0])
 
 
 def main():
-    p = argparse.ArgumentParser(description="Parametric gait demo")
-    p.add_argument("--config", default="configs/rl/skill_course.yaml")
-    p.add_argument("--video", action="store_true")
-    p.add_argument("--camera", default="fixed_close_dual")
-    p.add_argument("--fps", type=int, default=25)
-    p.add_argument("--frame-every", type=int, default=4)
-    p.add_argument("--seconds-per-speed", type=float, default=4.0)
-    args = p.parse_args()
+    args = script_config("run_parametric_demo")
 
     cfg = load_config(args.config)
     cfg.scenario.goal.x_range = [0.0, 0.0]
@@ -67,7 +59,7 @@ def main():
         out.parent.mkdir(parents=True, exist_ok=True)
         recorder = VideoRecorder(out, fps=args.fps)
 
-    from skills.overlay import annotate
+    from radial_sphere.overlay import annotate
     tick = {"n": 0}
     # The chase camera cannot show the shape of a path, so log it and draw it.
     track = {"speed": [], "sweep": [], "own": []}

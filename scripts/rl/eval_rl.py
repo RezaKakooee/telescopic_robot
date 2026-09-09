@@ -10,12 +10,13 @@ Usage (from the repo root):
 """
 from __future__ import annotations
 
+from radial_sphere.config import script_config
+
 try:
     import isaacgym  # noqa: F401
 except ImportError:
     pass
 
-import argparse
 import pickle
 from pathlib import Path
 
@@ -45,22 +46,7 @@ def load_obs_stats(path: Path):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Evaluate a trained RadialSphere steering policy")
-    p.add_argument("--run", required=True,
-                   help="training run dir (with checkpoints/final.zip + vecnormalize.pkl)")
-    p.add_argument("--kind", default="goal", help="scenario kind to evaluate on")
-    p.add_argument("--scenario", default=None, help="or a fixed scenario JSON")
-    p.add_argument("--episodes", type=int, default=3)
-    p.add_argument("--seed", type=int, default=100)
-    p.add_argument("--config", default=None)
-    p.add_argument("--no-video", dest="video", action="store_false")
-    p.add_argument("--output-dir", default=None,
-                   help="explicit output dir (default: creates new timestamped dir)")
-    p.add_argument("--config-name", "-cn", dest="config_name", default=None,
-                   help="config variant name under configs/rl/")
-    p.add_argument("overrides", nargs="*",
-                   help="config overrides as key=value (Hydra dotlist)")
-    args = p.parse_args()
+    args = script_config("eval_rl", passthrough=True)
 
     train_path = Path(args.run)
     if train_path.is_file():
@@ -83,7 +69,7 @@ def main():
     model = PPO.load(str(model_path), device="cpu")
 
     cfg = load_config_cli(path=args.config, name=args.config_name,
-                          overrides=args.overrides)
+                          overrides=args.scenario_overrides)
     video_cfg = getattr(cfg, "video", None)
     frame_every = int(getattr(video_cfg, "frame_every", 3))
     fps = int(getattr(video_cfg, "fps", 24))

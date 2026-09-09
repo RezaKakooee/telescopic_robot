@@ -33,10 +33,10 @@ conda activate roboverse
 export MUJOCO_GL=egl PYTHONPATH=.
 
 python tests/test_skills.py                                  # ~10 min
-python scripts/skills/run_pillars.py --seed 2 --video        # pillar ladder
-python scripts/skills/run_platforms.py --video               # platform course
-python scripts/skills/run_course.py --video                  # sketched circuit
-python scripts/skills/run_parametric_demo.py --video         # move(turn, speed)
+python scripts/skills/run_pillars.py seed=2 video=true        # pillar ladder
+python scripts/skills/run_platforms.py video=true               # platform course
+python scripts/skills/run_course.py video=true                  # sketched circuit
+python scripts/skills/run_parametric_demo.py video=true         # move(turn, speed)
 python scripts/skills/calibrate_hop.py                       # rebuild hop table (~15 min)
 ```
 

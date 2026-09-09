@@ -5,7 +5,8 @@ on native MuJoCo physics across diverse procedural mazes.
 """
 from __future__ import annotations
 
-import argparse
+from radial_sphere.config import script_config
+
 import logging
 from pathlib import Path
 
@@ -67,18 +68,10 @@ def load_bc_weights_into_sb3(sb3_model, bc_checkpoint_path: Path, device: str = 
 
 
 def main():
-    p = argparse.ArgumentParser(description="Fine-tune RL starting from BC Pretrained Checkpoint")
-    p.add_argument("--bc-ckpt", default="storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt",
-                   help="Path to pre-trained BC checkpoint")
-    p.add_argument("--algo", choices=["ppo", "sac"], default="ppo")
-    p.add_argument("--mode", choices=["steering", "lowlevel"], default="lowlevel")
-    p.add_argument("--config-name", default="maze_level3_large_active_braking_multiaxis")
-    p.add_argument("--steps", type=int, default=1000000)
-    p.add_argument("--n-envs", type=int, default=8)
-    p.add_argument("--lr", type=float, default=1e-4)  # Lower learning rate for fine-tuning
-    p.add_argument("--seed", type=int, default=7001)
-    p.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
-    args = p.parse_args()
+    args = script_config("train_finetune_rl")
+    if args.device is None:
+        # A yaml cannot probe the machine, so resolve it here.
+        args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     cfg = load_config_cli(name=args.config_name)
     max_steps = int(getattr(cfg.rl, "max_steps", 4000))

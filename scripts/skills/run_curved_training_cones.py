@@ -6,7 +6,6 @@ overhead minimap trajectory tracking, and zero cone collisions.
 """
 from __future__ import annotations
 
-import argparse
 import os
 os.environ["MUJOCO_GL"] = "egl"
 from pathlib import Path
@@ -16,13 +15,13 @@ import mujoco
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from scripts.skills.run_training_cones import _cone_contact
 
 
@@ -254,15 +253,7 @@ def run(
 
 
 def main():
-    p = argparse.ArgumentParser(description="Demonstrate Uneven Curved Training Cones Slalom Skill")
-    p.add_argument("--speed", type=float, default=1.1, help="Cruise speed in m/s")
-    p.add_argument("--lateral-offset", type=float, default=0.80, help="Lateral weave amplitude in metres")
-    p.add_argument("--lookahead", type=float, default=0.40, help="Lookahead distance in metres")
-    p.add_argument("--lateral-gain", type=float, default=5.0, help="Lateral steering gain")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--slowmo", type=int, default=1)
-    p.add_argument("--video", action="store_true", default=True, help="Record composite video")
-    args = p.parse_args()
+    args = script_config("run_curved_training_cones")
 
     run(
         speed=args.speed,

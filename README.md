@@ -25,11 +25,11 @@ steering policy (PPO).
     python scripts/heuristic/heuristic_agent.py
 
     # train the RL steering policy on the obstacle task
-    python scripts/rl/train_rl.py --kind obstacle
+    python scripts/rl/train_rl.py kind=obstacle
     sbatch ops/sb_train.sh train_rl "" --kind obstacle  # on the cluster
 
     # evaluate a trained policy with videos
-    python scripts/rl/eval_rl.py --run storage_local/<rl_train run dir> --kind obstacle
+    python scripts/rl/eval_rl.py run=storage_local/<rl_train run dir> kind=obstacle
 
 Any config value can be overridden on the command line (OmegaConf dotlist),
 or a whole variant selected via the env var:

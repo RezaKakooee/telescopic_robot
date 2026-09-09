@@ -9,7 +9,7 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.geometry import quat_to_rotmat
-from skills.wall_run import FOOT_BASE, _frame, get_wall_frame, next_phase, wall_run
+from skills.wall_running import FOOT_BASE, _frame, get_wall_frame, next_phase, wall_run
 from skills.locomotion import move, stop
 
 def test_jump(mode="curved", speed=6.5, launch_up=4.2, launch_in=2.6, launch_gap=1.6, approach_angle=20.0):

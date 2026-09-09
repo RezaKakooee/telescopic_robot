@@ -1,0 +1,27 @@
+# Knobs for scripts/skills/run_chimney.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_chimney.py config=<value>
+
+config: "configs/rl/chimney.yaml"
+
+#: hold at this height and slide back down instead of climbing out onto a box top
+target: null
+
+seed: null
+
+#: push stroke fraction; smaller = gentler, smaller hops
+push_frac: 1.0
+
+trace: false
+
+#: rod band for the last push; the normal band gives the most lift, steeper bands measured LESS
+exit_band: [0.45, 0.2, 0.85]
+
+#: arm the exit push this far ABOVE the low lip
+exit_from: 0.02
+
+video: false
+
+fps: 25
+
+frame_every: 4

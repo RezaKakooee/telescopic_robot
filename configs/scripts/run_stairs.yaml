@@ -1,0 +1,9 @@
+# Knobs for scripts/skills/run_stairs.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_stairs.py seed=<value>
+
+seed: 42
+
+slowmo: 1
+
+video: true

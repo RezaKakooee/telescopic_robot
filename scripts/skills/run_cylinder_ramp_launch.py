@@ -10,7 +10,6 @@ Usage:
 """
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 from pathlib import Path
@@ -23,14 +22,14 @@ import mujoco
 import numpy as np
 from omegaconf import OmegaConf
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from skills.locomotion import move
-from skills.interaction import cylinder_spiral_climb
-from skills.overlay import annotate
+from skills.climbing import cylinder_spiral_climb
+from radial_sphere.overlay import annotate
 
 
 def run_ramp_launch(
@@ -197,11 +196,7 @@ def render_frame(env, writer, phase_label, x, y, z, spd, a_c, in_cyl):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--target-z", type=float, default=3.50)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--video", action="store_true", default=True)
-    args = parser.parse_args()
+    args = script_config("run_cylinder_ramp_launch")
 
     run_ramp_launch(
         target_z=args.target_z,

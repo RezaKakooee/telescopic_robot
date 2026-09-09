@@ -1,0 +1,26 @@
+# Knobs for scripts/rl/eval_rl.py.
+# Override on the command line, for example:
+#     python scripts/rl/eval_rl.py run=<value>
+
+#: training run dir (with checkpoints/final.zip + vecnormalize.pkl)
+run: null
+
+#: scenario kind to evaluate on
+kind: "goal"
+
+#: or a fixed scenario JSON
+scenario: null
+
+episodes: 3
+
+seed: 100
+
+config: null
+
+video: true
+
+#: explicit output dir (default: creates new timestamped dir)
+output_dir: null
+
+#: config variant name under configs/rl/
+config_name: null
