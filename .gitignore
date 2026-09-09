@@ -4,6 +4,7 @@ wandb
 output
 roboverse_data
 datasets
+regen_check
 
 
 # Byte-compiled / optimized / DLL files
