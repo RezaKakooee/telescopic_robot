@@ -9,8 +9,8 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.geometry import quat_to_rotmat
-from skills.wall_run import FOOT_BASE, _frame
-from skills.locomotion import move, stop
+from skills.low_level.wall_running import FOOT_BASE, _frame
+from skills.low_level.locomotion import move, stop
 
 def test_continuous_wall_roll(
     ride_min_time: float = 0.50,

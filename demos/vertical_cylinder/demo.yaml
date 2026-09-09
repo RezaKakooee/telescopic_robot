@@ -1,0 +1,11 @@
+# vertical_cylinder: everything about showing one skill.
+#   python scripts/run_demo.py demo=vertical_cylinder
+# `knobs` is what this demo's own runner.py reads.
+
+description: Spiral up the inside of an upright cylinder.
+runner: true
+knobs:
+  target_z: 3.5
+  pitch: 26.0
+  seed: 42
+  video: true

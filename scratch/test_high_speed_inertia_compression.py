@@ -8,8 +8,8 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.geometry import quat_to_rotmat
-from skills.wall_run import FOOT_BASE, _frame, get_wall_frame, wall_reach
-from skills.locomotion import move, stop
+from skills.low_level.wall_running import FOOT_BASE, _frame, get_wall_frame, wall_reach
+from skills.low_level.locomotion import move, stop
 
 def test_inertia_compression(mode="curved", back_gain=4.5, launch_up=5.2, launch_in=3.8, launch_gap=1.55, approach_angle=24.0):
     cfg = load_config("configs/rl/wall_run.yaml")

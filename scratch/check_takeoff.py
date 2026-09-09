@@ -6,7 +6,7 @@ import mujoco
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.jumping import jump_up
+from skills.low_level.jumping import jump_up
 
 for mech in ["multi_stage", "zip_chain"]:
     cfg = load_config("configs/rl/config.yaml")

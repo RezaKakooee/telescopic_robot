@@ -1,0 +1,7 @@
+# Knobs for scripts/skills/calibrate_jump.py.
+# Override on the command line, for example:
+#     python scripts/skills/calibrate_jump.py config=<value>
+
+config: "configs/rl/skill_course.yaml"
+
+quick: false

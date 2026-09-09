@@ -1,0 +1,16 @@
+# Knobs for docs/blog/render_rough_terrain.py.
+# Override on the command line, for example:
+#     python docs/blog/render_rough_terrain.py seconds=20 speed=0.9
+
+#: Length of the recording, in simulated seconds.
+seconds: 120.0
+
+#: Commanded roaming speed in m/s, passed to stay_in_boundary.
+speed: 1.30
+
+#: x264 quality. Higher is a smaller, softer file.
+crf: 26
+
+#: Where the mp4, preview, csv and json are written.
+#: Relative paths resolve from the repo root.
+output_dir: docs/blog/assets

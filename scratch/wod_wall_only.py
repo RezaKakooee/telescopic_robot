@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.wall_of_death import wall_of_death, surface_normal
+from skills.low_level.bowl_riding import wall_of_death, surface_normal
 
 def trial(v0, z0=1.60, climb=0.0, press=0.45, steps=600, ext_frac=0.55, seed=1, log=False):
     cfg = load_config("configs/rl/motordrome.yaml"); OmegaConf.set_struct(cfg, False)

@@ -1,0 +1,22 @@
+# Knobs for scripts/rl/train_finetune_rl.py.
+# Override on the command line, for example:
+#     python scripts/rl/train_finetune_rl.py bc_ckpt=<value>
+
+#: Path to pre-trained BC checkpoint
+bc_ckpt: "storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt"
+
+algo: "ppo"
+
+mode: "lowlevel"
+
+config_name: "maze_level3_large_active_braking_multiaxis"
+
+steps: 1000000
+
+n_envs: 8
+
+lr: 0.0001
+
+seed: 7001
+
+device: null   # null picks cuda when available, else cpu

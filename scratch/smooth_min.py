@@ -1,7 +1,7 @@
 """Least smoothing that keeps the steady ride. 150 s each."""
 import os; os.environ["MUJOCO_GL"]="egl"
 import pathlib, tempfile, re
-import scripts.skills.run_motordrome_wall_of_death as R
+import demos.bowl.runner as R
 BASE = pathlib.Path("configs/rl/motordrome.yaml").read_text()
 def cfg_with(**over):
     txt = BASE

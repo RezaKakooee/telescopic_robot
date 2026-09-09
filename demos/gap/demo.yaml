@@ -1,0 +1,65 @@
+# gap: everything about showing one skill.
+#   python scripts/run_demo.py demo=gap
+# `knobs` is what this demo's own runner.py reads.
+
+description: Straddle a central trench, riding the two side ledges.
+scenario:
+  kind: gap_bridge
+  config: configs/rl/gap_bridge.yaml
+  seed: 42
+spawn:
+  x: 0.0
+  'y': 0.0
+  z: 0.44
+settle: 25
+skill:
+  name: straddle_gap
+  args:
+    d_hat:
+    - 1.0
+    - 0.0
+  feedback:
+    lateral_offset: ball_y
+steps: 750
+stop_when:
+  ball_x:
+    min: 5.0
+video:
+  fps: 25
+  every: 4
+  panes:
+  - camera: fixed_angle_close_3d
+    title: 'SKILL: straddle_gap (dual-flank outrigger gait)'
+    lines:
+    - 'Progress:   x = {ball_x:.2f} m / 5.00 m'
+    - 'Centering:  y = {ball_y:+.3f} m'
+    - 'Core:       z = {ball_z:.3f} m'
+    - 'Speed:      {speed:.2f} m/s'
+    - 'Time:       {time:.1f} s'
+  - tracking:
+      distance: 1.85
+      elevation: -14.0
+      azimuth: 0.0
+    title: CHASM VIEW (central hole underneath)
+    lines:
+    - 'Core height: z = {ball_z:.3f} m'
+    - 'Centering:   y = {ball_y:+.1f} cm'
+    - 'Speed:       {speed:.2f} m/s'
+expect:
+  final_x:
+    min: 4.8
+  distance_x:
+    min: 4.7
+  core_impacts:
+    max: 12
+  steps_run:
+    max: 600
+runner: true
+knobs:
+  config: configs/rl/gap_bridge.yaml
+  gap_width: 0.22
+  box_height: 0.25
+  drive_gain: null
+  video: true
+  fps: 25
+  frame_every: 4

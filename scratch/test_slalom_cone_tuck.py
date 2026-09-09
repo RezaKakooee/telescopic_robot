@@ -6,8 +6,8 @@ from radial_sphere.config import load_config
 from radial_sphere.geometry import quat_to_rotmat
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.locomotion import move
-from scripts.skills.run_training_cones import _cone_contact
+from skills.low_level.locomotion import move
+from demos.training_cones.runner import _cone_contact
 
 def test_slalom_cone_tuck(amp, sp, lookahead):
     cfg = load_config("configs/rl/training_cones.yaml")

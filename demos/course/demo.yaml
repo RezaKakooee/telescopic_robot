@@ -1,0 +1,31 @@
+# course: everything about showing one skill.
+#   python scripts/run_demo.py demo=course
+# `knobs` is what this demo's own runner.py reads.
+
+description: Run the full skill course end to end.
+runner: true
+knobs:
+  config: configs/rl/skill_course.yaml
+  video: false
+  camera: course_dual
+  fps: 25
+  frame_every: 4
+  lookahead: 0.85
+  reach: 0.45
+  max_steps_per_leg: 4000
+  debug_jump: false
+  max_legs: null
+  dip_at: null
+  box_height: null
+  box_depth: null
+  plat_height: null
+  plat_depth: null
+  plat_gain: null
+  plat_dip_at: null
+  box_gain: null
+  box_dip_at: null
+  launch_steps: null
+  dip_steps: null
+  approach_gain: null
+  wall_height: 0.55
+  floor_square: 0.9

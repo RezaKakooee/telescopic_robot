@@ -1,0 +1,51 @@
+# Knobs for scripts/skills/run_skill.py.
+# Override on the command line, for example:
+#     python scripts/skills/run_skill.py skill=<value>
+
+#: skill to run
+skill: null
+
+#: run all skills in sequence
+demo: false
+
+#: one continuous labelled clip of the ground locomotion skills
+combo: false
+
+#: list skills and exit
+list: false
+
+#: override step budget
+steps: null
+
+#: for --skill turn: positive degrees right, negative left
+angle_deg: 0.0
+
+#: signed speed in m/s: positive forward, negative reverse, zero stop
+speed: null
+
+#: scenario kind (default: from config)
+kind: null
+
+config: "configs/rl/standing_jump_showcase.yaml"
+
+seed: 42
+
+#: record an mp4
+video: false
+
+#: with --demo: write one video per skill instead of one long clip
+per_skill: false
+
+#: make each clip this long by repeating the skill's cycle
+seconds: null
+
+#: force the open goal arena (no rails, no hurdles)
+open_arena: false
+
+#: with --demo: keep state across skills instead of resetting
+reset_each: true
+
+#: camera name for the video
+camera: "dual"
+
+fps: 24

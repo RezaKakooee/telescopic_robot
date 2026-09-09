@@ -65,15 +65,15 @@ checkpoint + `vecnormalize.pkl` and records videos.
 Level 3 preset:
 
 ```bash
-python scripts/rl/train_rl.py -cn maze_level3 --kind maze
-python scripts/heuristic/heuristic_agent.py -cn maze_level3 --kind maze
+python scripts/rl/train_rl.py config_name=maze_level3 kind=maze
+python scripts/heuristic/heuristic_agent.py config_name=maze_level3 kind=maze
 ```
 
 Fixed-layout curriculum with random start/goal points, resumed from a prior
 checkpoint:
 
 ```bash
-python scripts/rl/train_rl.py -cn maze_level3_fixed --kind maze \
+python scripts/rl/train_rl.py config_name=maze_level3_fixed kind=maze \
   --resume storage_local/<prior-train-run>
 ```
 

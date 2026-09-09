@@ -7,7 +7,8 @@ Trains:
 """
 from __future__ import annotations
 
-import argparse
+from radial_sphere.config import script_config
+
 import json
 import logging
 from pathlib import Path
@@ -246,13 +247,7 @@ def train_bc(
 
 
 def main():
-    p = argparse.ArgumentParser(description="Imitation Learning BC Pre-training")
-    p.add_argument("--data-dir", default="datasets/maze_demos", help="Demonstrations directory")
-    p.add_argument("--out-dir", default="storage_local/20260822_1617__imitation_models", help="Model checkpoint directory")
-    p.add_argument("--epochs", type=int, default=50, help="Training epochs")
-    p.add_argument("--batch-size", type=int, default=512, help="Mini-batch size")
-    p.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
-    args = p.parse_args()
+    args = script_config("train_bc")
 
     train_bc(
         data_dir=Path(args.data_dir),

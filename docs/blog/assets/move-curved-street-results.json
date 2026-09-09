@@ -1,0 +1,67 @@
+{
+  "skill": "curve",
+  "seed": 42,
+  "duration_s": 11.099999999999808,
+  "phases": [
+    {
+      "phase": "STRAIGHT",
+      "mode": "straight",
+      "duration_s": 1.8,
+      "radius_m": null,
+      "direction": null,
+      "mean_speed_cm_s": 114.43449461521308,
+      "end_position_m": [
+        1.5582675775373147,
+        0.08818251850223527
+      ]
+    },
+    {
+      "phase": "CURVE RIGHT",
+      "mode": "curve",
+      "duration_s": 3.0,
+      "radius_m": 2.0,
+      "direction": "right",
+      "mean_speed_cm_s": 183.93610631764489,
+      "end_position_m": [
+        3.412598367616273,
+        -3.1615402739330962
+      ]
+    },
+    {
+      "phase": "STRAIGHT",
+      "mode": "straight",
+      "duration_s": 1.5,
+      "radius_m": null,
+      "direction": null,
+      "mean_speed_cm_s": 148.9733016745078,
+      "end_position_m": [
+        2.1765027312731435,
+        -5.26464087153467
+      ]
+    },
+    {
+      "phase": "CURVE LEFT",
+      "mode": "curve",
+      "duration_s": 3.0,
+      "radius_m": 2.0,
+      "direction": "left",
+      "mean_speed_cm_s": 199.22064562578757,
+      "end_position_m": [
+        4.336702329754606,
+        -8.695442608452181
+      ]
+    },
+    {
+      "phase": "STRAIGHT",
+      "mode": "straight",
+      "duration_s": 1.8,
+      "radius_m": null,
+      "direction": null,
+      "mean_speed_cm_s": 150.8221163757024,
+      "end_position_m": [
+        7.333936209402078,
+        -8.372856935796314
+      ]
+    }
+  ]
+}

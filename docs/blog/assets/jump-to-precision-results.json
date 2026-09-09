@@ -1,0 +1,15 @@
+{
+  "skill": "jump_to",
+  "target_x_m": 0.5,
+  "target_height_m": 0.12,
+  "commanded_vx_m_s": 0.7,
+  "commanded_vz_m_s": 2.6,
+  "achieved_launch_vx_m_s": 0.8054109079474621,
+  "achieved_launch_vz_m_s": 2.74516589458378,
+  "apex_height_m": 0.5165656451015511,
+  "landing_x_m": 0.4807678030668266,
+  "landing_y_m": -0.011874086987498537,
+  "landing_z_m": 0.3056137051584471,
+  "landing_position_error_cm": 1.92,
+  "success": true
+}

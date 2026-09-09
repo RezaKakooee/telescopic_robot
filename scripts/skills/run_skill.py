@@ -16,7 +16,6 @@ Examples
 """
 from __future__ import annotations
 
-import argparse
 import math
 import os
 import sys
@@ -28,14 +27,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.render import VideoRecorder
 from radial_sphere.run_id import build_run_id
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from skills import SKILL_NAMES
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from skills.runner import (NEEDS_WALL_NORMAL, PHASE_SCHEDULES, default_steps,
                            run_skill)
 
@@ -179,28 +178,7 @@ def report(stats):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Run a radial-sphere skill")
-    p.add_argument("--skill", choices=SKILL_NAMES, help="skill to run")
-    p.add_argument("--demo", action="store_true", help="run all skills in sequence")
-    p.add_argument("--combo", action="store_true",
-                   help="one continuous labelled clip of the ground locomotion skills")
-    p.add_argument("--list", action="store_true", help="list skills and exit")
-    p.add_argument("--steps", type=int, default=None, help="override step budget")
-    p.add_argument("--kind", default=None, help="scenario kind (default: from config)")
-    p.add_argument("--config", default="configs/rl/standing_jump_showcase.yaml")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--video", action="store_true", help="record an mp4")
-    p.add_argument("--per-skill", action="store_true",
-                   help="with --demo: write one video per skill instead of one long clip")
-    p.add_argument("--seconds", type=float, default=None,
-                   help="make each clip this long by repeating the skill's cycle")
-    p.add_argument("--open-arena", action="store_true",
-                   help="force the open goal arena (no rails, no hurdles)")
-    p.add_argument("--no-reset-each", action="store_true",
-                   help="with --demo: keep state across skills instead of resetting")
-    p.add_argument("--camera", default="dual", help="camera name for the video")
-    p.add_argument("--fps", type=int, default=24)
-    args = p.parse_args()
+    args = script_config("run_skill")
 
     if args.list:
         print("Available skills:")
@@ -209,7 +187,10 @@ def main():
         return
 
     if not args.skill and not args.demo and not args.combo:
-        p.error("pass --skill NAME, or --demo, or --combo, or --list")
+        raise SystemExit("pass --skill NAME, or --demo, or --combo, or --list")
+    if args.speed is not None and (args.demo or args.combo or args.skill not in {
+            "move", "move_forward", "go_fast", "go_slow", "turn"}):
+        raise SystemExit("--speed requires --skill move, move_forward, go_fast, go_slow, or turn")
 
     cfg = load_config(args.config)
     kind = args.kind or getattr(cfg.scenario, "kind", "goal")
@@ -257,12 +238,16 @@ def main():
     written = []
     for i, (name, steps, kw) in enumerate(program, 1):
         base_kw = dict(kw)
+        if args.speed is not None:
+            base_kw["speed"] = args.speed
+        if name == "turn":
+            base_kw["angle_deg"] = args.angle_deg
         if not args.demo and args.steps is not None:
             steps = args.steps
 
         # Each skill starts from a clean state, so one skill's leftover
         # momentum cannot distort the next one's clip.
-        if i > 1 and not args.no_reset_each:
+        if i > 1 and args.reset_each:
             env.reset(seed=args.seed)
 
         clip = None

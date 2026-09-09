@@ -1,0 +1,12 @@
+# Knobs for scripts/run_tests.py.
+# Override on the command line, for example:
+#     python scripts/run_tests.py all=true
+
+#: Also run the long integration drivers (about ten minutes).
+all: false
+
+#: Print what would run, then exit.
+list: false
+
+#: unittest verbosity, 1 or 2.
+verbose: 1

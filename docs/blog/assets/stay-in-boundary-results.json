@@ -1,0 +1,18 @@
+{
+  "scenario": "wall_less_circular_boundary",
+  "boundary_radius_m": 2.0,
+  "max_radius_reached_m": 1.8797,
+  "containment_margin_m": 0.1203,
+  "containment_success": true,
+  "mean_speed_mps": 0.6768,
+  "max_speed_mps": 1.4534,
+  "sub_skills_observed": [
+    "curve",
+    "move",
+    "stop",
+    "turn"
+  ],
+  "sim_steps": 12000,
+  "sim_duration_s": 120.0,
+  "video_duration_s": 120.0
+}

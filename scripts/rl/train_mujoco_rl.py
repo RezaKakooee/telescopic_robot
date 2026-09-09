@@ -8,7 +8,8 @@ Usage:
 """
 from __future__ import annotations
 
-import argparse
+from radial_sphere.config import script_config
+
 import logging
 from pathlib import Path
 
@@ -61,30 +62,9 @@ def make_mujoco_env(cfg, kind: str, rank: int, seed: int, max_steps: int, mode: 
 
 
 def main():
-    p = argparse.ArgumentParser(description="RL training on Native MuJoCo")
-    p.add_argument("--kind", choices=TRAIN_KINDS, default="maze")
-    p.add_argument("--algo", choices=["ppo", "sac"], default="ppo",
-                   help="RL algorithm: ppo | sac (default: ppo)")
-    p.add_argument("--mode", choices=["steering", "lowlevel"], default=None,
-                   help="control mode: steering (3D action) | lowlevel (60D slide actions)")
-    p.add_argument("--steps", type=int, default=None,
-                   help="total RL timesteps (default: from config)")
-    p.add_argument("--n-envs", type=int, default=None,
-                   help="parallel envs (default: from config)")
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--config", default=None,
-                   help="path to a config.yaml")
-    p.add_argument("--config-name", "-cn", dest="config_name", default="maze_level3_random_endpoints",
-                   help="config variant name under configs/rl/")
-    p.add_argument("--device", default=None,
-                   help="torch device: cpu | cuda (default: from config)")
-    p.add_argument("--resume", default=None,
-                   help="path to a run directory or model checkpoint to resume from")
-    p.add_argument("overrides", nargs="*",
-                   help="config overrides as key=value")
-    args = p.parse_args()
+    args = script_config("train_mujoco_rl", passthrough=True)
 
-    cfg = load_config_cli(path=args.config, name=args.config_name, overrides=args.overrides)
+    cfg = load_config_cli(path=args.config, name=args.config_name, overrides=args.scenario_overrides)
     rl = cfg.rl
     mode = str(args.mode if args.mode is not None else getattr(rl, "mode", "steering"))
     algo = str(args.algo).lower()

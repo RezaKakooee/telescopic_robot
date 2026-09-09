@@ -11,7 +11,7 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 out_dir = Path("storage_local/jump_test")
 out_dir.mkdir(parents=True, exist_ok=True)

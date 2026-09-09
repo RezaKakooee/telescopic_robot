@@ -1,0 +1,22 @@
+# Knobs for scripts/rl/train_rl.py.
+# Override on the command line, for example:
+#     python scripts/rl/train_rl.py kind=<value>
+
+kind: "goal"
+
+#: total PPO timesteps (default: config rl.total_steps)
+steps: null
+
+#: parallel envs (default: config rl.n_envs)
+n_envs: null
+
+seed: 0
+
+#: prior run directory or PPO checkpoint to resume
+resume: null
+
+#: path to a config.yaml (default: configs/rl/config.yaml)
+config: null
+
+#: config variant name under configs/rl/
+config_name: null

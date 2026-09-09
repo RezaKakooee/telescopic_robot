@@ -15,7 +15,7 @@ Evidence used for the numbers in this file:
 | source | what it holds |
 |---|---|
 | `tests/test_skills.py` | the asserted per-skill measurements, re-run after every change |
-| `scripts/skills/run_course.py` console output | per-leg distances, jump clearances, contact counts |
+| `demos/course/runner.py` console output | per-leg distances, jump clearances, contact counts |
 | `storage_local/20260827_*__run_course__skill_course/` | course renders |
 | `storage_local/20260827_*__run_skill__combo/` | side-by-side locomotion renders |
 | parameter sweeps run in-session | every "measured" table below |
@@ -226,7 +226,7 @@ height above the deck — instead.
 The cost is that all the sequencing, timing and obstacle awareness has to
 live in the caller. `skills/runner.py` carries the reusable part of that —
 argument routing and default phase schedules — and everything
-course-specific stays in `scripts/skills/run_course.py`.
+course-specific stays in `demos/course/runner.py`.
 
 ---
 
@@ -400,7 +400,7 @@ It was not. From a standstill `move_forward` and `reverse` look identical.
 Added `--combo`: all seven ground skills run back to back in one take with
 **no reset**, so each inherits the momentum the last one left. Every frame
 is stamped with the active skill, live speed, vx, vy and distance
-(`skills/overlay.py`).
+(`radial_sphere/overlay.py`).
 
 Two arena bugs surfaced immediately and are worth recording:
 
@@ -430,7 +430,7 @@ the dead-end spur's T-junction with no special casing.
   **into a dead-end spur and back out in reverse** → bottom corridor →
   down → goal.
 - Generator: `skill_course_scenario` in `radial_sphere/scenario.py`
-  (`kind: skill_course`); driver: `scripts/skills/run_course.py`.
+  (`kind: skill_course`); driver: `demos/course/runner.py`.
 
 Each leg is driven by a named skill, chosen to match the sketch's own
 labels. Steering is pure pursuit with a monotonic waypoint index — needed
@@ -505,7 +505,7 @@ A second box, deeper and taller, on the start corridor. The robot jumps
 
 Getting down is its own problem, so it became skill 12.
 
-### `fall_down` (`skills/falling.py`)
+### `fall_down` (`skills/low_level/falling.py`)
 
 Four phases:
 
@@ -659,7 +659,7 @@ arc down completely, because ballistic flight is a parabola.
 
 ### The calculation
 
-`skills/jump_planner.py` then works backwards from the obstacle:
+`skills/mid_level/jump_planner.py` then works backwards from the obstacle:
 
 1. **Required height** = obstacle height + ball underside (0.165 m) + margin.
 2. **Search** every calibrated row and every take-off stand-off. The ball must
@@ -845,7 +845,7 @@ stand 0.24 m from a face without punching it.
 
 ### 12.5 The hop planner brackets, and refuses
 
-`skills/hop_planner.py` plans each hop from the target pad's geometry and the
+`skills/mid_level/hop_planner.py` plans each hop from the target pad's geometry and the
 calibrated **lift-off envelope** — worst vz, vx bracket, lift height — over
 random orientations. Every parabola in the bracket must land inside the pad's
 safe band and clear its lip by 0.12 m; the planner also chooses *where to
@@ -1325,10 +1325,10 @@ move + stop → plan_standing_hop → jump_to → stop
             → plateau move → fall_down × 3 → stop
 ```
 
-- `skills/stairs.py` is a stateless dispatcher. Its `hop_*` phases delegate
+- `skills/mid_level/stair_climbing.py` is a stateless dispatcher. Its `hop_*` phases delegate
   to `jump_to`; braking delegates to `stop`; travel delegates to `move`; and
   `edge → freefall → absorb → settle` delegates to `fall_down`.
-- `scripts/skills/run_stairs.py` owns course state. It plans from the actual
+- `demos/stairs/runner.py` owns course state. It plans from the actual
   configured tread bounds, changes phase from live velocity/height/contact,
   and verifies each named MuJoCo support geom.
 - A sphere's footing changes after every landing. If an orientation gives a

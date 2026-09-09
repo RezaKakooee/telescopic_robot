@@ -19,7 +19,7 @@ The ride settles by about 10 s and stays. Before this work the robot reached
 Run it:
 
 ```bash
-python scripts/skills/run_motordrome_wall_of_death.py --seconds 75 --video
+python demos/bowl/runner.py seconds=75 video=true
 ```
 
 ## 2. Why the old arena could never work
@@ -114,7 +114,7 @@ drove into it and stopped dead. 1.50 spreads the same bank over a metre.
 
 ## 4. What the controller does
 
-Three ideas, in `skills/wall_of_death.py`.
+Three ideas, in `skills/low_level/bowl_riding.py`.
 
 **1. The gait is aimed at the surface, not at the floor.** `move` builds its
 push wave on how far each rod points *down*. `surface_drive` builds the same
@@ -154,12 +154,12 @@ ratio runs from 4.0x at the lowest amplitude to 1.95x at the highest.
 
 | file | what changed |
 |---|---|
-| `skills/wall_of_death.py` | new: `Bowl`, `advance_radius`, `surface_frame`, `wall_of_death` |
-| `skills/locomotion.py` | new `surface_drive`; stroke-aware speed curve |
+| `skills/low_level/bowl_riding.py` | new: `Bowl`, `advance_radius`, `surface_frame`, `wall_of_death` |
+| `skills/low_level/locomotion.py` | new `surface_drive`; stroke-aware speed curve |
 | `radial_sphere/scenario.py` | bowl profile from the ride condition |
 | `radial_sphere/mujoco_mjcf.py` | bowl built from a radius/height profile; configurable friction |
 | `configs/rl/motordrome.yaml` | new: the arena and the long-stroke build |
-| `scripts/skills/run_motordrome_wall_of_death.py` | rewritten on the skill |
+| `demos/bowl/runner.py` | rewritten on the skill |
 | `tests/test_skills.py` | test 17: sustained ride, not a peak |
 
 ## 7. Known limits

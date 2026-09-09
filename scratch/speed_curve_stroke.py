@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.locomotion import move, SPEED_CURVE
+from skills.low_level.locomotion import move, SPEED_CURVE
 cfg=load_config("configs/rl/motordrome.yaml"); OmegaConf.set_struct(cfg,False)
 GAINS=[g for g,_ in SPEED_CURVE]; V16=[v for _,v in SPEED_CURVE]
 print("Does the measured speed curve just scale with stroke?\n")

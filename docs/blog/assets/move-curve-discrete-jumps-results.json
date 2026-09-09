@@ -1,0 +1,69 @@
+{
+  "scenario": "discrete_heading_jumps",
+  "commanded_speed_m_s": 1.2,
+  "total_duration_s": 6.6000000000000005,
+  "nominal_curve_radius_m": 2.2,
+  "phases": [
+    {
+      "phase": "STRAIGHT",
+      "angle_deg": 0.0,
+      "duration_s": 1.5,
+      "mean_speed_cm_s": 110.57017034941234,
+      "min_speed_cm_s": 12.259896237918527,
+      "max_speed_cm_s": 146.84649622075642,
+      "end_pos_m": [
+        1.6896520708439684,
+        -0.08833435368631352
+      ]
+    },
+    {
+      "phase": "JUMP +30\u00b0",
+      "angle_deg": 30.0,
+      "duration_s": 1.2,
+      "mean_speed_cm_s": 153.8111982696948,
+      "min_speed_cm_s": 136.99687791952695,
+      "max_speed_cm_s": 166.13693570831023,
+      "end_pos_m": [
+        3.5191425999525223,
+        -0.31313076662945066
+      ]
+    },
+    {
+      "phase": "JUMP +60\u00b0",
+      "angle_deg": 60.0,
+      "duration_s": 1.2,
+      "mean_speed_cm_s": 172.1564996837006,
+      "min_speed_cm_s": 152.26885936726507,
+      "max_speed_cm_s": 184.47334277618853,
+      "end_pos_m": [
+        5.418684395705877,
+        -1.1055781005770255
+      ]
+    },
+    {
+      "phase": "JUMP +90\u00b0",
+      "angle_deg": 90.0,
+      "duration_s": 1.2,
+      "mean_speed_cm_s": 191.9895291910348,
+      "min_speed_cm_s": 171.64697138844517,
+      "max_speed_cm_s": 205.01519240049174,
+      "end_pos_m": [
+        7.072893953781619,
+        -2.6868123071506322
+      ]
+    },
+    {
+      "phase": "STRAIGHT",
+      "angle_deg": 90.0,
+      "duration_s": 1.5,
+      "mean_speed_cm_s": 197.1450481476639,
+      "min_speed_cm_s": 186.71266000911245,
+      "max_speed_cm_s": 204.77409153796148,
+      "end_pos_m": [
+        8.680670583056838,
+        -5.167990391884464
+      ]
+    }
+  ],
+  "max_lane_deviation_cm": 318.37556526546047
+}

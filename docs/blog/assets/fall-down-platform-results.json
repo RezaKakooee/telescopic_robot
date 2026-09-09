@@ -1,0 +1,11 @@
+{
+  "skill": "fall_down",
+  "platform_height_m": 0.18,
+  "initial_core_z_m": 0.3777353862993711,
+  "final_core_z_m": 0.19905395223448458,
+  "net_drop_cm": 17.868143406488652,
+  "minimum_core_z_m": 0.17546808912010475,
+  "minimum_shell_clearance_cm": 2.546808912010476,
+  "peak_downward_velocity_m_s": 1.5542005927574543,
+  "zero_core_impact": true
+}

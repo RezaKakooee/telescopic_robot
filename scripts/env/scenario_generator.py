@@ -24,8 +24,6 @@ try:
 except ImportError:
     pass
 
-import argparse
-
 import numpy as np
 import rootutils
 from loguru import logger as log
@@ -34,29 +32,19 @@ rootutils.setup_root(__file__, pythonpath=True)
 
 from radial_sphere import (KINDS, build_run_id, generate_scenario,  # noqa: E402
                            load_config_cli, make_run_dir, setup_logging)
+from radial_sphere.config import script_config  # noqa: E402
 
 setup_logging()
 
 
 def main():
-    p = argparse.ArgumentParser(description="Generate a scenario for the RadialSphere agent")
-    p.add_argument("--kind", choices=KINDS, default=None,
-                   help="task kind (default: config scenario.kind)")
-    p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--count", type=int, default=1, help="how many scenarios to generate")
-    p.add_argument("--config", default=None,
-                   help="path to a config.yaml (default: project config.yaml)")
-    p.add_argument("--no-preview", dest="preview", action="store_false",
-                   help="skip rendering preview PNGs (faster; no sim build)")
-    p.add_argument("--config-name", "-cn", dest="config_name", default=None,
-                   help="config variant name under configs/rl/")
-    p.add_argument("overrides", nargs="*",
-                   help="config overrides as key=value (Hydra dotlist)")
-    args = p.parse_args()
+    args = script_config("scenario_generator", passthrough=True)
 
     cfg = load_config_cli(path=args.config, name=args.config_name,
-                          overrides=args.overrides)
+                          overrides=args.scenario_overrides)
     kind = args.kind or getattr(cfg.scenario, "kind", "path")
+    if kind not in KINDS:
+        raise SystemExit(f"unknown kind {kind!r}; expected one of {list(KINDS)}")
 
     run_dir = make_run_dir(build_run_id("scenario_generator", tag=kind))
     setup_logging(run_dir)

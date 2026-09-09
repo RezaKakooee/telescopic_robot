@@ -1,0 +1,19 @@
+# Knobs for scripts/run_demo.py.
+#     python scripts/run_demo.py demo=gap
+#     python scripts/run_demo.py demo=all video=false
+
+#: Which demo in demos/ to run. "all" runs every one.
+demo: null
+
+#: List the available demos and exit.
+list: false
+
+#: Record video. Null uses whatever the demo's yaml says.
+video: null
+
+#: Override the demo's step count. Null keeps it.
+steps: null
+
+#: Force the shared declarative runner, even for a demo that has its own
+#: runner.py. This is the path tests/test_demos.py checks.
+declarative: false

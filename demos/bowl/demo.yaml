@@ -1,0 +1,19 @@
+# bowl: everything about showing one skill.
+#   python scripts/run_demo.py demo=bowl
+# `knobs` is what this demo's own runner.py reads.
+
+description: 'Wall of Death: spiral up the inside of a drome.'
+runner: true
+knobs:
+  seconds: 60.0
+  seed: 42
+  config: configs/rl/motordrome.yaml
+  open_rate: 0.1
+  steer_gain: 0.3
+  max_steer: 0.35
+  camera: rim
+  descend_after: null
+  close_rate: 0.2
+  brake_gain: 1.5
+  descend_speed: 0.8
+  video: false

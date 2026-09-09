@@ -1,9 +1,9 @@
 import os; os.environ["MUJOCO_GL"]="egl"
 import pathlib, tempfile, re
-import scripts.skills.run_motordrome_wall_of_death as R
+import demos.bowl.runner as R
 from radial_sphere.config import load_config
 from radial_sphere.scenario import generate_scenario
-from skills.wall_of_death import Bowl
+from skills.low_level.bowl_riding import Bowl
 BASE = pathlib.Path("configs/rl/motordrome.yaml").read_text()
 def cfg_with(**over):
     txt = BASE

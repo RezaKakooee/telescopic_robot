@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .gait import curb_vault, drive_wave, lock_out_leading, underbelly_stance
 from .geometry import quat_to_rotmat
 
 
@@ -145,35 +146,25 @@ def bar_targets(
     dirs_world = dirs_body @ R.T
 
     # 1. Base Push Wave (Dynamic Peristaltic Drive)
-    # Longitudinal coordinate along travel direction (-1 rear, +1 front)
     u_long = dirs_world[:, 0] * d_hat[0] + dirs_world[:, 1] * d_hat[1]
     u_lat = dirs_world[:, 0] * (-d_hat[1]) + dirs_world[:, 1] * d_hat[0]
     u_z = dirs_world[:, 2]
-
-    # Rear factor: trailing rods in rear hemisphere generate strong forward torque
-    rear_factor = np.clip((-u_long - 0.10) / 0.90, 0.0, 1.0)
-    # Downward stance factor: concentrates push in rear-downward quadrant
-    down_factor = np.clip(1.0 - abs(u_z + 0.35) / 0.85, 0.0, 1.0)
-    # Lateral tuck factor: suppress side flank rods from extending laterally
-    lat_tuck = np.clip(1.0 - 1.8 * (u_lat ** 2), 0.0, 1.0)
 
     # Effective back gain (boosted on steep incline slopes)
     effective_gain = back_gain
     if enable_incline_assist and incline_pitch > 0.04:
         effective_gain = back_gain * (1.0 + incline_boost_gain * np.sin(incline_pitch))
 
-    wave = np.clip((rear_factor ** 1.1) * down_factor * effective_gain * lat_tuck, 0.0, 1.0)
+    wave = drive_wave(u_long, u_lat, u_z, effective_gain)
 
     # 2. Obstacle / Curb Vaulting Boost
     if enable_curb_vaulting:
-        is_rear_pusher = (u_long < -0.10) & (u_z < 0.10)
-        wave[is_rear_pusher] = np.clip(wave[is_rear_pusher] * curb_boost_gain, 0.0, 1.0)
+        wave = curb_vault(wave, u_long, u_z, curb_boost_gain)
 
     # 3. Ground-Contacting Underbelly Support (Capped low-profile so no seesaw tipping occurs)
     if enable_underbelly_contact:
-        is_underbelly = (u_z < underbelly_threshold_z) & (u_long <= -0.05)
-        depth_fraction = np.clip((-u_z - abs(underbelly_threshold_z)) / (1.0 - abs(underbelly_threshold_z)), 0.0, 1.0)
-        support_stance = depth_fraction * underbelly_stance_gain * np.clip(1.0 - 1.5 * (u_lat ** 2), 0.0, 1.0)
+        is_underbelly, support_stance = underbelly_stance(
+            u_long, u_lat, u_z, underbelly_stance_gain, underbelly_threshold_z)
         wave = np.where(is_underbelly, np.maximum(wave, support_stance), wave)
 
     # 4. In-Pipe Circumferential Bracing (Transparent Glass Conduit Inspection)
@@ -185,9 +176,9 @@ def bar_targets(
         wave = np.where(is_side_guide, np.maximum(wave, pipe_stance), wave)
         wave[is_rear_pusher] = np.maximum(wave[is_rear_pusher], 0.90)
 
-    # Absolute guarantee: no rod in the leading forward sector (u_long > -0.05) or top (u_z > 0.10) ever extends
-    wave[u_long > -0.05] = 0.0
-    wave[u_z > 0.10] = 0.0
+    # Absolute guarantee: no rod in the leading forward sector or the top cap
+    # ever extends. See radial_sphere.gait for why.
+    wave = lock_out_leading(wave, u_long, u_z)
 
     targets = min_offset + drive * (max_extend - min_offset) * wave
 

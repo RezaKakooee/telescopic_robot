@@ -1,0 +1,6 @@
+# Knobs for docs/blog/render_stay_in_boundary.py.
+# Override on the command line, for example:
+#     python docs/blog/render_stay_in_boundary.py stones=<value>
+
+#: Populate circular arena with procedural stones/boulders.
+stones: false

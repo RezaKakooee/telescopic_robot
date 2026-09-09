@@ -1,5 +1,5 @@
 import os; os.environ["MUJOCO_GL"]="egl"
-import scripts.skills.run_wall_run as W
+import demos.wall_run.runner as W
 print(f"{'push':>5} | " + " ".join(f"{'run'+str(i):>22}" for i in (1,2,3)) + f" {'squash':>7} {'endz':>5}")
 for pf in (0.65, 0.70, 0.75):
     r = W.run(seconds=24, record_video=False, repeats=3, push_frac=pf)

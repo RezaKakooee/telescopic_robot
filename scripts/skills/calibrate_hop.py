@@ -15,7 +15,6 @@ planner works from those, so its promises hold on a bad day, not a lucky one.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -26,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
@@ -90,16 +89,7 @@ def one_hop(env, d_hat, vx_cmd, vz_cmd, rng, args=None):
 
 
 def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--config", default="configs/rl/pillar_course.yaml")
-    p.add_argument("--repeats", type=int, default=10)
-    p.add_argument("--wall-lock", action="store_true", default=True,
-                   help="burn with the leading sector shut (course mode)")
-    p.add_argument("--vz-grid", type=float, nargs="+",
-                   default=[3.0, 3.6, 4.2, 4.8])
-    p.add_argument("--vx-grid", type=float, nargs="+",
-                   default=[0.6, 0.9, 1.2])
-    args = p.parse_args()
+    args = script_config("calibrate_hop")
 
     cfg = load_config(args.config)
     cfg.scenario.goal.x_range = [0.0, 0.0]

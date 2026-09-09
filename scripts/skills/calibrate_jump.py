@@ -7,7 +7,7 @@ while they do it. So we measure the map once:
 
     (run-up gain, crouch steps)  ->  take-off state
 
-and write it to a table. `skills/jump_planner.py` inverts that table at run
+and write it to a table. `skills/mid_level/jump_planner.py` inverts that table at run
 time: it works out the take-off velocity an obstacle demands, then reads back
 the crouch length and trigger distance that deliver it.
 
@@ -16,7 +16,6 @@ the crouch length and trigger distance that deliver it.
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -27,7 +26,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import numpy as np
 
-from radial_sphere.config import load_config
+from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
@@ -95,10 +94,7 @@ def one_trial(env, d_hat, gain, crouch_steps, run_up_m=RUN_UP_M, phase_offset=0)
 
 
 def main():
-    p = argparse.ArgumentParser(description="Calibrate the jump take-off")
-    p.add_argument("--config", default="configs/rl/skill_course.yaml")
-    p.add_argument("--quick", action="store_true")
-    args = p.parse_args()
+    args = script_config("calibrate_jump")
 
     cfg = load_config(args.config)
     # Flat, empty arena: no walls or boxes to interfere with the run-up.

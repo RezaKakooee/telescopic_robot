@@ -1,0 +1,19 @@
+{
+  "skill": "follow_path",
+  "total_path_length_m": 7.8,
+  "final_position": [
+    8.06,
+    -0.11
+  ],
+  "final_goal_distance_cm": 27.9,
+  "mean_cross_track_error_cm": 12.8,
+  "max_cross_track_error_cm": 56.3,
+  "sub_skills_dispatched": {
+    "move": 191,
+    "curve": 243,
+    "turn": 135,
+    "stop": 51
+  },
+  "total_duration_s": 6.2,
+  "success": true
+}

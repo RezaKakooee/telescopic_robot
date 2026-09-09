@@ -25,14 +25,16 @@ from . import execute_skill
 
 # Skills that steer relative to a heading vector.
 NEEDS_HEADING = {
+    "move", "turn", "curve", "curved_movement",
     "move_forward", "move_right", "move_left", "go_fast", "go_slow", "reverse",
     "jump_forward_while_stopped", "jump_forward_while_moving", "fall_down",
     "jump_to", "straddle_gap", "straddle",
+    "traverse_rough_terrain", "rough_terrain", "active_suspension",
 }
 
 
 # Skills that read the robot's own position.
-NEEDS_POSITION = {"circle", "slalom", "training_cones", "curved_slalom", "curved_training_cones"}
+NEEDS_POSITION = {"circle", "curve", "curved_movement", "slalom", "training_cones", "curved_slalom", "curved_training_cones", "follow_path", "track_path", "stay_in_boundary", "stay_within_boundary", "boundary_containment"}
 
 #: Skills that carry their own state and arena model, so the generic runner
 #: cannot drive them. They need arena geometry, contacts, and course state;
@@ -43,7 +45,7 @@ SELF_DRIVEN = {
 }
 
 # Skills that read the robot's own velocity.
-NEEDS_VELOCITY = {"stop"}
+NEEDS_VELOCITY = {"stop", "move", "move_forward", "turn", "follow_path", "track_path", "traverse_rough_terrain", "rough_terrain", "active_suspension", "stay_in_boundary", "stay_within_boundary", "boundary_containment"}
 
 # Skills that need to know where the wall is.
 NEEDS_WALL_NORMAL = {"push_against_wall"}
@@ -121,10 +123,41 @@ def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
     if name in NEEDS_VELOCITY and "lin_vel" not in call:
         call["lin_vel"] = env.data.qvel[0:2].copy()
 
+    if name in {"move", "move_forward", "turn", "curve", "curved_movement"}:
+        call.setdefault("rod_mechanism", getattr(env.cfg.robot, "rod_mechanism", "single_stage"))
+
     # jump_to servos its burn against the live velocity.
     if name == "jump_to" and "vel" not in call:
         call["vel"] = env.data.qvel[0:3].copy()
 
+    if name in {"follow_path", "track_path"} and "path_pts" not in call:
+        if hasattr(env, "scenario") and hasattr(env.scenario, "path_pts"):
+            call["path_pts"] = env.scenario.path_pts
+
+    if name in {"traverse_rough_terrain", "rough_terrain", "active_suspension"} or (
+        name in {"stay_in_boundary", "stay_within_boundary", "boundary_containment"}
+        and call.get("enable_suspension", False)
+    ):
+        from .low_level.suspension import SuspensionState
+        now = float(env.data.time)
+        if not hasattr(env, "_suspension_state") or now <= getattr(env, "_suspension_last_time", -1):
+            env._suspension_state = SuspensionState(targets=env.data.ctrl.copy())
+        env._suspension_last_time = now
+        call.setdefault("suspension_state", env._suspension_state)
+        call.setdefault("control_dt", float(env.model.opt.timestep * env.action_repeat))
+        if "core_z" not in call:
+            call["core_z"] = float(env.data.qpos[2])
+        if "core_vz" not in call:
+            call["core_vz"] = float(env.data.qvel[2])
+        if "contact_forces" not in call and hasattr(env, "get_rod_contact_forces"):
+            call["contact_forces"] = env.get_rod_contact_forces()
+        if "terrain_clearances" not in call and hasattr(env, "get_terrain_clearances"):
+            call["terrain_clearances"] = env.get_terrain_clearances()
+
+    if name in {"stay_in_boundary", "stay_within_boundary", "boundary_containment"}:
+        if "step_count" not in call:
+            call["step_count"] = step
+        call.setdefault("rod_mechanism", getattr(env.cfg.robot, "rod_mechanism", "single_stage"))
 
     if name in NEEDS_WALL_NORMAL:
         if wall_normal is None:
@@ -165,9 +198,23 @@ def run_skill(env, name, steps=None, *, d_hat=None, wall_normal=None,
     peak_z = float(start[2])
     max_speed = 0.0
 
+    track_heading = None
+    if name in {"move", "move_forward", "turn"} and d_hat is not None:
+        from .low_level.locomotion import _rotate
+        angle = (-np.deg2rad(kwargs.get("angle_deg", 0.0)) if name == "turn"
+                 else kwargs.get("turn", 0.0))
+        track_heading = _rotate(d_hat, angle)
+        track_heading /= np.linalg.norm(track_heading)
+        if kwargs.get("speed", 1.2) < 0:
+            track_heading = -track_heading
+
     for step in range(steps):
+        call = dict(kwargs)
+        if track_heading is not None and "cross_track_error" not in call:
+            normal = np.array([-track_heading[1], track_heading[0]])
+            call["cross_track_error"] = float((env.data.qpos[:2] - start[:2]) @ normal)
         targets = skill_targets(env, name, step, d_hat=d_hat,
-                                wall_normal=wall_normal, **kwargs)
+                                wall_normal=wall_normal, **call)
         env.step(targets)
         peak_z = max(peak_z, float(env.data.qpos[2]))
         max_speed = max(max_speed, float(np.linalg.norm(env.data.qvel[0:2])))

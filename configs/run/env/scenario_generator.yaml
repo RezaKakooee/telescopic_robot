@@ -1,0 +1,24 @@
+# Knobs for scripts/env/scenario_generator.py.
+# Override on the command line, for example:
+#     python scripts/env/scenario_generator.py kind=goal count=5 preview=false
+#
+# Keys this file does not declare are passed through as scenario overrides,
+# for example scenario.maze.n_blockers=4.
+
+#: Task kind. Null takes scenario.kind from the config.
+kind: null
+
+#: First seed. Scenario i uses seed + i.
+seed: 0
+
+#: How many scenarios to generate.
+count: 1
+
+#: Path to a config yaml. Null uses the project default.
+config: null
+
+#: Config variant name under configs/rl/.
+config_name: null
+
+#: Render a preview PNG per scenario. False skips the sim build, which is faster.
+preview: true

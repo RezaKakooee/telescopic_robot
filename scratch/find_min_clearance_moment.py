@@ -5,8 +5,8 @@ import numpy as np
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.slalom import slalom
-from scripts.skills.run_training_cones import _cone_contact
+from skills.low_level.cone_courses import slalom
+from demos.training_cones.runner import _cone_contact
 
 cfg = load_config("configs/rl/training_cones.yaml")
 scenario = generate_scenario("training_cones", cfg, seed=42)

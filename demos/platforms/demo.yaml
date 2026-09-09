@@ -1,0 +1,13 @@
+# platforms: everything about showing one skill.
+#   python scripts/run_demo.py demo=platforms
+# `knobs` is what this demo's own runner.py reads.
+
+description: Hop between raised platforms.
+runner: true
+knobs:
+  config: configs/rl/skill_course.yaml
+  video: false
+  camera: fixed_angle_side_close
+  fps: 25
+  frame_every: 4
+  margin: 0.03

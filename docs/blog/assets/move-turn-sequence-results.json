@@ -1,0 +1,48 @@
+{
+  "duration_s": 12,
+  "phase_duration_s": 4,
+  "reset_between_phases": false,
+  "phases": [
+    {
+      "phase": "straight",
+      "angle_deg_right_positive": 0.0,
+      "requested_heading": [
+        1.0,
+        0.0
+      ],
+      "mean_final_second_velocity_cm_s": [
+        120.71667208424155,
+        -3.809422947201951
+      ],
+      "final_second_direction_error_degrees": -1.8074674006104428
+    },
+    {
+      "phase": "right",
+      "angle_deg_right_positive": 90.0,
+      "requested_heading": [
+        6.123233995736766e-17,
+        -1.0
+      ],
+      "mean_final_second_velocity_cm_s": [
+        -9.8354984181019,
+        -120.92816638880146
+      ],
+      "final_second_direction_error_degrees": -4.649825283382518
+    },
+    {
+      "phase": "left",
+      "angle_deg_right_positive": -90.0,
+      "requested_heading": [
+        1.0,
+        0.0
+      ],
+      "mean_final_second_velocity_cm_s": [
+        123.27869994577539,
+        14.123396919007018
+      ],
+      "final_second_direction_error_degrees": 6.535584294432415
+    }
+  ],
+  "seed": 42,
+  "mujoco_version": "3.8.1"
+}

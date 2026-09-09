@@ -12,8 +12,8 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
-from skills.overlay import annotate
-from scripts.skills.run_training_cones import draw_slalom_minimap, _cone_contact
+from radial_sphere.overlay import annotate
+from demos.training_cones.runner import draw_slalom_minimap, _cone_contact
 
 ARTIFACTS_DIR = Path("/home/azureuser/.gemini/antigravity-ide/brain/cae66589-5edc-46dd-9306-d193640ffe8c")
 

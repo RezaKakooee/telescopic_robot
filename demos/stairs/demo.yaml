@@ -1,0 +1,10 @@
+# stairs: everything about showing one skill.
+#   python scripts/run_demo.py demo=stairs
+# `knobs` is what this demo's own runner.py reads.
+
+description: Climb a flight of stairs and come back down.
+runner: true
+knobs:
+  seed: 42
+  slowmo: 1
+  video: true

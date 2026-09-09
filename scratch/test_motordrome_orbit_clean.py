@@ -9,9 +9,9 @@ from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.run_id import build_run_id
 from radial_sphere.snapshot import make_run_dir
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 from omegaconf import OmegaConf
-from skills.locomotion import move
+from skills.low_level.locomotion import move
 
 def main():
     floor_r = 1.0

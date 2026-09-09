@@ -10,7 +10,7 @@ from radial_sphere.scenario import generate_scenario
 from radial_sphere.run_id import build_run_id
 from radial_sphere.snapshot import make_run_dir
 import cv2
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 cfg = load_config("configs/rl/chimney.yaml")
 scenario = generate_scenario("chimney", cfg, seed=42)

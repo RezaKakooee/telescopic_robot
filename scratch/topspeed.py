@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.locomotion import move
+from skills.low_level.locomotion import move
 cfg=load_config("configs/rl/motordrome.yaml"); OmegaConf.set_struct(cfg,False)
 print(f"{'stroke':>7} {'foot_mu':>8} {'v_top':>7} {'v^2/g':>7}  (v^2/g caps r*tan(bank) at the ride point)")
 for stroke in (0.26, 0.30, 0.34):

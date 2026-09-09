@@ -19,6 +19,7 @@ Both return an ``omegaconf.DictConfig`` (attribute access: ``cfg.robot.n_bars``)
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from omegaconf import DictConfig, OmegaConf
@@ -89,3 +90,145 @@ def load_config_cli(path: str | Path | None = None,
     if chosen.exists():
         os.environ.setdefault("RADIAL_SPHERE_CONFIG", str(chosen.resolve()))
     return cfg
+
+
+def _find_run_config(script: str, config_dir: str | Path | None = None):
+    """Locate ``configs/run/**/<script>.yaml`` and return ``(folder, path)``.
+
+    Knobs are grouped by domain under ``configs/run/``, mirroring the layout
+    of ``scripts/``: ``run/rl/train_rl.yaml``, ``run/imitation/train_bc.yaml``.
+    That keeps command knobs apart from ``configs/rl/``, which holds the
+    scenario, floor, robot and sim2real presets - a different kind of thing
+    that happens to live in the same tree.
+    """
+    if config_dir is not None:
+        root = Path(config_dir)
+        return root, root / f"{script}.yaml"
+    base = _ROOT / "configs" / "run"
+    hits = sorted(base.rglob(f"{script}.yaml"))
+    if len(hits) > 1:
+        raise SystemExit(f"{script!r} is defined more than once: "
+                         + ", ".join(str(h.relative_to(_ROOT)) for h in hits))
+    if not hits:
+        known = sorted(q.stem for q in base.rglob("*.yaml"))
+        raise SystemExit(f"no config for {script!r} under {base}. "
+                         f"Known: {', '.join(known)}")
+    return hits[0].parent, hits[0]
+
+
+def script_config(script: str,
+                  argv: list[str] | None = None,
+                  *,
+                  passthrough: bool = False,
+                  config_dir: str | Path | None = None) -> DictConfig:
+    """Compose an entry script's own knobs, plus ``key=value`` CLI overrides.
+
+    Entry scripts used to parse flags with `argparse`, which meant every knob
+    was declared twice: once in the parser and once in whatever yaml the run
+    also loaded. A script's knobs now live under ``configs/run/``, in the
+    folder matching its own place in ``scripts/`` - ``configs/run/rl/`` for
+    ``scripts/rl/``, and so on. The command line takes Hydra dotlist
+    overrides::
+
+        python docs/blog/render_rough_terrain.py seconds=30 speed=0.9
+        python demos/gap/runner.py steps=800 video=false
+
+    Because the yaml can carry a ``defaults:`` list, a script config can pull
+    in a scenario preset from ``configs/rl/`` and override parts of it in the
+    same file.
+
+    A key the script does not declare is an error, so a typo or a stale flag
+    name is reported instead of being silently ignored. Scripts that also feed
+    scenario overrides to :func:`load_config_cli` pass ``passthrough=True``;
+    for those, unknown keys are collected into ``cfg.scenario_overrides`` and
+    one command line can carry both::
+
+        python scripts/rl/train_rl.py seed=7 rl.n_steps=512
+
+    ``--help`` prints the composed config, which is the full list of knobs.
+    Nothing here touches the working directory or the run directory: those
+    stay under the caller's control, which is why this composes by hand
+    instead of using ``@hydra.main``.
+    """
+    from hydra import compose, initialize_config_dir
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    root, path = _find_run_config(script, config_dir)
+
+    if any(a in ("-h", "--help") for a in argv):
+        cfg = _compose_script(compose, initialize_config_dir, root, script, [])
+        print(f"{script}: knobs from {path}\n")
+        print(OmegaConf.to_yaml(cfg))
+        print("Override any of them on the command line as key=value, "
+              "for example:\n"
+              f"    python <this script> {_example_override(cfg)}")
+        raise SystemExit(0)
+
+    bad = [a for a in argv if "=" not in a]
+    if bad:
+        raise SystemExit(
+            f"unexpected argument(s) {bad}. This script takes key=value "
+            f"overrides, not flags. Run with --help to list the knobs.")
+
+    # Split the command line: keys this script declares are its own knobs,
+    # anything else is a scenario override bound for `load_config_cli`. That
+    # lets one command line carry both, e.g.
+    #     python scripts/rl/train_rl.py seed=7 rl.n_steps=512
+    known = set(_compose_script(compose, initialize_config_dir, root, script, []).keys())
+    mine = [a for a in argv if a.split("=", 1)[0].lstrip("+~").split(".")[0] in known]
+    theirs = [a for a in argv if a not in mine]
+    if theirs and not passthrough:
+        raise SystemExit(
+            f"{script}: unknown knob(s) {[t.split('=')[0] for t in theirs]}. "
+            f"This script accepts: {', '.join(sorted(known))}. "
+            f"Run with --help to see the current values.")
+    cfg = _compose_script(compose, initialize_config_dir, root, script, mine)
+    OmegaConf.set_struct(cfg, False)
+    cfg.scenario_overrides = theirs
+    return cfg
+
+
+def _compose_script(compose, initialize_config_dir, root, script, overrides):
+    with initialize_config_dir(config_dir=str(Path(root).resolve()),
+                               version_base=None):
+        return compose(config_name=script, overrides=list(overrides))
+
+
+def _example_override(cfg: DictConfig) -> str:
+    """Pick one leaf key so --help can show a runnable example."""
+    for key, value in cfg.items():
+        if not isinstance(value, DictConfig):
+            return f"{key}={value!r}" if isinstance(value, str) else f"{key}={value}"
+    return "key=value"
+
+
+def demo_config(name: str, argv: list[str] | None = None) -> DictConfig:
+    """Compose one demo's yaml from ``demos/<name>/demo.yaml``.
+
+    A demo folder owns everything about showing one skill: the scenario it
+    runs in, the skill and its arguments, how long to run, what to record,
+    what counts as success, and any knobs its own runner reads. Script knobs
+    used to live in a parallel tree under ``configs/run/``, which meant
+    one demo was described in four places.
+
+    ``key=value`` overrides work the same as :func:`script_config`, including
+    the error on an unknown key, but they address the nested spec, so a knob
+    is written ``knobs.fps=30``.
+    """
+    from hydra import compose, initialize_config_dir
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    root = _ROOT / "demos" / name
+    path = root / "demo.yaml"
+    if not path.exists():
+        available = sorted(q.parent.name for q in (_ROOT / "demos").glob("*/demo.yaml"))
+        raise SystemExit(f"no demo {name!r}; available: {', '.join(available)}")
+
+    if any(a in ("-h", "--help") for a in argv):
+        cfg = _compose_script(compose, initialize_config_dir, root, "demo", [])
+        print(f"{name}: {path}\n")
+        print(OmegaConf.to_yaml(cfg))
+        raise SystemExit(0)
+
+    overrides = [a for a in argv if "=" in a]
+    return _compose_script(compose, initialize_config_dir, root, "demo", overrides)

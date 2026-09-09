@@ -11,9 +11,9 @@ import mujoco
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.locomotion import move
+from skills.low_level.locomotion import move
 from skills import execute_skill
-from skills.overlay import annotate
+from radial_sphere.overlay import annotate
 
 FORWARD = np.array([1.0, 0.0], dtype=np.float32)
 

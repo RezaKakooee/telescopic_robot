@@ -10,11 +10,29 @@ from pathlib import Path
 import imageio
 import numpy as np
 import mujoco
+from PIL import Image, ImageDraw, ImageFont
 
 from radial_sphere.geometry import fibonacci_sphere
-from skills.overlay import annotate
 from scratch.test_mechanism_options import generate_bar_xml
 
+
+def add_caption_band(frame: np.ndarray, title: str, lines: list[str]) -> np.ndarray:
+    """Place descriptive text above a render instead of covering the robot."""
+    image = Image.fromarray(frame).convert("RGB")
+    band_height = 116
+    canvas = Image.new("RGB", (image.width, image.height + band_height), "#101828")
+    canvas.paste(image, (0, band_height))
+
+    draw = ImageDraw.Draw(canvas)
+    font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+    title_font = ImageFont.truetype(font_path, 20)
+    line_font = ImageFont.truetype(font_path, 13)
+    draw.text((14, 10), title, font=title_font, fill="#FFFFFF")
+    y = 42
+    for line in lines:
+        draw.text((14, y), line, font=line_font, fill="#D1E9FF")
+        y += 21
+    return np.asarray(canvas)
 def render_mechanism_scene(mode: str, ext_val: float, width: int = 640, height: int = 480):
     n_bars = 60
     sphere_radius = 0.15
@@ -96,12 +114,11 @@ def main():
         for mode, title, note in modes:
             raw = render_mechanism_scene(mode, ext_val)
             lines = [
-                f"Mechanism: {title}",
                 f"State: {ext_desc}",
-                f"Hub Electronics (Blue Sphere): Visible at center",
-                f"Physical Clearance: {note}",
+                "Hub electronics: blue sphere at centre",
+                f"Clearance: {note}",
             ]
-            annotated = np.array(annotate(raw, title, lines, margin=12), copy=True)
+            annotated = add_caption_band(raw, title, lines)
             frames.append(annotated)
 
         # Stitch horizontally
@@ -109,6 +126,10 @@ def main():
         save_path = out_dir / f"compare_3_mechanisms_{ext_name}.png"
         imageio.imwrite(str(save_path), combined)
         print(f"Saved: {save_path}")
+        if ext_name == "extended":
+            blog_path = Path("docs/blog/assets/rod-mechanism-comparison.png")
+            imageio.imwrite(str(blog_path), combined)
+            print(f"Saved blog asset: {blog_path}")
 
     # Also build a 2x3 comprehensive grid
     img_ret = imageio.imread(str(out_dir / "compare_3_mechanisms_retracted.png"))

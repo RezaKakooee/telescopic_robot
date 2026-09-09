@@ -30,6 +30,10 @@ class MujocoRadialSphereEnv(gym.Env):
 
     metadata = {"render_modes": ["rgb_array"], "render_fps": 30}
 
+    # Slack added to the rod stroke when deciding which terrain ray hits a
+    # rod could actually act on. Hits past that range are reported as NaN.
+    TERRAIN_RAY_MARGIN = 0.05
+
     def __init__(
         self,
         config=None,
@@ -153,14 +157,29 @@ class MujocoRadialSphereEnv(gym.Env):
                     self.wall_geom_ids.add(i)
                     self.obstacle_geom_ids.add(i)
 
-        # Robot all geom IDs
-        self.robot_geom_ids = {self.core_geom_id} | self.foot_geom_ids | self.sleeve_geom_ids
-        for k in range(self.n_bars):
-            gid = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, f"inner_geom_{k}")
-            if gid >= 0:
-                self.robot_geom_ids.add(gid)
-                self.rod_geom_map[gid] = k
+        # Include all descendants, including middle stages and the visual hub.
+        robot_bodies = {self.core_body_id}
+        for bid in range(self.core_body_id + 1, self.model.nbody):
+            if int(self.model.body_parentid[bid]) in robot_bodies:
+                robot_bodies.add(bid)
+        self.robot_geom_ids = {gid for gid in range(self.model.ngeom)
+                               if int(self.model.geom_bodyid[gid]) in robot_bodies}
+        for gid in self.robot_geom_ids:
+            name = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, gid) or ""
+            if name.startswith(("foot_", "sleeve_", "stage1_geom_", "inner_geom_")):
+                self.rod_geom_map[gid] = int(name.rsplit("_", 1)[1])
 
+        # Reserve an unused, default-visible group for ray exclusions.
+        used_groups = set(self.model.geom_group.tolist())
+        ray_exclude_group = next((g for g in (2, 1, 0) if g not in used_groups), None)
+        if ray_exclude_group is None:
+            raise ValueError("Terrain sensing needs an unused visible geometry group")
+        self._terrain_ray_groups = np.ones(6, dtype=np.uint8)
+        self._terrain_ray_groups[ray_exclude_group] = 0
+        excluded = set(self.robot_geom_ids)
+        excluded.update(np.flatnonzero((self.model.geom_contype == 0) &
+                                      (self.model.geom_conaffinity == 0)).tolist())
+        self.model.geom_group[list(excluded)] = ray_exclude_group
         # Precompute sector base hues (3 lat lines x 3 lon lines = 16 sectors)
         n_lat_bins, n_lon_bins = 4, 4
         sector_hues = [
@@ -328,6 +347,8 @@ class MujocoRadialSphereEnv(gym.Env):
         for i in range(self.data.ncon):
             con = self.data.contact[i]
             g1, g2 = con.geom1, con.geom2
+            if g1 in self.robot_geom_ids and g2 in self.robot_geom_ids:
+                continue
             for g_id in (g1, g2):
                 if g_id in self.rod_geom_map:
                     rod_idx = self.rod_geom_map[g_id]
@@ -335,6 +356,35 @@ class MujocoRadialSphereEnv(gym.Env):
                     forces[rod_idx] += float(np.abs(c_force[0]))
         return forces
 
+    def get_terrain_clearances(self) -> np.ndarray:
+        """Signed vertical terrain height under each rod, excluding the robot.
+
+        Negative: raised terrain, such as a rock. Positive: recessed
+        terrain, such as a pit. NaN: nothing this rod can reach. Rods that
+        do not point downwards report zero.
+
+        The value is a vertical offset from the nominal z=0 floor, not a
+        distance along the rod axis. A rod only reports terrain inside its
+        own stroke, so a boulder a metre to the side no longer reads as
+        ground under the foot.
+        """
+        from radial_sphere.geometry import quat_to_rotmat
+        pos = self.data.qpos[:3].copy()
+        dirs_world = self.dirs_body @ quat_to_rotmat(self.data.qpos[3:7]).T
+        clearances = np.zeros(self.n_bars, dtype=np.float32)
+        geomid = np.zeros(1, dtype=np.int32)
+        reach = float(self.sphere_radius + self.max_extend) + self.TERRAIN_RAY_MARGIN
+        for i, direction in enumerate(dirs_world):
+            if direction[2] >= -0.15:
+                continue
+            distance = float(mujoco.mj_ray(
+                self.model, self.data, pos, direction,
+                self._terrain_ray_groups, 1, self.core_body_id, geomid))
+            if distance < 0.0 or distance > reach:
+                clearances[i] = np.nan
+                continue
+            clearances[i] = -(float(pos[2]) + distance * float(direction[2]))
+        return clearances
     # ------------------------------------------------------------------
     # Distance Metric
     # ------------------------------------------------------------------
