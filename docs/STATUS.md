@@ -88,7 +88,7 @@ controller moves the 60 bars. See `docs/ENV_OVERVIEW.md` for the env details.
   `get_states`). Training must run with `enable_camera=False` (the training
   script does this).
 - Old scicore login node: 10 GB per-user memory cap. Training there: only
-  `--n-envs 1`. Use SLURM for real runs.
+  `n_envs=1`. Use SLURM for real runs.
 - metasim's `ObsSaver` buffers frames in RAM (OOM risk) — we use our
   streaming `radial_sphere.render.VideoRecorder` instead.
 - A SLURM timeout once killed the final save; checkpoints now save their

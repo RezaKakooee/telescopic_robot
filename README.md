@@ -11,6 +11,13 @@ steering policy (PPO).
   steering wrapper, rendering. See `docs/ENV_OVERVIEW.md`.
 - `configs/` — YAML configs (OmegaConf). `configs/rl/config.yaml` is the
   single source of truth; see `configs/README.md`.
+- `skills/` — the skill library, grouped by what a skill decides:
+  `low_level/` computes one behaviour, `mid_level/` chooses a low-level
+  skill each step and delegates, `high_level/` is reserved for planning.
+  See `skills/README.md`.
+- `demos/` — one folder per skill demo: `demo.yaml`, plus `runner.py`
+  when the control flow is the point. `python scripts/run_demo.py
+  list=true` shows them. See `demos/README.md`.
 - `scripts/` — entry points, grouped by family; see `scripts/README.md`.
 - `ops/` — SLURM wrappers (`sbatch ops/sb_train.sh train_rl [config] [args]`);
   job logs land in `storage_local/sci_out/<run id>.out`.

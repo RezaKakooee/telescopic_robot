@@ -10,6 +10,13 @@ Companion docs: `skills/README.md` (API reference and how to run),
 `docs/project_journey/01_hierarchical_imitation_and_60d_rl_locomotion.md`
 (the RL chapters that precede this one).
 
+> **Commands in this document are as they were at the time.** The entry
+> scripts have since moved from `argparse` flags to yaml plus hydra, so
+> `--combo` is `combo=true` today and `--frame-every 4` is `frame_every=4`.
+> The skill modules moved too: `skills/` is now split into `low_level/`,
+> `mid_level/` and `high_level/`, and the demo runners live in `demos/`.
+> `skills/README.md` and `demos/README.md` are the current reference.
+
 Evidence used for the numbers in this file:
 
 | source | what it holds |

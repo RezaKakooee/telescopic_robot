@@ -1,5 +1,11 @@
 # Backflip skill
 
+> **The code this describes has been removed.** `skills/somersault.py` and
+> `scripts/skills/run_somersault.py` are gone, and no somersault or backflip
+> skill is in `SKILL_REGISTRY`. The commands below will not run. Kept as a
+> record of the approach and the measurements.
+
+
 This document is the implementation and verification reference for the radial
 sphere's backflip. The complete maneuver is driven by
 `scripts/skills/run_somersault.py`; the pure rod-target primitive lives in
