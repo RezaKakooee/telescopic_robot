@@ -245,7 +245,6 @@ def stay_in_boundary(
     min_offset: float = 0.025,
     core_z: float | None = None,
     core_vz: float | None = None,
-    target_ride_height: float = 0.28,
     contact_forces: np.ndarray | None = None,
     terrain_clearances: np.ndarray | None = None,
     enable_suspension: bool = True,
@@ -254,17 +253,9 @@ def stay_in_boundary(
     climb_drive_gain: float = 2.8,
     obstruction_steps: int = 0,
     climb_patience: int = 150,
-    suspension_kp: float = 0.75,
-    suspension_kd: float = 0.15,
-    suspension_force_compliance: float = 0.0018,
-    nominal_support_force: float = 10.0,
-    terrain_adaptation_gain: float = 0.85,
-    hole_reach_gain: float = 0.045,
     suspension: SuspensionGains | None = None,
     suspension_state: SuspensionState | None = None,
     control_dt: float = 0.01,
-    max_target_speed: float = 0.45,
-    suspension_filter_time: float = 0.06,
     return_metadata: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, dict]:
     """Confine locomotion inside a wall-less circular boundary on the floor.
@@ -314,8 +305,8 @@ def stay_in_boundary(
         1.2 m/s on flat ground.
     climb_drive_gain : drive-wave amplitude while climbing over an obstacle.
     climb_patience : steps spent climbing before pivoting away instead.
-    suspension : a `SuspensionGains` holding the whole correction tuning, in
-        place of the nine separate gain keywords, which stay accepted.
+    suspension : a `SuspensionGains` holding the whole correction tuning.
+        The only way to change a gain; the numbers live on the dataclass.
     rod_mechanism : "single_stage" or "multi_stage".
     curve_rod_mechanism : calibration for the arc phases only. The tracking
         error published for this skill was measured with the multi-stage
@@ -366,13 +357,7 @@ def stay_in_boundary(
     t_left = np.array([-n_out[1], n_out[0]], dtype=np.float64)
     t_dot = float(np.dot(d_now, t_left))
     t_dir = t_left if t_dot >= 0.0 else -t_left
-
-    gains = suspension or SuspensionGains(
-        target_ride_height=target_ride_height, kp=suspension_kp, kd=suspension_kd,
-        force_compliance=suspension_force_compliance,
-        nominal_support_force=nominal_support_force,
-        terrain_adaptation=terrain_adaptation_gain, hole_reach=hole_reach_gain,
-        max_target_speed=max_target_speed, filter_time=suspension_filter_time)
+    gains = suspension or SuspensionGains()
 
     # Targets that already went through apply_suspension must not be
     # corrected a second time; the slew limiter and filter are stateful.
@@ -583,7 +568,7 @@ def stay_in_boundary(
             targets, u_z, max_extend, core_z=core_z, core_vz=vz,
             min_offset=min_offset, contact_forces=contact_forces,
             terrain_clearances=terrain_clearances, support_weight=support_b,
-            state=suspension_state, dt=control_dt, **gains.as_kwargs(),
+            gains=gains, state=suspension_state, dt=control_dt,
         )
 
     meta = {

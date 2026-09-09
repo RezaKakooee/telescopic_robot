@@ -34,11 +34,6 @@ def traverse_rough_terrain(
     lin_vel: np.ndarray | None = None,
     core_z: float | None = None,
     core_vz: float | None = None,
-    target_ride_height: float = 0.28,
-    suspension_kp: float = 0.75,
-    suspension_kd: float = 0.15,
-    suspension_force_compliance: float = 0.0018,
-    nominal_support_force: float = 10.0,
     contact_forces: np.ndarray | None = None,
     enable_underbelly_contact: bool = True,
     underbelly_stance_gain: float = 0.42,
@@ -46,13 +41,9 @@ def traverse_rough_terrain(
     enable_curb_vaulting: bool = True,
     curb_boost_gain: float = 2.6,
     terrain_clearances: np.ndarray | None = None,
-    terrain_adaptation_gain: float = 0.85,
-    hole_reach_gain: float = 0.045,
     suspension: SuspensionGains | None = None,
     suspension_state: SuspensionState | None = None,
     control_dt: float = 0.01,
-    max_target_speed: float = 0.45,
-    suspension_filter_time: float = 0.06,
     return_metadata: bool = False,
 ) -> np.ndarray | tuple[np.ndarray, dict]:
     """Traverse non-smooth, rocky terrain using active terrain-filtering suspension.
@@ -79,28 +70,17 @@ def traverse_rough_terrain(
     back_gain : override for traveling wave gain.
     core_z : current vertical position of the ball core (m).
     core_vz : current vertical velocity of the ball core (m/s).
-    target_ride_height : nominal world-frame core altitude (m), default 0.28m.
-        Set this inside what the build can hold. The 15 cm core with a 16 cm
-        stroke settles near 0.23 m in this rolling gait, and a target above
-        the reachable range pins the height term at its clip, which turns the
-        PD correction into a constant offset.
-    suspension_kp : dimensionless height-error gain.
-    suspension_kd : vertical-velocity gain in seconds.
-    suspension_force_compliance : compliant compliance factor (m/N).
-    nominal_support_force : threshold normal contact force before yielding (N).
     contact_forces : (60,) normal force per rod (N) from simulation sensors.
     enable_underbelly_contact : maintain low-profile ground support under chassis.
     underbelly_stance_gain : underbelly extension depth fraction.
     underbelly_threshold_z : vertical projection boundary for underbelly rods.
     enable_curb_vaulting : boost rear pusher rods against steep rock edges.
-    suspension : a `SuspensionGains` holding the whole correction tuning. It
-        replaces the nine separate gain keywords above, which stay accepted
-        for existing callers. Pass one of these instead of spelling out five
-        zeros to switch the feedback off; see `SuspensionGains.without_feedback`.
+    suspension : a `SuspensionGains` holding the whole correction tuning.
+        This is the only way to change a gain: the numbers live on the
+        dataclass and nowhere else. Use `SuspensionGains.without_feedback()`
+        to switch the corrections off without touching the gait.
     suspension_state : persistent filter history; one instance per robot/run.
     control_dt : elapsed control interval in seconds (default 0.01).
-    max_target_speed : rod-target slew limit in metres per second (default 0.45).
-    suspension_filter_time : filter time constant in seconds (default 0.06).
     curb_boost_gain : multiplier on rear pushers.
     return_metadata : if True, return (targets, meta_dict).
 
@@ -109,12 +89,7 @@ def traverse_rough_terrain(
     targets : (60,) rod extension targets in [min_offset, max_extend].
     meta (optional) : telemetry dictionary with heave correction and compliance.
     """
-    gains = suspension or SuspensionGains(
-        target_ride_height=target_ride_height, kp=suspension_kp, kd=suspension_kd,
-        force_compliance=suspension_force_compliance,
-        nominal_support_force=nominal_support_force,
-        terrain_adaptation=terrain_adaptation_gain, hole_reach=hole_reach_gain,
-        max_target_speed=max_target_speed, filter_time=suspension_filter_time)
+    gains = suspension or SuspensionGains()
 
     R = quat_to_rotmat(quat)
     dirs_world = dirs_body @ R.T
@@ -180,7 +155,7 @@ def traverse_rough_terrain(
         targets, u_z, max_extend, core_z=core_z, core_vz=vz,
         min_offset=min_offset, contact_forces=contact_forces,
         terrain_clearances=terrain_clearances, support_weight=support,
-        state=suspension_state, dt=control_dt, **gains.as_kwargs(),
+        gains=gains, state=suspension_state, dt=control_dt,
     )
     meta["underbelly_active_count"] = int(np.sum(is_underbelly))
     return (targets, meta) if return_metadata else targets

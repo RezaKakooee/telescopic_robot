@@ -364,7 +364,14 @@ enforces the ones a machine can check.
 3. **Docstring.** One full sentence on the first line. A skill with eight or
    more options needs a `Parameters` section, or a `Phases` section if it is a
    phase machine and explains its options there.
-4. **Shared names keep shared meanings.** `min_offset` is 0.025 everywhere,
+4. **A tuning number is declared once.** Gains, thresholds and ride heights
+   live on a frozen dataclass in the skill module, never as a keyword default
+   repeated down a call chain. `SuspensionGains` is the worked example: its
+   nine numbers used to be written in four places, so a default could drift
+   between a skill and the primitive it called. Passing one of the old
+   keywords now raises `TypeError`, which is the point.
+
+5. **Shared names keep shared meanings.** `min_offset` is 0.025 everywhere,
    except in `stop`, which has no `min_offset` at all: it holds its stance on
    `stance_height` and retracts every other rod to zero. Passing `min_offset`
    to `stop` raises `TypeError`, which is how `follow_path` used to crash on a
@@ -373,7 +380,7 @@ enforces the ones a machine can check.
    `back_gain` overrides the speed lookup. Do not invent a different default
    for one skill: `curve` used to default `rod_mechanism` to `"multi_stage"`,
    which quietly drove it about 15 % softer than its neighbours.
-5. **Register it.** Add the name to `SKILL_REGISTRY` in `skills/__init__.py`,
+6. **Register it.** Add the name to `SKILL_REGISTRY` in `skills/__init__.py`,
    otherwise `execute_skill` cannot reach it and the runner cannot drive it.
 
 ## Every name in the registry

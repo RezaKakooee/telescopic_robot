@@ -40,19 +40,6 @@ class SuspensionGains:
         return replace(self, kp=0.0, kd=0.0, force_compliance=0.0,
                        terrain_adaptation=0.0, hole_reach=0.0)
 
-    def as_kwargs(self) -> dict:
-        """Spread into the keyword names ``apply_suspension`` still accepts."""
-        return {
-            "target_ride_height": self.target_ride_height,
-            "suspension_kp": self.kp,
-            "suspension_kd": self.kd,
-            "suspension_force_compliance": self.force_compliance,
-            "nominal_support_force": self.nominal_support_force,
-            "terrain_adaptation_gain": self.terrain_adaptation,
-            "hole_reach_gain": self.hole_reach,
-            "max_target_speed": self.max_target_speed,
-            "filter_time": self.filter_time,
-        }
 
 
 @dataclass
@@ -66,18 +53,18 @@ class SuspensionState:
 
 
 def apply_suspension(targets, u_z, max_extend, *, core_z, core_vz,
-                     target_ride_height=0.28, min_offset=0.025,
-                     suspension_kp=0.75, suspension_kd=0.15,
-                     suspension_force_compliance=0.0018,
-                     nominal_support_force=10.0, contact_forces=None,
-                     terrain_clearances=None, terrain_adaptation_gain=0.85,
-                     hole_reach_gain=0.045, support_weight=None, state=None,
-                     dt=0.01, max_target_speed=0.45, filter_time=0.06):
+                     gains=SuspensionGains(), min_offset=0.025,
+                     contact_forces=None, terrain_clearances=None,
+                     support_weight=None, state=None, dt=0.01):
     """Apply smooth, limited extension corrections, never forces or pose edits.
 
     Ray offsets are signed vertical terrain heights relative to a z=0 floor.
     Positive means a measured depression, not merely an unloaded foot.
     Pass persistent state for temporal filtering and a physical slew limit.
+
+    ``gains`` carries the whole tuning. Those numbers live on
+    :class:`SuspensionGains` and nowhere else, so a default cannot drift
+    between this function and its callers.
 
     ``support_weight`` is a per-rod weight in [0, 1] naming the rods the
     caller already uses to carry the robot. Corrections are scaled by it.
@@ -86,6 +73,14 @@ def apply_suspension(targets, u_z, max_extend, *, core_z, core_vz,
     becomes an anchor and stops the robot, so callers with a travel
     direction should always supply this weight.
     """
+    target_ride_height = gains.target_ride_height
+    suspension_kp, suspension_kd = gains.kp, gains.kd
+    suspension_force_compliance = gains.force_compliance
+    nominal_support_force = gains.nominal_support_force
+    terrain_adaptation_gain = gains.terrain_adaptation
+    hole_reach_gain = gains.hole_reach
+    max_target_speed, filter_time = gains.max_target_speed, gains.filter_time
+
     if dt <= 0 or not np.isfinite(dt):
         raise ValueError("dt must be finite and positive")
     if max_target_speed <= 0 or not np.isfinite(max_target_speed):

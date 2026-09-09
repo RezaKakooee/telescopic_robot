@@ -4,6 +4,7 @@ import numpy as np
 import os
 os.environ["MUJOCO_GL"] = "egl"
 
+from skills.low_level.suspension import SuspensionGains
 from skills.low_level.terrain_following import traverse_rough_terrain
 from skills import execute_skill, SKILL_REGISTRY
 from skills.runner import run_skill
@@ -52,19 +53,22 @@ class TestRoughTerrainSkill(unittest.TestCase):
         # Nominal height
         targets_nom = traverse_rough_terrain(
             self.quat, self.dirs_body, self.max_extend, d_hat=d_hat,
-            core_z=target_z, core_vz=0.0, target_ride_height=target_z
+            core_z=target_z, core_vz=0.0,
+            suspension=SuspensionGains(target_ride_height=target_z)
         )
 
         # High core (e.g. climbed over boulder)
         targets_high = traverse_rough_terrain(
             self.quat, self.dirs_body, self.max_extend, d_hat=d_hat,
-            core_z=target_z + 0.05, core_vz=0.0, target_ride_height=target_z
+            core_z=target_z + 0.05, core_vz=0.0,
+            suspension=SuspensionGains(target_ride_height=target_z)
         )
 
         # Low core (e.g. dipped into trench)
         targets_low = traverse_rough_terrain(
             self.quat, self.dirs_body, self.max_extend, d_hat=d_hat,
-            core_z=target_z - 0.05, core_vz=0.0, target_ride_height=target_z
+            core_z=target_z - 0.05, core_vz=0.0,
+            suspension=SuspensionGains(target_ride_height=target_z)
         )
 
         for idx in down_idx:
@@ -78,11 +82,13 @@ class TestRoughTerrainSkill(unittest.TestCase):
 
         targets_still = traverse_rough_terrain(
             self.quat, self.dirs_body, self.max_extend, d_hat=d_hat,
-            core_z=0.28, core_vz=0.0, target_ride_height=0.28
+            core_z=0.28, core_vz=0.0,
+            suspension=SuspensionGains(target_ride_height=0.28)
         )
         targets_rising = traverse_rough_terrain(
             self.quat, self.dirs_body, self.max_extend, d_hat=d_hat,
-            core_z=0.28, core_vz=0.5, target_ride_height=0.28
+            core_z=0.28, core_vz=0.5,
+            suspension=SuspensionGains(target_ride_height=0.28)
         )
         for idx in down_idx:
             self.assertLessEqual(targets_rising[idx], targets_still[idx] + 1e-4)

@@ -10,7 +10,8 @@ from radial_sphere.geometry import quat_to_rotmat
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills.runner import skill_targets
-from skills.low_level.suspension import SuspensionState, apply_suspension
+from skills.low_level.suspension import (SuspensionGains, SuspensionState,
+                                         apply_suspension)
 
 
 class SuspensionFeedbackTests(unittest.TestCase):
@@ -25,7 +26,7 @@ class SuspensionFeedbackTests(unittest.TestCase):
                     core_z=.20, core_vz=(-1)**step,
                     contact_forces=np.full(3, 80 if step % 2 else 0),
                     terrain_clearances=np.full(3, .08 if step % 2 else -.05),
-                    state=state, dt=dt, max_target_speed=.45,
+                    state=state, dt=dt, gains=SuspensionGains(max_target_speed=.45),
                 )
                 self.assertLessEqual(np.max(abs(result-previous)), .45*dt+2e-8)
                 self.assertTrue(np.all((result >= .025-1e-8) & (result <= .16)))
@@ -109,42 +110,46 @@ class SuspensionFeedbackTests(unittest.TestCase):
         skill_targets(env,'traverse_rough_terrain',d_hat=[1.,0.])
         self.assertIsNot(first,env._suspension_state)
 
-    def test_gains_object_matches_the_separate_keywords(self):
-        """`suspension=` must be a pure repackaging of the nine keywords."""
-        from skills.mid_level.navigation import stay_in_boundary
+    def test_the_tuning_keywords_are_gone(self):
+        """One home for each number, so a default cannot drift.
+
+        `suspension_kp` and its eight siblings used to be written in four
+        places: the dataclass, `apply_suspension`, `traverse_rough_terrain`
+        and `stay_in_boundary`. Passing one now raises, loudly.
+        """
         from skills.low_level.terrain_following import traverse_rough_terrain
-        from skills.low_level.suspension import SuspensionGains
+        from skills.mid_level.navigation import stay_in_boundary
         from radial_sphere.geometry import fibonacci_sphere
 
         dirs = fibonacci_sphere(60).astype(np.float32)
-        quat = np.array([0.94, 0.05, -0.12, 0.31])
-        quat = quat / np.linalg.norm(quat)
-        forces = np.linspace(0, 40, 60)
-        clear = np.linspace(-0.08, 0.08, 60)
-        spread = dict(target_ride_height=.23, suspension_kp=.8, suspension_kd=.2,
-                      suspension_force_compliance=.0022, nominal_support_force=12.,
-                      terrain_adaptation_gain=.9, hole_reach_gain=.055,
-                      max_target_speed=.4, suspension_filter_time=.05)
-        packed = SuspensionGains(target_ride_height=.23, kp=.8, kd=.2,
-                                 force_compliance=.0022, nominal_support_force=12.,
-                                 terrain_adaptation=.9, hole_reach=.055,
-                                 max_target_speed=.4, filter_time=.05)
-        shared = dict(core_z=.21, core_vz=-.05, contact_forces=forces,
-                      terrain_clearances=clear, control_dt=.01)
+        quat = np.array([1., 0., 0., 0.])
+        for call in (
+            lambda: apply_suspension(np.zeros(2), -np.ones(2), .16, core_z=.2,
+                                     core_vz=0., suspension_kp=.8),
+            lambda: traverse_rough_terrain(quat, dirs, .16, suspension_kp=.8),
+            lambda: stay_in_boundary(quat, dirs, .16, ball_xy=np.zeros(2),
+                                     hole_reach_gain=.05),
+        ):
+            with self.assertRaises(TypeError):
+                call()
 
-        a = traverse_rough_terrain(quat, dirs, .16, d_hat=[1., 0.], speed=.72,
-                                   **shared, **spread)
-        b = traverse_rough_terrain(quat, dirs, .16, d_hat=[1., 0.], speed=.72,
-                                   suspension=packed, **shared)
-        np.testing.assert_allclose(a, b, atol=1e-12)
+    def test_the_gains_object_is_the_only_way_in(self):
+        """A tuning passed as an object must actually take effect."""
+        from skills.low_level.terrain_following import traverse_rough_terrain
+        from radial_sphere.geometry import fibonacci_sphere
 
-        boundary = dict(ball_xy=np.array([1.2, .4]), lin_vel=np.array([.3, .1]),
-                        boundary_radius=3.4, speed=1.3, safety_margin=.7,
-                        step_count=40, rough_terrain_gait=True, rough_drive_gain=2.0,
-                        **shared)
-        c = stay_in_boundary(quat, dirs, .16, **boundary, **spread)
-        d = stay_in_boundary(quat, dirs, .16, **boundary, suspension=packed)
-        np.testing.assert_allclose(c, d, atol=1e-12)
+        dirs = fibonacci_sphere(60).astype(np.float32)
+        quat = np.array([.94, .05, -.12, .31]); quat = quat / np.linalg.norm(quat)
+        shared = dict(d_hat=[1., 0.], speed=.72, core_z=.21, core_vz=-.05,
+                      contact_forces=np.linspace(0, 40, 60),
+                      terrain_clearances=np.linspace(-.08, .08, 60), control_dt=.01)
+        soft = traverse_rough_terrain(quat, dirs, .16, **shared,
+                                      suspension=SuspensionGains(target_ride_height=.23))
+        off = traverse_rough_terrain(quat, dirs, .16, **shared,
+                                     suspension=SuspensionGains(target_ride_height=.23)
+                                     .without_feedback())
+        self.assertGreater(float(np.max(np.abs(soft - off))), 1e-6,
+                           "turning the feedback off must change the targets")
 
     def test_without_feedback_keeps_the_gait_and_drops_the_corrections(self):
         from skills.low_level.suspension import SuspensionGains
