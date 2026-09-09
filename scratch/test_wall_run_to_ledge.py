@@ -12,7 +12,7 @@ from radial_sphere.scenario import Scenario, generate_scenario
 from radial_sphere.snapshot import make_run_dir
 from radial_sphere.run_id import build_run_id
 from radial_sphere.overlay import annotate
-from skills.wall_running import FOOT_BASE, next_phase, _frame
+from skills.low_level.wall_running import FOOT_BASE, next_phase, _frame
 from scratch.test_wall_run_upward_bias import wall_run_enhanced
 
 def create_wall_run_ledge_scenario(cfg):
@@ -118,7 +118,7 @@ def run_wall_run_to_ledge(record_video=True, slowmo=2, seconds=7.0):
             cam = mujoco.MjvCamera()
             eye = np.array([pos[0] - 2.8, face_y - 6.8, pos[2] + 3.8])
             look = np.array([pos[0] + 1.2, 0.5 * (pos[1] + face_y), pos[2] + 0.35])
-            from scripts.skills.run_wall_run import _aim
+            from demos.wall_run.runner import _aim
             _aim(cam, eye, look)
             env.renderer.update_scene(env.data, camera=cam)
             frame = annotate(

@@ -1,0 +1,28 @@
+{
+  "skill": "jump_up",
+  "seed": 42,
+  "video_slowdown": 2,
+  "jumps": [
+    {
+      "level": "LOW (20 cm)",
+      "requested_height_cm": 20.0,
+      "measured_rise_cm": 20.905742106766343,
+      "peak_core_height_cm": 40.18634112483046,
+      "error_cm": 0.9057421067663434
+    },
+    {
+      "level": "MEDIUM (35 cm)",
+      "requested_height_cm": 35.0,
+      "measured_rise_cm": 30.543303588032934,
+      "peak_core_height_cm": 50.43675318145168,
+      "error_cm": -4.456696411967066
+    },
+    {
+      "level": "HIGH (50 cm)",
+      "requested_height_cm": 50.0,
+      "measured_rise_cm": 53.398601014259796,
+      "peak_core_height_cm": 72.64508645257285,
+      "error_cm": 3.398601014259796
+    }
+  ]
+}

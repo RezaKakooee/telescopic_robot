@@ -1,0 +1,49 @@
+{
+  "duration_s": 16,
+  "phase_duration_s": 4,
+  "reset_between_phases": false,
+  "seed": 42,
+  "phases": [
+    {
+      "phase": "forward",
+      "requested_speed_cm_s": 120.0,
+      "displacement_cm": [
+        460.04926299304844,
+        -4.993747055122853
+      ],
+      "mean_last_second_vx_cm_s": 120.71667208424157,
+      "end_horizontal_speed_cm_s": 122.97438563795345
+    },
+    {
+      "phase": "stop",
+      "requested_speed_cm_s": 0.0,
+      "displacement_cm": [
+        40.33929027512136,
+        7.414788071868372
+      ],
+      "mean_last_second_vx_cm_s": -0.04269501175455103,
+      "end_horizontal_speed_cm_s": 1.3419144136769667
+    },
+    {
+      "phase": "reverse",
+      "requested_speed_cm_s": -120.0,
+      "displacement_cm": [
+        -458.42704477257536,
+        -4.882111348882995
+      ],
+      "mean_last_second_vx_cm_s": -120.14008438304728,
+      "end_horizontal_speed_cm_s": 123.05550036218138
+    },
+    {
+      "phase": "stop",
+      "requested_speed_cm_s": 0.0,
+      "displacement_cm": [
+        -39.31631948873016,
+        -10.231331368969698
+      ],
+      "mean_last_second_vx_cm_s": 0.40375699026671114,
+      "end_horizontal_speed_cm_s": 1.2010377718005514
+    }
+  ],
+  "mujoco_version": "3.8.1"
+}

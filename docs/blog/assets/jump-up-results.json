@@ -1,0 +1,29 @@
+{
+  "seed": 42,
+  "duration_s": 3,
+  "video_slowdown": 2,
+  "starting_core_height_cm": 19.668765925476247,
+  "peak_core_height_cm": 71.27662375894896,
+  "rise_cm": 51.60785783347271,
+  "airborne_verified": true,
+  "touchdown_verified": true,
+  "final_vertical_speed_cm_s": -18.736337237867932,
+  "phases": [
+    {
+      "phase": "crouch",
+      "time_s": 0.0
+    },
+    {
+      "phase": "takeoff",
+      "time_s": 0.2
+    },
+    {
+      "phase": "airborne",
+      "time_s": 0.32
+    },
+    {
+      "phase": "landing",
+      "time_s": 0.8300000000000001
+    }
+  ]
+}

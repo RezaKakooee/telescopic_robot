@@ -1,0 +1,12 @@
+# chimney_descend: everything about showing one skill.
+#   python scripts/run_demo.py demo=chimney_descend
+# `knobs` is what this demo's own runner.py reads.
+
+description: Slide back down a chimney under friction control.
+runner: true
+knobs:
+  mode: servo
+  v_target: -0.5
+  start_z: 3.5
+  seed: 42
+  video: true

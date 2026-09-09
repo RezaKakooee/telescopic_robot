@@ -8,8 +8,8 @@ import imageio
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.wall_running import FOOT_BASE, _frame
-from skills.locomotion import move, stop
+from skills.low_level.wall_running import FOOT_BASE, _frame
+from skills.low_level.locomotion import move, stop
 
 def test_full_turn_wall_run(
     approach_angle: float = 16.0,

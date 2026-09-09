@@ -2,7 +2,7 @@
 #     python scripts/run_demo.py demo=gap
 #     python scripts/run_demo.py demo=all video=false
 
-#: Which demo in configs/demos/ to run. "all" runs every one.
+#: Which demo in demos/ to run. "all" runs every one.
 demo: null
 
 #: List the available demos and exit.
@@ -13,3 +13,7 @@ video: null
 
 #: Override the demo's step count. Null keeps it.
 steps: null
+
+#: Force the shared declarative runner, even for a demo that has its own
+#: runner.py. This is the path tests/test_demos.py checks.
+declarative: false

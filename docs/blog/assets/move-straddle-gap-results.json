@@ -1,0 +1,20 @@
+{
+  "skill": "straddle_gap",
+  "gap_width_cm": 22.0,
+  "platform_height_cm": 25.0,
+  "initial_pos": [
+    0.07153773074381548,
+    0.0,
+    0.4157286826718891
+  ],
+  "final_pos": [
+    4.864156787767567,
+    -0.021094116846055173,
+    0.3921206756848718
+  ],
+  "total_distance_m": 4.792619057023751,
+  "max_centerline_deviation_cm": 13.067076054897289,
+  "average_cruise_speed_m_s": 1.0400739522252016,
+  "min_core_z_m": 0.3729939141841168,
+  "success": true
+}

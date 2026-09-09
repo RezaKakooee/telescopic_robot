@@ -4,7 +4,7 @@ import numpy as np
 import os
 os.environ["MUJOCO_GL"] = "egl"
 
-from skills.terrain_following import traverse_rough_terrain
+from skills.low_level.terrain_following import traverse_rough_terrain
 from skills import execute_skill, SKILL_REGISTRY
 from skills.runner import run_skill
 from radial_sphere.config import load_config
@@ -176,7 +176,7 @@ class TestRoughTerrainSkill(unittest.TestCase):
         reflex pivoted 65 degrees away from every rock. That looks like the
         robot refusing the terrain.
         """
-        from skills.navigation import stay_in_boundary
+        from skills.mid_level.navigation import stay_in_boundary
 
         common = dict(
             ball_xy=np.array([0.2, 0.1]), lin_vel=np.array([0.0, 0.0]),
@@ -200,7 +200,7 @@ class TestRoughTerrainSkill(unittest.TestCase):
         self.assertEqual(giving_up["action_name"], "roam_obstacle_escape")
 
     def test_support_weight_must_match_rod_count(self):
-        from skills.suspension import apply_suspension
+        from skills.low_level.suspension import apply_suspension
         with self.assertRaises(ValueError):
             apply_suspension(np.zeros(4), -np.ones(4), 0.16, core_z=0.2, core_vz=0.0,
                              support_weight=np.ones(3))

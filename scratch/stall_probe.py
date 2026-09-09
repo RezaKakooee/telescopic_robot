@@ -4,7 +4,7 @@ from omegaconf import OmegaConf
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.bowl_riding import Bowl, advance_radius, wall_of_death, surface_frame
+from skills.low_level.bowl_riding import Bowl, advance_radius, wall_of_death, surface_frame
 cfg=load_config("configs/rl/motordrome.yaml"); OmegaConf.set_struct(cfg,False)
 sc=generate_scenario("motordrome",cfg,seed=1); md=sc.motordromes[0]
 bowl=Bowl.from_motordrome(md)

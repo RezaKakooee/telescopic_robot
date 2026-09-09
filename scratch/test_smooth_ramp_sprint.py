@@ -11,7 +11,7 @@ from radial_sphere.run_id import build_run_id
 from radial_sphere.snapshot import make_run_dir
 from radial_sphere.overlay import annotate
 from omegaconf import OmegaConf
-from skills.locomotion import move
+from skills.low_level.locomotion import move
 
 def main():
     cyl_rad = 0.85

@@ -1,7 +1,7 @@
 """The two gait callers must keep sharing one drive wave.
 
 ``radial_sphere.controller.bar_targets`` and
-``skills.locomotion.traverse_rough_terrain`` used to hold separate copies of
+``skills.low_level.locomotion.traverse_rough_terrain`` used to hold separate copies of
 the same arithmetic. They drifted: a widened curb-vault sector landed in one
 and not the other. Both now call ``radial_sphere.gait``, and these checks fail
 if either grows a private copy again.
@@ -15,7 +15,7 @@ import numpy as np
 from radial_sphere import gait
 from radial_sphere.controller import bar_targets
 from radial_sphere.geometry import fibonacci_sphere
-from skills.terrain_following import traverse_rough_terrain
+from skills.low_level.terrain_following import traverse_rough_terrain
 
 MAX_EXTEND = 0.16
 MIN_OFFSET = 0.025

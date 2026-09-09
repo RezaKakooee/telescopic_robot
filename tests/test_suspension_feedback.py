@@ -10,7 +10,7 @@ from radial_sphere.geometry import quat_to_rotmat
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills.runner import skill_targets
-from skills.suspension import SuspensionState, apply_suspension
+from skills.low_level.suspension import SuspensionState, apply_suspension
 
 
 class SuspensionFeedbackTests(unittest.TestCase):
@@ -111,9 +111,9 @@ class SuspensionFeedbackTests(unittest.TestCase):
 
     def test_gains_object_matches_the_separate_keywords(self):
         """`suspension=` must be a pure repackaging of the nine keywords."""
-        from skills.navigation import stay_in_boundary
-        from skills.terrain_following import traverse_rough_terrain
-        from skills.suspension import SuspensionGains
+        from skills.mid_level.navigation import stay_in_boundary
+        from skills.low_level.terrain_following import traverse_rough_terrain
+        from skills.low_level.suspension import SuspensionGains
         from radial_sphere.geometry import fibonacci_sphere
 
         dirs = fibonacci_sphere(60).astype(np.float32)
@@ -147,7 +147,7 @@ class SuspensionFeedbackTests(unittest.TestCase):
         np.testing.assert_allclose(c, d, atol=1e-12)
 
     def test_without_feedback_keeps_the_gait_and_drops_the_corrections(self):
-        from skills.suspension import SuspensionGains
+        from skills.low_level.suspension import SuspensionGains
         gains = SuspensionGains(target_ride_height=.23, kp=.8, max_target_speed=.4)
         off = gains.without_feedback()
         self.assertEqual(off.target_ride_height, .23)

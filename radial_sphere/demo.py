@@ -6,7 +6,7 @@ and fourteen stepped a skill through ``execute_skill``. They differed in
 data, not in logic: which scenario, which skill, how many steps, which
 cameras, and what counts as success.
 
-That data is now a yaml under ``configs/demos/``, and this module is the one
+That data is now a yaml under ``demos/``, and this module is the one
 runner. A demo that genuinely needs its own control flow, such as a course
 state machine or a calibration sweep, stays a script.
 

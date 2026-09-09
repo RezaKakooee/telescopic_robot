@@ -1,7 +1,7 @@
 """The peristaltic drive wave, in one place.
 
 Two callers grew their own copy of this arithmetic: ``controller.bar_targets``
-and ``skills.locomotion.traverse_rough_terrain``. The copies shared every
+and ``skills.low_level.locomotion.traverse_rough_terrain``. The copies shared every
 magic number, so a fix applied to one silently left the other behind. Widening
 the curb-vault sector did exactly that.
 

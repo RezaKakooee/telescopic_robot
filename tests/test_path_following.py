@@ -130,7 +130,7 @@ class TestPathFollowingSkill(unittest.TestCase):
         """A one-point path used to raise TypeError from the stop branch."""
         import numpy as np
         from radial_sphere.geometry import fibonacci_sphere
-        from skills.navigation import follow_path
+        from skills.mid_level.navigation import follow_path
 
         dirs = fibonacci_sphere(60).astype(np.float32)
         quat = np.array([1.0, 0.0, 0.0, 0.0])

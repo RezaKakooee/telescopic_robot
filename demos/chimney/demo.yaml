@@ -1,0 +1,20 @@
+# chimney: everything about showing one skill.
+#   python scripts/run_demo.py demo=chimney
+# `knobs` is what this demo's own runner.py reads.
+
+description: Climb a vertical shaft by bracing on two facing walls.
+runner: true
+knobs:
+  config: configs/rl/chimney.yaml
+  target: null
+  seed: null
+  push_frac: 1.0
+  trace: false
+  exit_band:
+  - 0.45
+  - 0.2
+  - 0.85
+  exit_from: 0.02
+  video: false
+  fps: 25
+  frame_every: 4

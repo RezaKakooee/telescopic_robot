@@ -1,0 +1,30 @@
+{
+  "skill": "push_against_wall",
+  "wall_y_m": -0.45,
+  "total_contacts": 3,
+  "total_duration_s": 6.4,
+  "total_forward_progress_m": 7.05,
+  "cycle_records": [
+    {
+      "contact_index": 1,
+      "min_gap_cm": 8.04,
+      "peak_vy_m_s": 2.02
+    },
+    {
+      "contact_index": 2,
+      "min_gap_cm": 7.23,
+      "peak_vy_m_s": 2.03
+    },
+    {
+      "contact_index": 3,
+      "min_gap_cm": 6.79,
+      "peak_vy_m_s": 1.98
+    }
+  ],
+  "max_repulsion_vy_m_s": 2.03,
+  "final_position": [
+    7.05,
+    0.78
+  ],
+  "success": true
+}

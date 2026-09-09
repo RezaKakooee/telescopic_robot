@@ -45,9 +45,9 @@ from radial_sphere.scenario import Scenario, generate_scenario, skill_course_pla
 from skills import execute_skill
 from radial_sphere.overlay import annotate
 from skills.runner import skill_targets
-from skills.locomotion import move, move_right, move_left, stop, go_fast
-from skills.jumping import jump_forward_while_moving
-from skills.falling import fall_down
+from skills.low_level.locomotion import move, move_right, move_left, stop, go_fast
+from skills.low_level.jumping import jump_forward_while_moving
+from skills.low_level.falling import fall_down
 
 FORWARD = np.array([1.0, 0.0], dtype=np.float32)
 
@@ -392,7 +392,7 @@ def main():
     # 13. Pillars (jump_to)
     print("  Rendering Skill 13 (jump_to on pillars)...")
     out13 = exp_dir / "13_jump_to_pillars.mp4"
-    subprocess.run([sys.executable, "scripts/skills/run_pillars.py", "--video", "--seed", "42"], check=True)
+    subprocess.run([sys.executable, "demos/pillars/runner.py", "--video", "--seed", "42"], check=True)
     p_vids = sorted(Path("storage_local").glob("**/renders/pillar_course.mp4"), key=os.path.getmtime)
     if p_vids:
         shutil.copy2(str(p_vids[-1]), str(out13))
@@ -401,7 +401,7 @@ def main():
     # 14. Circle Orbit
     print("  Rendering Skill 14 (circle orbit)...")
     out14 = exp_dir / "14_circle_orbit.mp4"
-    subprocess.run([sys.executable, "scripts/skills/run_circle.py", "--video", "--laps", "1"], check=True)
+    subprocess.run([sys.executable, "demos/circle/runner.py", "--video", "--laps", "1"], check=True)
     c_vids = sorted(Path("storage_local").glob("**/renders/circle_skill_composite.mp4"), key=os.path.getmtime)
     if c_vids:
         shutil.copy2(str(c_vids[-1]), str(out14))
@@ -410,7 +410,7 @@ def main():
     # 15. Straddle Gap
     print("  Rendering Skill 15 (straddle_gap)...")
     out15 = exp_dir / "15_straddle_gap.mp4"
-    subprocess.run([sys.executable, "scripts/skills/run_gap.py", "--video"], check=True)
+    subprocess.run([sys.executable, "demos/gap/runner.py", "--video"], check=True)
     g_vids = sorted(Path("storage_local").glob("**/renders/gap_straddle_composite.mp4"), key=os.path.getmtime)
     if g_vids:
         shutil.copy2(str(g_vids[-1]), str(out15))
@@ -419,7 +419,7 @@ def main():
     # 16. Chimney Climb
     print("  Rendering Skill 16 (chimney climb)...")
     out16 = exp_dir / "16_chimney_climb.mp4"
-    subprocess.run([sys.executable, "scripts/skills/run_chimney.py", "--video"], check=True)
+    subprocess.run([sys.executable, "demos/chimney/runner.py", "--video"], check=True)
     ch_vids = sorted(Path("storage_local").glob("**/renders/chimney_climb.mp4"), key=os.path.getmtime)
     if ch_vids:
         shutil.copy2(str(ch_vids[-1]), str(out16))
@@ -480,7 +480,7 @@ def main():
     # 00. Complete Continuous Skill Course Parkour
     print("  Rendering Complete Continuous Skill Course Parkour...")
     out00 = exp_dir / "00_continuous_skill_course_parkour.mp4"
-    subprocess.run([sys.executable, "scripts/skills/run_course.py", "--video"], check=True)
+    subprocess.run([sys.executable, "demos/course/runner.py", "--video"], check=True)
     crs_vids = sorted(Path("storage_local").glob("**/renders/skill_course.mp4"), key=os.path.getmtime)
     if crs_vids:
         shutil.copy2(str(crs_vids[-1]), str(out00))

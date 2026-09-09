@@ -39,7 +39,7 @@ from PIL import Image, ImageDraw, ImageFont
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.navigation import stay_in_boundary
+from skills.mid_level.navigation import stay_in_boundary
 
 
 def main():

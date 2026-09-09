@@ -13,7 +13,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 import numpy as np
 
 from radial_sphere.geometry import fibonacci_sphere
-from skills.locomotion import move, surface_drive
+from skills.low_level.locomotion import move, surface_drive
 
 MAX_EXTEND = 0.16
 MIN_OFFSET = 0.025

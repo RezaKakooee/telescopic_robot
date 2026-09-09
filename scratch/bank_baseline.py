@@ -5,8 +5,8 @@ from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.geometry import quat_to_rotmat
-from skills.bowl_riding import surface_frame, reach_caps, FOOT_BASE
-from skills.locomotion import surface_drive
+from skills.low_level.bowl_riding import surface_frame, reach_caps, FOOT_BASE
+from skills.low_level.locomotion import surface_drive
 WALL_R=1.80; EXT=0.09; ROLL=FOOT_BASE+EXT
 
 def arena(bank_deg, top=3.0):

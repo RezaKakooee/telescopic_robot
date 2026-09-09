@@ -10,7 +10,7 @@ command speed and the same seed. Only the terrain feedback differs:
 Heading comes from ``stay_in_boundary``, which keeps the robot inside a
 wall-less circle and picks its own roaming actions. Both panels therefore
 receive the same action sequence and diverge only through physics. The rod
-support corrections under test are the ones in ``skills/suspension.py``,
+support corrections under test are the ones in ``skills/low_level/suspension.py``,
 shared with ``traverse_rough_terrain``.
 
 The camera tracks each robot from the side, so the rods under the body stay
@@ -49,8 +49,8 @@ from PIL import Image, ImageDraw, ImageFont
 from radial_sphere.config import load_config, script_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
-from skills.navigation import stay_in_boundary
-from skills.suspension import SuspensionGains, SuspensionState
+from skills.mid_level.navigation import stay_in_boundary
+from skills.low_level.suspension import SuspensionGains, SuspensionState
 
 BOUNDARY_RADIUS = 3.4
 N_STONES = 160

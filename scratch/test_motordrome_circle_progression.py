@@ -11,7 +11,7 @@ from radial_sphere.run_id import build_run_id
 from radial_sphere.snapshot import make_run_dir
 from radial_sphere.overlay import annotate
 from omegaconf import OmegaConf
-from skills.locomotion import circle
+from skills.low_level.locomotion import circle
 
 def main():
     floor_r = 1.0

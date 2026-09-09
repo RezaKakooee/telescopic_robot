@@ -1341,7 +1341,7 @@ def skill_course_route(cfg) -> np.ndarray:
 # Each entry is (x centre, height, depth, role). Roles:
 #   "over"  — a low box on the floor, to be cleared
 #   "onto"  — a deck to land on, reached from the floor or from the box before
-# Heights and gaps are inside what skills/jump_planner.py can guarantee: the
+# Heights and gaps are inside what skills/mid_level/jump_planner.py can guarantee: the
 # leap only carries about 0.25 m horizontally at its take-off height, and about
 # 0.5 m if it is dropping 0.15 m, so ascending steps are kept adjacent and only
 # descending steps get a real gap.

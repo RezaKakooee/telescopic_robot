@@ -1,0 +1,13 @@
+{
+  "config": "configs/rl/config.yaml",
+  "seed": 42,
+  "mechanism": "multi_stage",
+  "requested_speed_cm_s": 120,
+  "duration_s": 5.999999999999551,
+  "distance_cm": 703.1850050616071,
+  "sideways_cm": -6.103832811535442,
+  "mean_speed_last_2s_cm_s": 121.42982658593297,
+  "physics_step_s": 0.002,
+  "action_repeat": 5,
+  "mujoco_version": "3.8.1"
+}

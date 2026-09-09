@@ -1,0 +1,26 @@
+# wall_run: everything about showing one skill.
+#   python scripts/run_demo.py demo=wall_run
+# `knobs` is what this demo's own runner.py reads.
+
+description: Jump at a wall, ride it on momentum, push off again.
+runner: true
+knobs:
+  mode: curved
+  seconds: 12.0
+  seed: 3
+  speed: 7.5
+  approach_angle: 28.0
+  launch_gap: null
+  launch_in: 3.6
+  launch_up: 5.2
+  give: 0.13
+  squash_span: 0.26
+  cushion_max: 0.025
+  push_frac: 1.0
+  along_drive: 0.55
+  upward_bias: 0.35
+  min_turns: 0.25
+  target_distance: 1.0
+  slowmo: 1
+  repeats: 1
+  video: false

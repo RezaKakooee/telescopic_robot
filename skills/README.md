@@ -261,11 +261,11 @@ python scripts/skills/run_skill.py skill=push_against_wall kind=maze \
 python scripts/skills/run_somersault.py
 
 # geometry- and contact-verified stair course (add --no-video for tests)
-python scripts/skills/run_stairs.py
+python demos/stairs/runner.py
 ```
 
 The stair controller is intentionally a composition of existing skills. The
-runner plans each tread hop with `skills/hop_planner.py`, retries after a small
+runner plans each tread hop with `skills/mid_level/hop_planner.py`, retries after a small
 sideways footing change when orientation produces a weak launch, and counts a
 step only after contact with that tread plus a stable pose inside its bounds.
 See the [Stairs Skill guide](../docs/stairs_skill.md).
@@ -335,7 +335,7 @@ run_program(env, [
 
 ## Running a skill as a demo
 
-A demo is a yaml, not a script. `configs/demos/<name>.yaml` names the
+A demo is a yaml, not a script. `demos/<name>/demo.yaml` names the
 scenario, the skill, how long to run, which cameras to record, and what
 counts as success. One runner executes all of them:
 
@@ -344,7 +344,7 @@ counts as success. One runner executes all of them:
     python scripts/run_demo.py list=true
 
 Each demo's `expect` block turns it into a regression test, and
-`tests/test_demos.py` runs every one. See `configs/demos/README.md`.
+`tests/test_demos.py` runs every one. See `demos/README.md`.
 
 Demos whose control flow is the point stay as scripts under
 `scripts/skills/`: the course state machines, the phase machines and the
@@ -465,9 +465,9 @@ targets, meta = execute_skill(
 
 ## The pillar course (standing hops)
 
-`scripts/skills/run_pillars.py` climbs a ladder of narrow columns -- 0.90 m
+`demos/pillars/runner.py` climbs a ladder of narrow columns -- 0.90 m
 pads, up to 3.5x the core in height -- where every ascent is a `jump_to`
-standing hop planned by `skills/hop_planner.py` from the pad's own geometry,
+standing hop planned by `skills/mid_level/hop_planner.py` from the pad's own geometry,
 and every descent is a `fall_down` roll off the lip (the 0.12 m gaps are
 narrower than the ball, so no jump is needed downhill). The planner works
 from `skills/hop_calibration.json`, measured over RANDOM orientations

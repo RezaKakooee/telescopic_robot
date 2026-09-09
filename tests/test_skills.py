@@ -308,7 +308,7 @@ def test_wall_of_death(seconds=65.0, seed=1):
     """
     import mujoco
     from omegaconf import OmegaConf
-    from skills.bowl_riding import Bowl, advance_radius, surface_frame, wall_of_death
+    from skills.low_level.bowl_riding import Bowl, advance_radius, surface_frame, wall_of_death
 
     cfg = load_config("configs/rl/motordrome.yaml")
     OmegaConf.set_struct(cfg, False)
@@ -380,7 +380,7 @@ def test_wall_of_death_descent(seconds=75.0, descend_after=45.0):
     The test is that the robot is in charge the whole way down: no stretch of
     free fall, and a stop at the bottom rather than a stop against something.
     """
-    from scripts.skills.run_motordrome_wall_of_death import run
+    from demos.bowl.runner import run
 
     r = run(seconds=seconds, descend_after=descend_after, record_video=False)
 
@@ -408,9 +408,9 @@ def test_wall_run(seconds=18.0, repeats=2):
     2. Curved arc wall run with extended wall contact
     3. Banked wall run
     """
-    from scripts.skills.run_wall_run import run
+    from demos.wall_run.runner import run
     from types import SimpleNamespace
-    from skills.wall_running import get_wall_frame
+    from skills.low_level.wall_running import get_wall_frame
 
     # Geometry is part of the controller: wall segments are geom centre lines,
     # while rod reach must be measured to the near surface.
@@ -481,7 +481,7 @@ def test_wall_run(seconds=18.0, repeats=2):
 
 def test_training_cones():
     """Slalom weave cleanly between 10 linear training cones with zero collisions."""
-    from scripts.skills.run_training_cones import run
+    from demos.training_cones.runner import run
 
     r = run(speed=1.1, lateral_offset=0.80, lookahead=0.40, lateral_gain=5.0, record_video=False)
 
@@ -497,7 +497,7 @@ def test_training_cones():
         f"FAIL: min clearance {r['min_clearance']:.3f}m is dangerously close (<0.40m)")
 def test_curved_training_cones():
     """Slalom weave cleanly between 10 unevenly spaced cones along an S-curve track."""
-    from scripts.skills.run_curved_training_cones import run
+    from demos.curved_training_cones.runner import run
 
     r = run(speed=1.1, lateral_offset=0.80, lookahead=0.40, lateral_gain=5.0, record_video=False)
 
@@ -517,7 +517,7 @@ def test_curved_training_cones():
 
 def test_stairs_climb():
     """Verify three real tread landings up and three controlled drops down."""
-    from scripts.skills.run_stairs import run
+    from demos.stairs.runner import run
 
     r = run(record_video=False)
     stair_geo = stairs_course_geometry(load_config("configs/rl/stairs_course.yaml"))
@@ -553,7 +553,7 @@ def test_rough_terrain_skill():
     2. Per-rod adaptation: underneath rod opens lower on stones and opens longer in holes.
     3. Traverses across rocky boulder field without stalling.
     """
-    from skills.terrain_following import traverse_rough_terrain
+    from skills.low_level.terrain_following import traverse_rough_terrain
     from radial_sphere.geometry import fibonacci_sphere
     quat = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
     dirs = fibonacci_sphere(60).astype(np.float32)

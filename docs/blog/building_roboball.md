@@ -620,7 +620,7 @@ seed 42, and no randomization.*
 Video path for the later HTML version: `assets/move-forward.mp4`.
 
 
-Implementation: [movement skills](../../skills/locomotion.py).
+Implementation: [movement skills](../../skills/low_level/locomotion.py).
 Reproduce the results with the [measurement script](./plot_move_forward.py);
 the [recorded data](./assets/move-forward.csv) and
 [run summary](./assets/move-forward-results.json) are available alongside it.
@@ -874,7 +874,7 @@ Video path for the later HTML version: `assets/jump-height-standing.mp4`.
 
 Video path for the later HTML version: `assets/jump-height-moving.mp4`.
 
-Implementation: [jumping skills](../../skills/jumping.py).
+Implementation: [jumping skills](../../skills/low_level/jumping.py).
 Reproduce with the [jump-height recording script](./render_jump_height.py).
 [Standing data](./assets/jump-height-standing.csv) ·
 [moving data](./assets/jump-height-moving.csv) ·
@@ -982,7 +982,7 @@ is a request, not the measured curve speed.
 
 Video path for the later HTML version: `assets/move-curved-street.mp4`.
 
-Implementation: [locomotion skills](../../skills/locomotion.py).
+Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
 Recording scripts: [curved motion](./render_curved_motion.py),
 [timed heading changes](./render_discrete_jumps.py),
 [open-loop rotation](./render_openloop_drift.py).
@@ -1039,7 +1039,7 @@ radius shell. Its final height was $19.9\,\text{cm}$.
 
 Video path for the later HTML version: `assets/fall-down-platform.mp4`.
 
-Implementation: [falling skills](../../skills/falling.py).
+Implementation: [falling skills](../../skills/low_level/falling.py).
 [Recording script](./render_fall_down.py) ·
 [trajectory](./assets/fall-down-platform.csv) ·
 [summary](./assets/fall-down-platform-results.json).
@@ -1090,7 +1090,7 @@ $12.3\,\text{cm}$ of shell clearance, because the core itself has a radius.
 
 Video path for the later HTML version: `assets/move-straddle-gap.mp4`.
 
-Implementation: [locomotion skills](../../skills/locomotion.py).
+Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
 [Recording script](./render_straddle_gap.py) ·
 [trajectory](./assets/move-straddle-gap.csv) ·
 [summary](./assets/move-straddle-gap-results.json).
@@ -1134,7 +1134,7 @@ away from a fixed wall, not moving a loose crate or other object.
 
 Video path for the later HTML version: `assets/wall-push-shove.mp4`.
 
-Implementation: [interaction skills](../../skills/climbing.py).
+Implementation: [interaction skills](../../skills/low_level/climbing.py).
 [Recording script](./render_wall_push.py) ·
 [trajectory](./assets/wall-push-shove.csv) ·
 [summary](./assets/wall-push-shove-results.json).
@@ -1191,7 +1191,7 @@ verified stop.
 
 Video path for the later HTML version: `assets/jump-to-precision.mp4`.
 
-Implementation: [jumping skills](../../skills/jumping.py).
+Implementation: [jumping skills](../../skills/low_level/jumping.py).
 [Recording script](./render_precision_jump.py) ·
 [trajectory](./assets/jump-to-precision.csv) ·
 [summary](./assets/jump-to-precision-results.json).
@@ -1258,7 +1258,7 @@ about $26\,\text{cm/s}$. All four sub-skills were selected during the run.
 
 Video path for the later HTML version: `assets/follow-path-ground.mp4`.
 
-Implementation: [locomotion skills](../../skills/locomotion.py).
+Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
 [Recording script](./render_path_following.py) ·
 [trajectory](./assets/follow-path-ground.csv) ·
 [summary](./assets/follow-path-ground-results.json).
@@ -1313,7 +1313,7 @@ the robot can translate during that action.
 
 Video path for the later HTML version: `assets/stay-in-boundary.mp4`.
 
-Implementation: [locomotion skills](../../skills/locomotion.py).
+Implementation: [locomotion skills](../../skills/low_level/locomotion.py).
 [Recording script](./render_stay_in_boundary.py) ·
 [trajectory](./assets/stay-in-boundary.csv) ·
 [summary](./assets/stay-in-boundary-results.json).
@@ -1501,9 +1501,9 @@ lockout live in [gait](../../radial_sphere/gait.py), shared by this skill and
 the original `bar_targets` controller. They used to be two copies of the same
 arithmetic, which is how the two drifted apart.
 
-Implementation: [locomotion skills](../../skills/locomotion.py) ·
+Implementation: [locomotion skills](../../skills/low_level/locomotion.py) ·
 [gait core](../../radial_sphere/gait.py) ·
-[suspension](../../skills/suspension.py).
+[suspension](../../skills/low_level/suspension.py).
 [Recording script](./render_rough_terrain.py) ·
 [trajectory](./assets/rough-terrain-suspension.csv) ·
 [summary](./assets/rough-terrain-suspension-results.json).

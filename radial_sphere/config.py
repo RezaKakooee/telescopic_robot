@@ -105,7 +105,7 @@ def script_config(script: str,
     and the command line takes Hydra's dotlist overrides::
 
         python docs/blog/render_rough_terrain.py seconds=30 speed=0.9
-        python scripts/skills/run_gap.py steps=800 video=false
+        python demos/gap/runner.py steps=800 video=false
 
     Because the yaml can carry a ``defaults:`` list, a script config can pull
     in a scenario preset from ``configs/rl/`` and override parts of it in the
@@ -177,3 +177,35 @@ def _example_override(cfg: DictConfig) -> str:
         if not isinstance(value, DictConfig):
             return f"{key}={value!r}" if isinstance(value, str) else f"{key}={value}"
     return "key=value"
+
+
+def demo_config(name: str, argv: list[str] | None = None) -> DictConfig:
+    """Compose one demo's yaml from ``demos/<name>/demo.yaml``.
+
+    A demo folder owns everything about showing one skill: the scenario it
+    runs in, the skill and its arguments, how long to run, what to record,
+    what counts as success, and any knobs its own runner reads. Script knobs
+    used to live in a parallel tree under ``configs/scripts/``, which meant
+    one demo was described in four places.
+
+    ``key=value`` overrides work the same as :func:`script_config`, including
+    the error on an unknown key, but they address the nested spec, so a knob
+    is written ``knobs.fps=30``.
+    """
+    from hydra import compose, initialize_config_dir
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    root = _ROOT / "demos" / name
+    path = root / "demo.yaml"
+    if not path.exists():
+        available = sorted(q.parent.name for q in (_ROOT / "demos").glob("*/demo.yaml"))
+        raise SystemExit(f"no demo {name!r}; available: {', '.join(available)}")
+
+    if any(a in ("-h", "--help") for a in argv):
+        cfg = _compose_script(compose, initialize_config_dir, root, "demo", [])
+        print(f"{name}: {path}\n")
+        print(OmegaConf.to_yaml(cfg))
+        raise SystemExit(0)
+
+    overrides = [a for a in argv if "=" in a]
+    return _compose_script(compose, initialize_config_dir, root, "demo", overrides)

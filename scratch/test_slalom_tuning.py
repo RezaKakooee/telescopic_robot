@@ -2,7 +2,7 @@ import os
 os.environ["MUJOCO_GL"] = "egl"
 import numpy as np
 
-from scripts.skills.run_training_cones import run
+from demos.training_cones.runner import run
 
 print("Testing slalom parameters for 0 contacts and smooth weave:")
 for speed in [1.2, 1.4, 1.6]:

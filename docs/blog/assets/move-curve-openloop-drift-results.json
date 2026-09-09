@@ -1,0 +1,11 @@
+{
+  "scenario": "open_loop_rotating_heading",
+  "requested_speed_m_s": 1.2,
+  "target_radius_m": 2.0,
+  "omega_rad_s": 0.6,
+  "straight_duration_s": 1.5,
+  "turn_duration_s": 4.5,
+  "final_drift_m": 4.582697858601945,
+  "max_drift_m": 4.582697858601945,
+  "final_effective_radius_m": 6.582697858601945
+}

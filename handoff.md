@@ -17,13 +17,13 @@ prove them.
 | Piece | Where | One line |
 |---|---|---|
 | Skills | `skills/` | Pure functions: state in, 60 rod targets out. `skills/README.md` is the API. |
-| The gait | `skills/locomotion.py: move(turn, speed)` | Radians and m/s. Every named locomotion skill is a preset of it. |
-| Aimed hop | `skills/jumping.py: jump_to(vx_target, vz_target)` | Standing jump, velocity-servoed during the burn. |
-| Hop planner | `skills/hop_planner.py` | Pad geometry → stand point + velocity command, or `None`. |
-| Run-jump planner | `skills/jump_planner.py` | Box geometry → run-up gain, crouch, trigger, or `None`. |
+| The gait | `skills/low_level/locomotion.py: move(turn, speed)` | Radians and m/s. Every named locomotion skill is a preset of it. |
+| Aimed hop | `skills/low_level/jumping.py: jump_to(vx_target, vz_target)` | Standing jump, velocity-servoed during the burn. |
+| Hop planner | `skills/mid_level/hop_planner.py` | Pad geometry → stand point + velocity command, or `None`. |
+| Run-jump planner | `skills/mid_level/jump_planner.py` | Box geometry → run-up gain, crouch, trigger, or `None`. |
 | Calibrations | `skills/hop_calibration.json`, `skills/jump_calibration.json` | Measured over random orientations. Regenerate if the robot changes. |
 | Courses | `radial_sphere/scenario.py` | `skill_course`, `platform_course`, `pillar_course`. |
-| Drivers | `scripts/skills/run_course.py`, `run_platforms.py`, `run_pillars.py` | Each prints per-hop results and can record video. |
+| Drivers | `demos/course/runner.py`, `run_platforms.py`, `run_pillars.py` | Each prints per-hop results and can record video. |
 | Tests | `tests/test_skills.py` | 12 physics assertions. All pass as of this commit. |
 
 ## How to run
@@ -33,10 +33,10 @@ conda activate roboverse
 export MUJOCO_GL=egl PYTHONPATH=.
 
 python tests/test_skills.py                                  # ~10 min
-python scripts/skills/run_pillars.py seed=2 video=true        # pillar ladder
-python scripts/skills/run_platforms.py video=true               # platform course
-python scripts/skills/run_course.py video=true                  # sketched circuit
-python scripts/skills/run_parametric_demo.py video=true         # move(turn, speed)
+python demos/pillars/runner.py seed=2 video=true        # pillar ladder
+python demos/platforms/runner.py video=true               # platform course
+python demos/course/runner.py video=true                  # sketched circuit
+python demos/parametric/runner.py video=true         # move(turn, speed)
 python scripts/skills/calibrate_hop.py                       # rebuild hop table (~15 min)
 ```
 

@@ -7,7 +7,7 @@ while they do it. So we measure the map once:
 
     (run-up gain, crouch steps)  ->  take-off state
 
-and write it to a table. `skills/jump_planner.py` inverts that table at run
+and write it to a table. `skills/mid_level/jump_planner.py` inverts that table at run
 time: it works out the take-off velocity an obstacle demands, then reads back
 the crouch length and trigger distance that deliver it.
 

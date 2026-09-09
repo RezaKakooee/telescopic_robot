@@ -21,8 +21,8 @@ from functools import lru_cache
 
 import numpy as np
 
-from .suspension import SuspensionGains, SuspensionState, apply_suspension
-from .locomotion import (
+from .low_level.suspension import SuspensionGains, SuspensionState, apply_suspension
+from .low_level.locomotion import (
     move,
     turn,
     move_forward,
@@ -37,9 +37,9 @@ from .locomotion import (
     straddle_gap,
     surface_drive,
 )
-from .terrain_following import traverse_rough_terrain
-from .navigation import follow_path, stay_in_boundary
-from .bowl_riding import (
+from .low_level.terrain_following import traverse_rough_terrain
+from .mid_level.navigation import follow_path, stay_in_boundary
+from .low_level.bowl_riding import (
     wall_of_death,
     Bowl,
     advance_radius,
@@ -49,10 +49,10 @@ from .bowl_riding import (
     reach_caps,
     grip_margin,
 )
-from .wall_running import wall_run, wall_reach, next_phase as wall_run_next_phase
-from .falling import fall_down
-from .climbing import push_against_wall, chimney_climb
-from .jumping import (
+from .low_level.wall_running import wall_run, wall_reach, next_phase as wall_run_next_phase
+from .low_level.falling import fall_down
+from .low_level.climbing import push_against_wall, chimney_climb
+from .low_level.jumping import (
     jump_to,
     jump_up,
     jump_forward_while_stopped,
@@ -60,9 +60,9 @@ from .jumping import (
     power_for_jump_height,
     JUMP_HEIGHT_CURVES,
 )
-from .cone_courses import slalom, training_cones, curved_slalom
+from .low_level.cone_courses import slalom, training_cones, curved_slalom
 
-from .stair_climbing import climb_stairs
+from .mid_level.stair_climbing import climb_stairs
 
 # ---------------------------------------------------------------------------
 # Skill Registry — string name → callable

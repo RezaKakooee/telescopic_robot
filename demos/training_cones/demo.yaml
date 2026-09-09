@@ -1,0 +1,53 @@
+# training_cones: everything about showing one skill.
+#   python scripts/run_demo.py demo=training_cones
+# `knobs` is what this demo's own runner.py reads.
+
+description: Weave through a row of training cones with the slalom skill.
+scenario:
+  kind: training_cones
+  config: configs/rl/training_cones.yaml
+  seed: 42
+skill:
+  name: slalom
+  args:
+    speed: 1.1
+    lateral_offset: 0.8
+    lead_distance: 0.4
+    lateral_gain: 5.0
+  args_from_scenario:
+    cones: cones
+  feedback:
+    ball_xy: ball_xy
+    lin_vel: lin_vel
+steps: 3500
+stop_when:
+  goal_distance:
+    max: 0.6
+video:
+  fps: 25
+  every: 4
+  panes:
+  - camera: chase
+    title: 'SKILL: slalom (training_cones)'
+    lines:
+    - x = {ball_x:.2f} m   y = {ball_y:+.2f} m
+    - speed = {speed:.2f} m/s
+    - t = {time:.1f} s
+expect:
+  final_x:
+    min: 25.0
+  final_y:
+    max: 0.6
+  core_impacts:
+    max: 2
+  steps_run:
+    max: 2900
+runner: true
+knobs:
+  speed: 1.1
+  lateral_offset: 0.8
+  lookahead: 0.4
+  lateral_gain: 5.0
+  seed: 42
+  slowmo: 1
+  video: true

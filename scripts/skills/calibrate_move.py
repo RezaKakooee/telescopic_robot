@@ -10,7 +10,7 @@ import numpy as np
 from radial_sphere.config import load_config
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
-from skills.locomotion import move_forward, SPEED_CURVE
+from skills.low_level.locomotion import move_forward, SPEED_CURVE
 
 
 def main():

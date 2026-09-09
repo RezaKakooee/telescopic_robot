@@ -20,7 +20,7 @@ Outputs land in `storage_local/<run>/` (videos, checkpoints, code snapshot).
 
 ## Demos
 
-`run_demo.py` runs any demo declared in `configs/demos/`. Prefer adding a yaml
+`run_demo.py` runs any demo declared in `demos/`. Prefer adding a yaml
 there over writing another runner: the shared plumbing (run dir, video panes,
 overlay, metrics, expectations) lives once in `radial_sphere/demo.py`.
 

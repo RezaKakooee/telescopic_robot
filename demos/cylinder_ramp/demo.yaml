@@ -1,0 +1,10 @@
+# cylinder_ramp: everything about showing one skill.
+#   python scripts/run_demo.py demo=cylinder_ramp
+# `knobs` is what this demo's own runner.py reads.
+
+description: Launch off a ramp into a cylinder and climb it.
+runner: true
+knobs:
+  target_z: 3.5
+  seed: 42
+  video: true

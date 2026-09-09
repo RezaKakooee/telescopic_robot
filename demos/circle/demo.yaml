@@ -1,0 +1,15 @@
+# circle: everything about showing one skill.
+#   python scripts/run_demo.py demo=circle
+# `knobs` is what this demo's own runner.py reads.
+
+description: Hold a circular track at a commanded radius and speed.
+runner: true
+knobs:
+  config: configs/rl/circle_track.yaml
+  radius: 1.8
+  speed: 1.2
+  laps: 2.5
+  clockwise: false
+  video: true
+  fps: 25
+  frame_every: 4

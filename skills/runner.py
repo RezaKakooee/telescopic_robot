@@ -138,7 +138,7 @@ def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
         name in {"stay_in_boundary", "stay_within_boundary", "boundary_containment"}
         and call.get("enable_suspension", False)
     ):
-        from .suspension import SuspensionState
+        from .low_level.suspension import SuspensionState
         now = float(env.data.time)
         if not hasattr(env, "_suspension_state") or now <= getattr(env, "_suspension_last_time", -1):
             env._suspension_state = SuspensionState(targets=env.data.ctrl.copy())
@@ -200,7 +200,7 @@ def run_skill(env, name, steps=None, *, d_hat=None, wall_normal=None,
 
     track_heading = None
     if name in {"move", "move_forward", "turn"} and d_hat is not None:
-        from .locomotion import _rotate
+        from .low_level.locomotion import _rotate
         angle = (-np.deg2rad(kwargs.get("angle_deg", 0.0)) if name == "turn"
                  else kwargs.get("turn", 0.0))
         track_heading = _rotate(d_hat, angle)

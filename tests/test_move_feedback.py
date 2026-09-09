@@ -7,7 +7,7 @@ from radial_sphere.config import load_config
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from skills.runner import run_skill, skill_targets
-from skills.locomotion import move_forward
+from skills.low_level.locomotion import move_forward
 
 
 def make_env():
@@ -79,7 +79,7 @@ class TestMoveFeedback(unittest.TestCase):
             env.close()
 
     def test_negative_speed_rotates_the_travel_reference(self):
-        from skills.locomotion import move, stop
+        from skills.low_level.locomotion import move, stop
         env = make_env()
         try:
             q = env.data.qpos[3:7]

@@ -12,7 +12,7 @@ from radial_sphere.snapshot import make_run_dir
 from radial_sphere.overlay import annotate
 from omegaconf import OmegaConf
 from radial_sphere.geometry import quat_to_rotmat
-from skills.locomotion import move
+from skills.low_level.locomotion import move
 
 def main():
     cyl_rad = 0.85

@@ -5,7 +5,7 @@ import imageio
 import numpy as np
 from PIL import Image
 
-from scripts.skills.run_wall_run import run
+from demos.wall_run.runner import run
 
 ART_DIR = Path("/home/azureuser/.gemini/antigravity-ide/brain/cae66589-5edc-46dd-9306-d193640ffe8c")
 RENDERS_DIR = Path("/home/azureuser/telescopic_robot/renders")

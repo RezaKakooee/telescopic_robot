@@ -18,7 +18,7 @@ import numpy as np
 
 from radial_sphere.geometry import fibonacci_sphere
 from skills import SKILL_REGISTRY, execute_skill
-from skills.bowl_riding import Bowl
+from skills.low_level.bowl_riding import Bowl
 
 #: Arguments for the skills that need real scene geometry. Anything a skill
 #: requires and this map does not cover makes the coverage test fail, which is
@@ -125,7 +125,7 @@ class SkillInterfaceTests(unittest.TestCase):
         `execute_skill` can only give a uniform interface to what is
         registered, so this records the gap rather than hiding it.
         """
-        from skills import climbing
+        from skills.low_level import climbing
         unregistered = {fn.__name__ for fn in SKILL_REGISTRY.values()}
         for name in ("chimney_friction_servo", "chimney_step_down",
                      "cylinder_spiral_climb"):

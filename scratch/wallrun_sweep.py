@@ -1,5 +1,5 @@
 import os; os.environ["MUJOCO_GL"]="egl"
-import scripts.skills.run_wall_run as W
+import demos.wall_run.runner as W
 print(f"{'damp':>5} {'cush_mm':>8} {'ang':>4} | {'contact s':>10} {'along m':>8} "
       f"{'min gap':>8} {'squash mm':>10} {'peak z':>7}")
 FULL = 0.173 + 0.30

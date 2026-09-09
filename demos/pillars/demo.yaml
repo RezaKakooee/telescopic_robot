@@ -1,0 +1,17 @@
+# pillars: everything about showing one skill.
+#   python scripts/run_demo.py demo=pillars
+# `knobs` is what this demo's own runner.py reads.
+
+description: Navigate a field of pillars.
+runner: true
+knobs:
+  config: configs/rl/pillar_course.yaml
+  video: false
+  camera: pillar_side
+  fps: 25
+  frame_every: 4
+  seed: null
+  max_probes: 5
+  max_restarts: 2
+  gear: 0.5
+  demo_recovery: false

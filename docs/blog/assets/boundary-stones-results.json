@@ -1,0 +1,21 @@
+{
+  "scenario": "wall_less_circular_boundary_stones",
+  "boundary_radius_m": 2.0,
+  "n_stones": 130,
+  "max_stone_size": 0.055,
+  "max_radius_reached_m": 1.5603,
+  "containment_margin_m": 0.4397,
+  "containment_success": true,
+  "mean_speed_mps": 0.3015,
+  "max_speed_mps": 0.9956,
+  "mean_core_z_m": 0.1863,
+  "sub_skills_observed": [
+    "curve",
+    "move",
+    "stop",
+    "turn"
+  ],
+  "sim_steps": 12000,
+  "sim_duration_s": 120.0,
+  "video_duration_s": 120.0
+}

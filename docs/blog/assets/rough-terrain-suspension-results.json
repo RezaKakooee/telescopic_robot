@@ -1,0 +1,44 @@
+{
+  "scenario": "rough_arena_free_roam_boulders_and_pits",
+  "comparison": "same roaming skill and command speed, terrain feedback gains on or off",
+  "heading_source": "stay_in_boundary",
+  "seed": 42,
+  "command_speed_mps": 1.3,
+  "rough_drive_gain": 2.0,
+  "target_ride_height_m": 0.23,
+  "boundary_radius_m": 3.4,
+  "n_stones": 160,
+  "max_stone_size_m": 0.08,
+  "n_pits": 8,
+  "pit_depth_m": 0.04,
+  "n_ledges": 8,
+  "ledge_height_m": 0.065,
+  "camera_distance_m": 1.25,
+  "metrics_warmup_s": 1.0,
+  "sim_duration_s": 120.0,
+  "video_duration_s": 120.0,
+  "runs": {
+    "fixed_stance": {
+      "distance_rolled_m": 84.85,
+      "mean_speed_mps": 0.706,
+      "stalled_time_pct": 1.6,
+      "longest_stall_s": 0.23,
+      "climb_over_steps": 21,
+      "pivot_away_steps": 0,
+      "core_height_mean_cm": 20.54,
+      "core_height_std_cm": 2.09,
+      "vertical_speed_rms_cm_s": 20.68
+    },
+    "active_suspension": {
+      "distance_rolled_m": 97.69,
+      "mean_speed_mps": 0.813,
+      "stalled_time_pct": 1.3,
+      "longest_stall_s": 0.38,
+      "climb_over_steps": 49,
+      "pivot_away_steps": 0,
+      "core_height_mean_cm": 20.53,
+      "core_height_std_cm": 2.1,
+      "vertical_speed_rms_cm_s": 21.61
+    }
+  }
+}

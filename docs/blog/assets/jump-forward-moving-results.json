@@ -1,0 +1,43 @@
+{
+  "skill": "jump_forward_while_moving",
+  "seed": 42,
+  "duration_s": 7,
+  "video_slowdown": 2,
+  "starting_core_height_cm": 19.979050173572407,
+  "peak_core_height_cm": 70.79357627246516,
+  "rise_cm": 50.81452609889274,
+  "airborne_verified": true,
+  "touchdown_verified": true,
+  "forward_to_touchdown_cm": 347.10581542088687,
+  "final_vertical_speed_cm_s": 7.82656597843614,
+  "final_horizontal_speed_cm_s": 109.30118112813534,
+  "phases": [
+    {
+      "phase": "move",
+      "time_s": 0.0
+    },
+    {
+      "phase": "dip",
+      "time_s": 2.0
+    },
+    {
+      "phase": "launch",
+      "time_s": 2.07
+    },
+    {
+      "phase": "airborne",
+      "time_s": 2.2
+    },
+    {
+      "phase": "landing",
+      "time_s": 2.71
+    },
+    {
+      "phase": "resume",
+      "time_s": 2.75
+    }
+  ],
+  "requested_before_and_after_cm_s": 120,
+  "mean_before_jump_vx_cm_s": 119.90021541523973,
+  "mean_final_second_vx_cm_s": 111.05248964054286
+}
