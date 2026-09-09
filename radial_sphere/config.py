@@ -92,6 +92,30 @@ def load_config_cli(path: str | Path | None = None,
     return cfg
 
 
+def _find_run_config(script: str, config_dir: str | Path | None = None):
+    """Locate ``configs/run/**/<script>.yaml`` and return ``(folder, path)``.
+
+    Knobs are grouped by domain under ``configs/run/``, mirroring the layout
+    of ``scripts/``: ``run/rl/train_rl.yaml``, ``run/imitation/train_bc.yaml``.
+    That keeps command knobs apart from ``configs/rl/``, which holds the
+    scenario, floor, robot and sim2real presets - a different kind of thing
+    that happens to live in the same tree.
+    """
+    if config_dir is not None:
+        root = Path(config_dir)
+        return root, root / f"{script}.yaml"
+    base = _ROOT / "configs" / "run"
+    hits = sorted(base.rglob(f"{script}.yaml"))
+    if len(hits) > 1:
+        raise SystemExit(f"{script!r} is defined more than once: "
+                         + ", ".join(str(h.relative_to(_ROOT)) for h in hits))
+    if not hits:
+        known = sorted(q.stem for q in base.rglob("*.yaml"))
+        raise SystemExit(f"no config for {script!r} under {base}. "
+                         f"Known: {', '.join(known)}")
+    return hits[0].parent, hits[0]
+
+
 def script_config(script: str,
                   argv: list[str] | None = None,
                   *,
@@ -101,8 +125,10 @@ def script_config(script: str,
 
     Entry scripts used to parse flags with `argparse`, which meant every knob
     was declared twice: once in the parser and once in whatever yaml the run
-    also loaded. A script's knobs now live in ``configs/scripts/<script>.yaml``
-    and the command line takes Hydra's dotlist overrides::
+    also loaded. A script's knobs now live under ``configs/run/``, in the
+    folder matching its own place in ``scripts/`` - ``configs/run/rl/`` for
+    ``scripts/rl/``, and so on. The command line takes Hydra dotlist
+    overrides::
 
         python docs/blog/render_rough_terrain.py seconds=30 speed=0.9
         python demos/gap/runner.py steps=800 video=false
@@ -127,10 +153,7 @@ def script_config(script: str,
     from hydra import compose, initialize_config_dir
 
     argv = list(sys.argv[1:] if argv is None else argv)
-    root = Path(config_dir) if config_dir else (_ROOT / "configs" / "scripts")
-    path = root / f"{script}.yaml"
-    if not path.exists():
-        raise SystemExit(f"no config for {script!r}; expected {path}")
+    root, path = _find_run_config(script, config_dir)
 
     if any(a in ("-h", "--help") for a in argv):
         cfg = _compose_script(compose, initialize_config_dir, root, script, [])
@@ -185,7 +208,7 @@ def demo_config(name: str, argv: list[str] | None = None) -> DictConfig:
     A demo folder owns everything about showing one skill: the scenario it
     runs in, the skill and its arguments, how long to run, what to record,
     what counts as success, and any knobs its own runner reads. Script knobs
-    used to live in a parallel tree under ``configs/scripts/``, which meant
+    used to live in a parallel tree under ``configs/run/``, which meant
     one demo was described in four places.
 
     ``key=value`` overrides work the same as :func:`script_config`, including

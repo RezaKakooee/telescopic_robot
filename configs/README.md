@@ -6,7 +6,9 @@ YAML configs (OmegaConf), grouped like `scripts/`:
   (robot, controller, scenarios, reward, camera, rl, video). The
   `radial_sphere` package loads it when `RADIAL_SPHERE_CONFIG` is not set.
 
-- `scripts/<name>.yaml` — the knobs for the entry script of the same name.
+- `run/<domain>/<name>.yaml` — the knobs for the entry script of the same
+  name, grouped the way `scripts/` is: `run/rl/train_rl.yaml`,
+  `run/imitation/train_bc.yaml`, `run/skills/run_skill.yaml`.
   These replaced the old `argparse` flags, so every knob a script takes is
   now visible in one file instead of being buried in a parser.
 
@@ -37,3 +39,18 @@ Entry scripts accept trailing `key=value` overrides (OmegaConf dotlist):
 
 Each run snapshots its RESOLVED config (with overrides applied) into
 `storage_local/<run>/code/config.yaml` — that copy is what reproduces the run.
+
+## Why two trees
+
+`rl/` and `run/` hold different kinds of thing, which is why they are not
+merged even though both have an `rl` folder.
+
+| Tree | Holds | Example keys |
+| --- | --- | --- |
+| `rl/` | the world and the robot | `scenario`, `floor`, `robot`, `sim2real` |
+| `run/` | what one command does | `epochs`, `n_envs`, `steps`, `seed` |
+
+A scenario preset such as `rl/chimney.yaml` is loaded by any script that
+wants that arena. A knob file such as `run/rl/train_rl.yaml` belongs to
+exactly one command. Putting `train_rl.yaml` beside `maze_level3.yaml`
+would mix the two.
