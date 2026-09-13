@@ -1,0 +1,65 @@
+defaults:
+  - maze_complex_blockers_random_endpoints
+  - _self_
+
+# =====================================================================
+# Maze navigation on the CURRENT antenna, trained against a task bank.
+#
+# Two things separate this from the 2026-08 runs that produced the three
+# 1M-step experts.
+#
+# 1. Those runs pinned `layout_seed`, so every episode was the same labyrinth
+#    and only the endpoints moved. This one draws its maze from
+#    `storage_local/maze_task_bank/tasks.json`: 400 training tasks over 80
+#    layouts, with 20 layouts held back so the eval afterwards can tell
+#    navigation from memorisation.
+# 2. Those runs had no `rod_mechanism` key at all, so they silently trained on
+#    `single_stage`. Two of the three then failed on the multi_stage antenna
+#    the repo has used since ead03dd. This one names the build.
+# =====================================================================
+
+robot:
+  rod_mechanism: multi_stage   # the current nested antenna, not the old rod
+  appearance_theme: realistic
+
+scenario:
+  maze:
+    # Overwritten per episode by radial_sphere.task_bank.BankedMazeEnv. The
+    # value here only matters if the bank is switched off.
+    layout_seed: null
+    random_endpoints: true
+
+rl:
+  # Hyperparameters copied from the three 1M-step experts, which shared this
+  # recipe exactly. Reproduce with:
+  #   storage_local/20260821_*/code/config.yaml
+  decision_every: 10
+  obs_obstacles: 3
+  obs_lidar: 24
+  lidar_range: 3.5
+  obs_endpoints: true          # ball xy, goal xy, start xy, goal relative
+  max_steps: 8000
+  n_settle_steps: 100
+  lr: 0.0003
+  gamma: 0.995
+  n_steps: 512
+  batch_size: 1024
+  ent_coef: 0.01
+  net: [256, 256]
+  collision_cost: 0.003
+  smooth_alpha: 0.35
+  action_smoothness_cost: 0.02
+  lidar_clearance_cost: 0.06
+  lidar_min_margin: 0.38
+
+  # Steering only, no throttle. Both experts that survived the move to
+  # multi_stage had include_drive false; the one that broke had it true. The
+  # drive channel is the part tied hardest to rod dynamics, so it stays off
+  # until a run says otherwise.
+  include_drive: false
+
+  n_envs: 16                   # 24 cores available; 16 leaves room to render
+  total_steps: 1000000         # match the experts, so the numbers compare
+  checkpoint_every: 50000
+  device: cpu
+  wandb: false

@@ -1,0 +1,34 @@
+# Knobs for scripts/rl/eval_bc_maze_bank.py.
+#     python scripts/rl/eval_bc_maze_bank.py rods=single_stage episodes=5
+
+checkpoint: storage_local/20260822_1617__imitation_models/bc_hierarchical_best.pt
+
+#: The BC policy's own maze config. It needs a 163D observation but emits a
+#: plain 60D action, matching the dataset it was cloned from. The `_multiaxis`
+#: config adds `rl.cpg_residual`, which prepends 6 CPG parameters to the action
+#: and makes the space 66D, so that is switched off below.
+config: configs/rl/maze_level3_large_active_braking_multiaxis.yaml
+
+#: the bank's config, read only for its endpoint route range so the same
+#: (layout_seed, endpoint_seed) picks the same start and goal
+bank_config: configs/rl/maze_bank_multistage.yaml
+
+bank: storage_local/maze_task_bank/tasks.json
+split: heldout
+
+#: comma separated. `single_stage` is what this checkpoint was trained on;
+#: `multi_stage` is the build the repo has used since ead03dd.
+rods: single_stage,multi_stage
+
+episodes: 15
+#: Raw env steps, which advance 10 ms each. The PPO evaluator counts policy
+#: steps of 100 ms, so 1200 there is 12000 here. Comparing the two without
+#: this conversion gives the BC a tenth of the time and makes it look broken.
+max_steps: 12000
+seed: 7
+
+video: true
+n_videos: 2
+fps: 20
+camera: course_dual
+out_dir: storage_local/20260822_1617__imitation_models/renders

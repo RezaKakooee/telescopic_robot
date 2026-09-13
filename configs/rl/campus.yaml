@@ -1,0 +1,26 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  kind: campus
+
+robot:
+  rod_mechanism: multi_stage
+
+rl:
+  action_mode: hybrid
+  grid_size: 16
+  patch_span: 4.0
+  total_steps: 500000
+  n_envs: 8
+  n_steps: 512
+  batch_size: 1024
+  net: [256, 256]
+  max_steps: 1500
+  checkpoint_every: 50000
+  lr: 0.0003
+  gamma: 0.99
+  ent_coef: 0.02
+  wandb: false
+  device: cuda

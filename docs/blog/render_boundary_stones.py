@@ -43,7 +43,25 @@ from _assets import assets_dir  # noqa: E402
 from radial_sphere.config import load_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
+from skills.low_level.suspension import SuspensionGains, SuspensionState
 from skills.mid_level.navigation import stay_in_boundary
+
+# Suspension tuning for this arena.
+#
+# The default target_ride_height of 0.28 m is out of reach here: the core
+# settles near 0.20 m on the stone field. An unreachable target pins the
+# height PD term at its +0.025 m clip on every step, and because the
+# correction is applied only to the trailing support rods, a constant
+# trailing extension is a constant forward push. That turned the suspension
+# into a hidden throttle worth about 0.15 m/s of creep, which is what broke
+# containment once the terrain sensor was fixed. 0.20 m is measured, not
+# guessed: it is the height the robot holds with the feedback switched off.
+BOUNDARY_SUSPENSION = SuspensionGains(target_ride_height=0.20)
+
+# Deflection starts 0.75 m from the line. The published 0.65 m was tuned
+# against a robot the broken sensor held to 0.30 m/s. At the real commanded
+# speed the robot needs the extra 10 cm to turn.
+SAFETY_MARGIN = 0.75
 
 
 def main():
@@ -73,6 +91,13 @@ def main():
     for _ in range(25):
         targets = np.full(len(env.dirs_body), 0.025, dtype=np.float32)
         env.step(targets)
+
+    # One persistent filter history for the whole run. Without it the
+    # suspension has no slew limit, so the rods jump to the full correction
+    # every step and pump the robot along. `skills/runner.py` supplies this
+    # automatically; this script drives the skill directly, so it must not
+    # forget it.
+    suspension_state = SuspensionState(targets=env.data.ctrl.copy())
 
     env.model.vis.global_.offwidth = 800
     env.model.vis.global_.offheight = 448
@@ -152,13 +177,16 @@ def main():
             lin_vel=vel[:2],
             boundary_radius=boundary_radius,
             speed=0.75,
-            safety_margin=0.65,
+            safety_margin=SAFETY_MARGIN,
             step_count=sim_step,
             core_z=core_z,
             core_vz=vel[2],
             contact_forces=cf,
             terrain_clearances=tc,
             enable_suspension=True,
+            suspension=BOUNDARY_SUSPENSION,
+            suspension_state=suspension_state,
+            control_dt=dt,
             return_metadata=True,
         )
 
@@ -287,6 +315,8 @@ def main():
         "mean_speed_mps": round(mean_speed, 4),
         "max_speed_mps": round(float(np.max(speed_history)), 4),
         "mean_core_z_m": round(float(np.mean(core_z_history)), 4),
+        "target_ride_height_m": BOUNDARY_SUSPENSION.target_ride_height,
+        "safety_margin_m": SAFETY_MARGIN,
         "sub_skills_observed": sorted(list(sub_skills_seen)),
         "sim_steps": sim_step,
         "sim_duration_s": round(t_sim, 2),

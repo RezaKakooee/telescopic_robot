@@ -1,0 +1,22 @@
+# goal_seeking: everything about showing one skill.
+#   python scripts/run_demo.py demo=goal_seeking
+# `knobs` is what this demo's own runner.py reads.
+#
+# Reference run (seed 7, five 0.22 m pillars, 4.23 m to the goal):
+#   arrives in 3.9 s, 0.12 m from the goal, closest pillar surface 0.38 m,
+#   two detour waypoints at the widest point of the plan.
+# Those are regression guards from a measured run, not physical ideals.
+
+description: Plan a route past pillars and drive it, choosing a skill each step.
+runner: true
+knobs:
+  config: configs/rl/obstacle_realistic.yaml
+  seed: 7
+  speed: 1.2
+  clearance: 0.35
+  goal_tolerance: 0.35
+  max_steps: 4000
+  hold_steps: 60
+  video: false
+  fps: 25
+  frame_every: 4

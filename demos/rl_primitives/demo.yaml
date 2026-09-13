@@ -1,0 +1,25 @@
+# rl_primitives: everything about showing one skill.
+#   python scripts/run_demo.py demo=rl_primitives
+# `knobs` is what this demo's own runner.py reads.
+#
+# A tour of the seven primitives in `skills_rl/`, driven one after another on
+# one arena. Nothing here decides what to do: each segment names a primitive
+# and its parameters, and the runner calls it.
+#
+# The point of the demo is to watch the mechanics, so it records at 1x. The
+# robot really does take this long.
+#
+# Reference run (hardware profile, seed 0): the ball travels about 1.4 m under
+# `drive`, stops inside 0.3 m under `brake`, hops 0.13 m under `thrust`, and
+# is shoved clear of the wall by `brace`.
+
+description: Tour the seven RL primitives, one after another, on one arena.
+runner: true
+knobs:
+  # "hardware" uses the calibration measured with the motors modelled, and
+  # turns the actuator model on in the env. "ideal" is the library curve.
+  profile: hardware
+  seed: 0
+  video: false
+  fps: 25
+  frame_every: 4      # env step is 10 ms, so 4 frames at 25 fps is real time

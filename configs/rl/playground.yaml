@@ -1,0 +1,24 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "playground"
+  kind: "playground"
+
+robot:
+  appearance_theme: "realistic"
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0
+
+rl:
+  action_mode: "hybrid"
+  perception:
+    grid_size: 16
+    grid_res: 0.10
+    n_lookahead_waypoints: 2

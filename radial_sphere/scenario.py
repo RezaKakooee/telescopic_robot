@@ -27,7 +27,7 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary", "campus", "university_campus", "playground", "robotics_playground")
 
 
 
@@ -1969,6 +1969,223 @@ def boundary_scenario(
     return sc
 
 
+def campus_scenario(cfg, *, rng=None, name: str = "campus") -> Scenario:
+    """Realistic University Campus environment: Clean North-South Central Boulevard.
+
+    Features:
+      - 20m x 20m campus with perimeter walls and clean 3D architectural buildings.
+      - 3.0m wide central paved promenade running from South Spawn (0, -8) to North Goal (0, 8).
+      - Cross-walk utility conduit pipe (6cm radius) perpendicular to travel at y = -3.8.
+      - Recessed maintenance floor pit (8cm deep) on right lane at y = -1.5 (left lane open).
+      - Seamless 3-step grand stairs (y in [1.0, 1.75]) leading directly to elevated terrace deck (z=+0.15m)
+        and smooth descent ramp (y in [3.5, 4.25]), with stainless-steel railings along both flanks.
+      - Wooden delivery crates near loading bay at y = 5.5.
+      - Zero dome bollards or misaligned clutter.
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    spawn = np.array([0.0, -8.0], dtype=np.float32)
+    goal = np.array([0.0, 8.0], dtype=np.float32)
+
+    # Key navigation waypoints along the central boulevard
+    key_waypoints = np.array([
+        [0.0, -8.0],   # South Spawn
+        [0.0, -5.5],   # Sprint run-up
+        [0.0, -4.5],   # Approaching cross-walk utility pipe
+        [0.0, -3.2],   # Clearing utility pipe
+        [-0.5, -1.5],  # Passing recessed maintenance pit via clear left lane
+        [0.0, 0.5],    # Re-centering on promenade before stairs
+        [0.0, 1.35],   # Mid-flight on 3-step stairs
+        [0.0, 2.6],    # Crossing elevated terrace deck
+        [0.0, 3.9],    # Descending ramp back to grade
+        [0.4, 5.5],    # Passing delivery crates
+        [0.0, 7.0],    # Entering finish quad
+        [0.0, 8.0],    # Goal beacon
+    ], dtype=np.float32)
+
+    # Smoothly interpolate waypoints along the path (N = 200 points)
+    t_key = np.linspace(0.0, 1.0, len(key_waypoints))
+    t_interp = np.linspace(0.0, 1.0, 200)
+    pts_x = np.interp(t_interp, t_key, key_waypoints[:, 0])
+    pts_y = np.interp(t_interp, t_key, key_waypoints[:, 1])
+    path_pts = np.column_stack([pts_x, pts_y]).astype(np.float32)
+    markers = path_pts[::10].copy()
+    path_length = _arc_length(path_pts)
+
+    # 1. Campus Perimeter & Building Collision Footprints (20m x 20m)
+    walls = np.array([
+        # Outer campus perimeter fence/wall
+        [-10.0, -10.0, 10.0, -10.0],
+        [-10.0, 10.0, 10.0, 10.0],
+        [-10.0, -10.0, -10.0, 10.0],
+        [10.0, -10.0, 10.0, 10.0],
+        # Building 1 Footprint (Engineering Hall, West: x in [-9, -3.5], y in [-2, 7])
+        [-9.0, -2.0, -3.5, -2.0],
+        [-3.5, -2.0, -3.5, 7.0],
+        [-3.5, 7.0, -9.0, 7.0],
+        [-9.0, 7.0, -9.0, -2.0],
+        # Building 2 Footprint (Library & Arts, East: x in [3.5, 9], y in [-7, 2])
+        [3.5, -7.0, 9.0, -7.0],
+        [9.0, -7.0, 9.0, 2.0],
+        [9.0, 2.0, 3.5, 2.0],
+        [3.5, 2.0, 3.5, -7.0],
+    ], dtype=np.float32)
+
+    # 2. Grand Terrace Stairs (3 steps, 25cm run, 5cm rise, 3.0m wide, heading North +y)
+    staircases = [
+        [0.0, 1.0, 3, 0.05, 0.25, 3.0, 0.0, False],
+    ]
+
+    # 3. Contiguous Elevated Terrace Deck (z = +0.15m, y in [1.75, 3.5]) and Descent Ramp (y in [3.5, 4.25])
+    # Platform: center [0, 2.625], half_x = 1.5, half_y = 0.875, height = 0.15
+    ramps = [
+        [0.0, 2.625, 3.0, 1.75, 0.15, 0.0, 0.0],
+        [0.0, 3.875, 3.0, 0.75, 0.0, 0.15, 180.0],  # Descent slope back to ground
+    ]
+
+    # 4. Cross-Walk Utility Conduit Pipe: Straight, perpendicular across walkway at y = -3.8
+    # Spans x in [-1.6, 1.6], r = 0.06m
+    pipes = [
+        [0.0, -3.8, 3.2, 0.045, 0.060, 0.0],
+    ]
+
+    # 5. Recessed Maintenance Floor Pit: Rectangular 8cm-deep pit on the right lane (y = -1.5)
+    # Center x=0.55, y=-1.5, half_x=0.35, half_y=0.45 (spans x in [0.2, 0.9], left lane x in [-1.5, 0.0] clear)
+    gaps = [
+        [0.55, -1.5, 0.35, 0.45, 0.08],
+    ]
+
+    # 6. Obstacles: Zero dome bollards
+    obstacles = np.empty((0, 3), dtype=np.float32)
+
+    return Scenario(
+        kind="campus",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=path_pts,
+        markers=markers,
+        path_length=path_length,
+        walls=walls,
+        obstacles=obstacles,
+        staircases=staircases,
+        ramps=ramps,
+        pipes=pipes,
+        gaps=gaps,
+    )
+
+
+
+def playground_scenario(cfg, *, rng=None, name: str = "playground") -> Scenario:
+    """Robotics Testing Playground: Multi-Turn Street Course with 3-Box Parkour & Deep Valleys.
+
+    Layout:
+      - Street corridor width = 2.4m, bounded by guide walls.
+      - Leg 1 (East, y=0.0): Spawn (0,0) -> Hurdle (x=4.5, h=0.18m) -> Turn 1 (9.0, 0.0)
+      - Leg 2 (North, x=9.0): Turn 1 -> 3-Box Parkour across 2 deep valleys (y in [2.2, 6.7]) -> Turn 2 (9.0, 9.0)
+      - Leg 3 (West, y=9.0): Turn 2 -> 3-Step Stairs (x in [7.0, 6.25]) -> Deck -> Ramp -> Turn 3 (0.0, 9.0)
+      - Leg 4 (North, x=0.0): Turn 3 -> Rough Bed (y in [10.5, 12.8]) -> Low Conduit (y in [13.2, 15.2]) -> Goal (0.0, 16.5)
+    """
+    rng = rng if rng is not None else np.random.default_rng()
+    spawn = np.array([0.0, 0.0], dtype=np.float32)
+    goal = np.array([0.0, 16.5], dtype=np.float32)
+
+    # Key Waypoints for smooth turning
+    key_waypoints = np.array([
+        [0.0, 0.0],    # Spawn (Station 1: Sprint)
+        [4.5, 0.0],    # Hurdle Leap (Station 2)
+        [8.0, 0.0],    # Approach Turn 1
+        [9.0, 0.0],    # Turn 1 Apex
+        [9.0, 1.2],    # Exit Turn 1 onto Leg 2
+        [9.0, 2.8],    # Box 1 (Parkour Station 3)
+        [9.0, 4.45],   # Box 2 (Over Valley 1)
+        [9.0, 6.1],    # Box 3 (Over Valley 2)
+        [9.0, 7.5],    # Landed back on ground
+        [9.0, 9.0],    # Turn 2 Apex
+        [7.8, 9.0],    # Exit Turn 2 onto Leg 3
+        [6.6, 9.0],    # 3-Step Stairs (Station 4)
+        [5.3, 9.0],    # Elevated Terrace Deck
+        [3.8, 9.0],    # Descent Ramp back to grade
+        [1.2, 9.0],    # Approach Turn 3
+        [0.0, 9.0],    # Turn 3 Apex
+        [0.0, 10.2],   # Exit Turn 3 onto Leg 4
+        [0.0, 11.6],   # Rough Cobblestone Bed (Station 5)
+        [0.0, 14.2],   # Low-Clearance Conduit (Station 6)
+        [0.0, 15.8],   # Deceleration Pad
+        [0.0, 16.5],   # Goal Beacon (Station 7)
+    ], dtype=np.float32)
+
+    # Smoothly interpolate 250 waypoints along the route
+    t_key = np.linspace(0.0, 1.0, len(key_waypoints))
+    t_interp = np.linspace(0.0, 1.0, 250)
+    pts_x = np.interp(t_interp, t_key, key_waypoints[:, 0])
+    pts_y = np.interp(t_interp, t_key, key_waypoints[:, 1])
+    path_pts = np.column_stack([pts_x, pts_y]).astype(np.float32)
+    markers = path_pts[::10].copy()
+    path_length = _arc_length(path_pts)
+
+    # 1. Guide Walls (Width 2.4m, half-width 1.2m)
+    hw = 1.2
+    walls = np.array([
+        # Outer boundary
+        [-1.2, -hw, 9.0 + hw, -hw],
+        [9.0 + hw, -hw, 9.0 + hw, 9.0 + hw],
+        [9.0 + hw, 9.0 + hw, 0.0 + hw, 9.0 + hw],
+        [0.0 + hw, 9.0 + hw, 0.0 + hw, 17.5],
+        [0.0 + hw, 17.5, -hw, 17.5],
+        [-hw, 17.5, -hw, 9.0 - hw],
+        [-hw, 9.0 - hw, -1.2, 9.0 - hw],
+        [-1.2, -hw, -1.2, hw],
+        # Inner corner walls
+        [-1.2, hw, 9.0 - hw, hw],
+        [9.0 - hw, hw, 9.0 - hw, 9.0 - hw],
+        [9.0 - hw, 9.0 - hw, -hw, 9.0 - hw],
+    ], dtype=np.float32)
+
+    # 2. Deep Valleys between the 3 Boxes on Leg 2 (x=9.0):
+    # Valley 1: y in [3.40, 3.85] (center y=3.625, half_y=0.225, half_x=1.2, depth=0.50m)
+    # Valley 2: y in [5.05, 5.50] (center y=5.275, half_y=0.225, half_x=1.2, depth=0.50m)
+    gaps = [
+        [9.0, 3.625, 1.20, 0.225, 0.50],
+        [9.0, 5.275, 1.20, 0.225, 0.50],
+    ]
+
+    # 3. Station 4: 3-Step Stairs & Elevated Deck on Leg 3 (y=9.0, heading -X / West):
+    staircases = [
+        [7.0, 9.0, 3, 0.05, 0.25, 2.4, 180.0, False],
+    ]
+    ramps = [
+        [5.375, 9.0, 1.75, 2.4, 0.15, 0.0, 180.0],
+        [4.0, 9.0, 1.0, 2.4, 0.0, -8.53, 180.0],
+    ]
+
+    # 4. Station 5: Rough Cobblestone Bed on Leg 4 (x=0.0, y in [10.5, 12.8]):
+    stones = [
+        [0.0, 11.65, 1.0, 1.15, 45, 0.040],
+    ]
+
+    # 5. Station 6: Low-Clearance Conduit Tunnel on Leg 4 (x=0.0, y in [13.2, 15.2], length 2.0m, heading +Y):
+    pipes = [
+        [0.0, 13.2, 2.0, 0.380, 0.395, 90.0],
+    ]
+
+    return Scenario(
+        kind="playground",
+        name=name,
+        spawn_xy=spawn,
+        goal=goal,
+        path_pts=path_pts,
+        markers=markers,
+        path_length=path_length,
+        walls=walls,
+        obstacles=np.empty((0, 3), dtype=np.float32),
+        staircases=staircases,
+        ramps=ramps,
+        pipes=pipes,
+        stones=stones,
+        gaps=gaps,
+    )
+
+
 _GENERATORS = {
     "path": path_scenario, "goal": goal_scenario,
     "roundtrip": roundtrip_scenario, "obstacle": obstacle_scenario,
@@ -1991,6 +2208,8 @@ _GENERATORS = {
     "training_cones": training_cones_scenario, "cones": training_cones_scenario, "slalom": training_cones_scenario,
     "curved_cones": curved_training_cones_scenario, "curved_training_cones": curved_training_cones_scenario, "uneven_slalom": curved_training_cones_scenario,
     "boundary": boundary_scenario, "stay_in_boundary": boundary_scenario, "circular_boundary": boundary_scenario,
+    "campus": campus_scenario, "university_campus": campus_scenario, "university": campus_scenario,
+    "playground": playground_scenario, "robotics_playground": playground_scenario, "proving_ground": playground_scenario,
 }
 
 

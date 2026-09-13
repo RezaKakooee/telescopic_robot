@@ -1,0 +1,12 @@
+defaults:
+  - playground
+  - _self_
+
+rl:
+  action_mode: "macro"
+  ent_coef: 0.02
+  forward_incentive: true
+  anti_stagnation: true
+  no_progress_steps: 100  # 10 seconds without gaining 10 cm along the route
+  progress_min_delta: 0.10
+  stage_rewards: false

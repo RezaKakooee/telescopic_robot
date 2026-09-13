@@ -19,6 +19,8 @@ rl:
   lr: 0.0003
   gamma: 0.995
   ent_coef: 0.01
+  wandb: false
+  device: cuda
 
 reward:
   collision_cost: 0.08         # Strict wall collision penalty (~ -0.80 per decision step in contact)

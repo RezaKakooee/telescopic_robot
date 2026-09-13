@@ -1244,10 +1244,6 @@ Defaults are $35\,\text{cm}$ for goal tolerance, $28^\circ$ for heading
 error, and $0.0018\,\text{cm}^{-1}$ for the curvature threshold.
 Selecting `stop` starts braking; it does not establish that velocity is zero.
 
-There is also a sign mismatch in the current curve dispatch: the path
-estimator makes leftward curvature positive, but `curve` expects positive
-to mean rightward. The estimated curvature needs negating at that API
-boundary; the recorded trajectory is not evidence that this mapping is correct.
 
 ```python
 targets = execute_skill(
@@ -1481,3 +1477,43 @@ Implementation: [terrain skill](../../skills/low_level/terrain_following.py) ·
 [Recording script](./render_rough_terrain.py) ·
 [trajectory](./assets/rough-terrain-suspension.csv) ·
 [summary](./assets/rough-terrain-suspension-results.json).
+
+### 5.14 Single-Maze RL Policy Transfer & Retraining on Multi-Stage Ball Dynamics
+
+In earlier iterations with single-stage antenna rods, an active-braking PPO policy trained strictly on a single 7×6 Level 3 maze demonstrated strong zero-shot generalization across unseen maze layouts. Following major mechanical dynamics updates—3-stage concentric nesting, concentric tube damping, increased inertia, and motor latency—we conducted a rigorous two-phase investigation:
+
+1. **Phase 1: Zero-Shot Transfer of Old Weights on New Dynamics.** The original policy (`ppo_final.zip`) was directly evaluated against the new multi-stage ball across 7 topologies (the training maze plus 6 unseen benchmark layouts). The policy suffered a severe under-actuation collapse: **0% success (0 / 7 solved)**, with mean speed dropping by 92% to **$0.061\,\text{m/s}$** as the sphere crept forward and timed out.
+2. **Phase 2: Retraining Natively on Multi-Stage Physics.** We retrained the PPO active-braking agent natively from scratch on the single 7×6 fixed Level 3 maze for 400,000 steps (`20260911_0011__local_455348__train_rl`). Mean episode reward rose from $0.158$ to $45.1$, and the agent adapted its propulsion impulses to overcome concentric tube friction.
+
+#### Comprehensive Generalization Benchmark Matrix
+
+| # | Maze Layout & Topology | Single-Stage Baseline (Old Ball + Old Policy) | Zero-Shot Transfer (New Ball + Old Policy) | **Retrained Policy (New Ball + New Policy)** |
+| :---: | :--- | :---: | :---: | :---: |
+| **0** | **Training Maze** (Level 3, Fixed 7×6) | 100% Success \| 0.0% Hits \| ~1.1 m/s | **FAILED** (Timeout) \| 0.06 m/s | **SUCCESS** \| 422 steps \| **1.03 m/s** \| 1.2% hits |
+| **1** | **Orthogonal Spiral Labyrinth** (Level 1) | 100% Success \| 0.0% Hits \| ~0.9 m/s | **FAILED** (Timeout) \| 0.02 m/s | **SUCCESS** \| 1,122 steps \| **0.61 m/s** \| 1.2% hits |
+| **2** | **High-Density Multi-Loop Braid** (Level 2) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.15 m/s | **SUCCESS** \| 356 steps \| **0.89 m/s** \| 1.1% hits |
+| **3** | **Deep Branching Tree Maze** (Level 3) | 100% Success \| 0.0% Hits \| ~0.8 m/s | **FAILED** (Timeout) \| 0.01 m/s | **FAILED** (Timeout) \| 0.25 m/s \| 0.1% hits |
+| **4** | **Random Diagonal Endpoints Route** (Level 2) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.08 m/s | **FAILED** (Timeout) \| 0.18 m/s \| 82.9% hits |
+| **5** | **Large 7×6 45m Gauntlet** (Level 3) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.02 m/s | **SUCCESS** \| 522 steps \| **0.88 m/s** \| **0.0% hits** |
+| **6** | **Dense S-Curve Switchback** (Level 3) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.10 m/s | **SUCCESS** \| 461 steps \| **0.84 m/s** \| 0.7% hits |
+| **Total** | **Overall Benchmark** | **6 / 6 Solved (100%)** | **0 / 7 Solved (0%)**<br>Mean speed: **0.061 m/s** | **5 / 7 Solved (71.4%)**<br>Mean speed: **0.669 m/s** |
+
+#### Key Insights & Visual Evidence
+- **Thrust & Velocity Restoration**: Locomotion speed surged from $0.061\,\text{m/s}$ up to **$1.03\,\text{m/s}$**, proving that PPO quickly adapts to the higher damping and multi-joint kinematics of concentric rods.
+- **Unseen Generalization Intact**: Without any maze randomization during training, the policy successfully solved 4 out of 6 unseen topologies, including the **45m Gauntlet** with **0 wall collisions** ($0.0\%$).
+- **Experiment Directory**: [`storage_local/20260911_0011__local_455348__train_rl/`](../../storage_local/20260911_0011__local_455348__train_rl/) contains all run checkpoints (`final.zip`, `vecnormalize.pkl`), quantitative evaluations, and full video recordings.
+- **Evaluation Artifacts**:
+  - Retrained evaluation metrics: [`eval_new_policy_new_ball.json`](../../storage_local/20260911_0011__local_455348__train_rl/eval_new_policy_new_ball.json)
+  - Baseline zero-shot metrics: [`eval_old_policy_new_ball.json`](../../storage_local/20260911_0011__local_455348__train_rl/eval_old_policy_new_ball.json)
+  - 100k intermediate checkpoint metrics: [`eval_100k_policy_new_ball.json`](../../storage_local/20260911_0011__local_455348__train_rl/eval_100k_policy_new_ball.json)
+
+<img src="./assets/maze-policy-transfer-comparison.png" alt="Side-by-side comparison of old policy vs retrained policy on new multi-stage ball" width="800">
+
+#### Experiment Video Suite (`storage_local/20260911_0011__local_455348__train_rl/renders/`)
+All demonstration videos are rendered at 25 fps with faststart streamable MP4 encoding:
+- [Side-by-side transfer comparison video](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_policy_transfer_comparison.mp4) ([recording script](./render_maze_comparison.py))
+- [Maze 5: Unseen 45m Gauntlet (Level 3)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_5_unseen_gauntlet_level3.mp4) — 522 steps, 0 wall hits ($0.0\%$)
+- [Maze 0: Training Maze (Level 3 Fixed 7×6)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_0_training_level3.mp4) — 422 steps, $1.03\,\text{m/s}$
+- [Maze 2: Unseen High-Density Multi-Loop Braid (Level 2)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_2_unseen_multiloop_braid_level2.mp4) — 356 steps, $0.89\,\text{m/s}$
+- [Maze 6: Unseen Dense S-Curve Switchback (Level 3)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_6_unseen_switchback_level3.mp4) — 461 steps, $0.84\,\text{m/s}$
+- [Video render script for experiment suite](../../scripts/render_experiment_videos.py)

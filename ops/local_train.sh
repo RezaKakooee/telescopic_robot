@@ -52,7 +52,11 @@ run_job() {
 
 if [ "${RADIAL_LOCAL_WORKER:-0}" != 1 ]; then
     output_dir="$PROJECT_ROOT/storage_local/sci_out"
-    run_id="$(date +%Y%m%d_%H%M)__local_$$__$(basename "$PY_SCRIPT")"
+    cfg_tag=""
+    if [[ -n "$CFG_ARG" && "$CFG_ARG" != -* && "$CFG_ARG" != *=* ]]; then
+        cfg_tag="__$(basename "$CFG_ARG" .yaml)"
+    fi
+    run_id="${RADIAL_SPHERE_RUN_ID:-$(date +%Y%m%d_%H%M)__local_$$__$(basename "$PY_SCRIPT")${cfg_tag}}"
     output_file="$output_dir/$run_id.out"
 
     mkdir -p "$output_dir"

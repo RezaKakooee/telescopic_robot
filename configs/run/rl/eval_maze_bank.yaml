@@ -1,0 +1,37 @@
+# Knobs for scripts/rl/eval_maze_bank.py.
+# Override on the command line, for example:
+#     python scripts/rl/eval_maze_bank.py run=<dir> episodes=30
+
+#: training run dir, holding checkpoints/ppo_final.zip and vecnormalize_final.pkl
+run: null
+
+#: the same bank the run trained against
+bank: storage_local/maze_task_bank/tasks.json
+
+#: scenario + rl config; must match the run, or the observation will not line up
+config: configs/rl/maze_bank_multistage.yaml
+
+#: tasks drawn from each split
+episodes: 15
+
+#: policy steps allowed per episode; one step is 100 ms of sim
+max_steps: 1200
+
+seed: 7
+
+#: record the first `n_videos` held-out episodes. They land in <run>/renders/,
+#: beside the checkpoints they came from, so a run directory holds its own
+#: evidence. Failures are recorded too: a run that only keeps its wins is not
+#: evidence of anything.
+video: true
+n_videos: 4
+fps: 20
+
+#: Which camera the video uses.
+#   course_dual  map on the left, close-up on the right whose azimuth NEVER
+#                rotates. The ball turns; the view does not.
+#   dual         map plus a chase camera that swings round with the ball. It
+#                shows heading well and is tiring to watch for two minutes.
+#   fixed_close_dual   two locked close-ups, no map
+#   bird_fixed         map only
+camera: course_dual

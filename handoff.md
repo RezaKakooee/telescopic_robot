@@ -1,6 +1,6 @@
 # Handoff — current state
 
-Date: 2026-09-09. Supersedes the 2026-08-28 handoff (that story is in
+Date: 2026-09-11. Supersedes the 2026-09-09 handoff (that story is in
 `docs/project_journey/02_skill_library_and_the_skill_course.md`).
 
 A 60-rod spherical robot in MuJoCo. It moves by extending and retracting
@@ -14,8 +14,8 @@ library of motion skills, a set of demos that prove them, and an RL stack.
 | `radial_sphere/` | The robot and the runtime: MuJoCo env, MJCF builder, scenarios, the shared gait maths, the demo runner. |
 | `skills/low_level/` | 9 modules. State in, 60 rod targets out. One behaviour each, no branching. |
 | `skills/mid_level/` | 4 modules. Choose a low-level skill each step and delegate: `follow_path`, `stay_in_boundary`, `climb_stairs`, plus the jump planners. |
-| `skills/high_level/` | Empty. Reserved for planning and RL policies that emit skill commands. |
-| `demos/<name>/` | 16 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
+| `skills/high_level/` | 1 module. `go_to_goal` plans a route and answers with a skill name plus arguments, never rod targets. |
+| `demos/<name>/` | 17 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
 | `configs/rl/` | 45 scenario presets: arena, floor, robot, sim2real. |
 | `configs/run/` | 16 knob files, one per entry script, grouped like `scripts/`. |
 | `scripts/` | Entry points: RL training, imitation, calibration, `run_demo.py`, `run_tests.py`. |
@@ -52,29 +52,87 @@ BLOG_ASSETS_DIR=$PWD/regen_check python docs/blog/render_wall_push.py
 
 ## State
 
-`main` is at `f43f2c8` and pushed. Working tree clean. 82 tests pass.
+`main` is at `f43f2c8`. The working tree has the four fixes below, uncommitted.
+95 tests pass.
+
+## Just fixed
+
+- **`boundary-stones` contains again.** Max radius 1.77 m in a 2.0 m circle,
+  mean speed 0.47 m/s. It was not a tuning problem. The suspension was
+  driving the robot: an unreachable `target_ride_height` pinned the height PD
+  term at its clip, and that correction only touches the trailing support
+  rods, which is how the rolling gait pushes. `regen_check/README.md` has all
+  three faults and the measurements.
+- **`demos/chimney` climbs out again.** Peak 3.59 m, lands on the 3.3 m box
+  top at 13.7 s. See the rod-mechanism note below for the cause.
+- **`docs/backflip_skill.md` is kept on purpose.** The backflip is going to be
+  rebuilt. The banner now reads as a specification, not as an obituary. The
+  `backflip` row in `skills/README.md` is marked planned, since the name is
+  not in `SKILL_REGISTRY`.
+- **`skills/high_level/` has its first skill.** `go_to_goal` in
+  `goal_seeking.py` returns a skill name plus arguments, never rod targets.
+  It routes around declared obstacles and decides over-or-around from the
+  jump calibration. `skills/README.md` documents it;
+  `tests/test_goal_seeking.py` has 13 tests, including a route property
+  checked on 200 random maps. `demos/goal_seeking/` shows it: the video pairs
+  a chase camera with a plan view drawing the inflated pillars, the chosen
+- **Multi-stage RL maze locomotion successfully retrained & benchmarked.**
+  As noted under Open below, switching to `multi_stage` rods absorbed the single-stage
+  RL policy's thrust impulses (speed dropped from ~1.1 m/s to 0.061 m/s, causing
+  0/7 maze completions). Retraining PPO natively on `multi_stage` for 400k steps
+  (`storage_local/20260911_0011__local_455348__train_rl/`) restored full locomotion:
+  mean speed jumped 11x to 1.03 m/s, solving the training maze in 422 steps and
+  generalizing zero-shot to 4 of 6 unseen maze topologies (including the 45m Gauntlet
+  with 0 wall collisions). Complete suite of videos and evaluation metrics are saved
+  in the experiment run folder `storage_local/20260911_0011__local_455348__train_rl/renders/`.
 
 ## Open
 
-- **`boundary-stones` demo fails containment.** The robot leaves its 2.0 m
-  circle by 78 cm. It used to pass, but only because a terrain-sensor bug was
-  holding it to 0.30 m/s against a commanded 0.75. With the sensor fixed it
-  reaches its commanded speed and `safety_margin=0.65` is too small. Scaling
-  the margin with speed made the overshoot worse, so the demo needs real
-  retuning. `regen_check/README.md` has the numbers.
-- **`demos/chimney` fails its climb.** Peak 0.82 m, lip not cleared. Predates
-  this work.
+- **The `multi_stage` rod may have broken more than the chimney.** Commit
+  `ead03dd` switched `configs/rl/config.yaml` from `single_stage` to
+  `multi_stage`. That rod puts a passive middle stage in series with the
+  actuator through a soft equality constraint, so an impulse is partly
+  absorbed instead of reaching the ball. The chimney was tuned before that
+  commit and stalled at 0.82 m against a 3.3 m lip; raising
+  `actuator_force_limit` from 100 N to 200 N in `configs/rl/chimney.yaml`
+  brings it back to 5 of 6 orientation seeds. Any other demo tuned before
+  `ead03dd` deserves the same check. The bisect: `ad86844` passes,
+  `ead03dd` fails, nothing since made it worse.
+- **The chimney is slower than it was.** 13.7 s to the box top against 4.8 s
+  at `ad86844`, and 5 of 6 seeds against a recorded 6 of 6. The remaining gap
+  is inside `ead03dd`'s asset changes, which also moved `joint_damping` from
+  0.5 to 0.35, `joint_frictionloss` from 0.8 to 0.08 and the rubber solref
+  time constant from 0.020 to 0.006. None of those was bisected further.
+- **Two more demos fail, and neither is the force limit.** Found while
+  checking the rest of `run_demo.py demo=all`; both predate this work and
+  neither touches anything changed here.
+  - `vertical_cylinder` does not climb at all: +0.02 m against a 3.5 m
+    target, with tangential and vertical speed both at zero. It shares
+    `configs/rl/chimney.yaml`, so it was re-run at 100, 200 and 400 N and the
+    result is identical every time. Whatever stops it, the actuator limit is
+    not it.
+  - `platforms` makes 4 of 5 jumps. The last one, onto box4, is a 0.16 m drop
+    across a 0.50 m gap; the ball stalls at x 10.63 and spends 2,500 steps
+    there. The four before it all clear.
 - **`scratch/`** is 331 tracked files that are gitignored. Untrack with
   `git rm -r --cached scratch/` when convenient.
-- **`docs/backflip_skill.md`** documents code that no longer exists. It has a
-  banner saying so; delete the file if you do not want the record.
-- **`skills/high_level/`** is empty, with the contract written in its
-  `__init__.py`.
+- **The blog videos are stale for boundary-stones.** `regen_check/` holds the
+  fixed render; `docs/blog/assets/` still holds the published one. Copying it
+  over is a decision, not a chore, so it was left alone.
 
 ## Things worth knowing before changing code
 
 - A tuning number is declared once. `SuspensionGains` holds the nine
   suspension gains; passing one as a keyword raises `TypeError` on purpose.
+- A `SuspensionGains` target the build cannot reach is not a harmless
+  request. The height term saturates at its clip and stays there, and since
+  the correction only extends the trailing support rods, a constant clip is a
+  constant forward push. Measure what the robot actually holds on that
+  surface before setting `target_ride_height`.
+- Any caller of `stay_in_boundary` or `traverse_rough_terrain` that drives the
+  skill directly must pass its own `SuspensionState`. `skills/runner.py` does
+  it automatically; the blog render scripts bypass the runner and have to do
+  it by hand.
 - `mid_level` may import `low_level`, never the reverse.
   `tests/test_skill_levels.py` enforces it.
 - A module is never named after a skill. `skills.slalom` used to resolve to

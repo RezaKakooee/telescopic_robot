@@ -36,8 +36,9 @@ from stable_baselines3.common.vec_env import (DummyVecEnv, SubprocVecEnv,  # noq
 
 from omegaconf import OmegaConf  # noqa: E402
 
-from radial_sphere import (SteeringEnv, build_run_id, generate_scenario,  # noqa: E402
-                           load_config_cli, make_run_dir, save_code, setup_logging)
+from radial_sphere import (MultiVideoRecorder, Scenario, SteeringEnv, SkillArbitrationEnv, VideoRecorder, build_run_id,  # noqa: E402
+                           generate_scenario, load_config_cli, make_run_dir,
+                           save_code, setup_logging)
 
 setup_logging()
 
@@ -46,13 +47,31 @@ def load_config_dict_section(section):
     """DictConfig section → plain dict (for the wandb config)."""
     return OmegaConf.to_container(section, resolve=True)
 
-TRAIN_KINDS = ("path", "goal", "obstacle", "maze")
+TRAIN_KINDS = ("path", "goal", "obstacle", "maze", "campus", "university_campus", "playground", "robotics_playground", "proving_ground")
+
+
+def load_obs_stats(path: Path):
+    """Load VecNormalize obs statistics without needing a live VecEnv."""
+    if not path.exists():
+        return None
+    with open(path, "rb") as f:
+        norm = pickle.load(f)
+    norm.training = False
+    return norm
 
 
 def make_env(cfg, kind: str, rank: int, run_dir, seed: int, max_steps: int):
     """Thunk building one training env in a worker process."""
     def _thunk():
         scenario = generate_scenario(kind, cfg, seed=seed + rank)
+        if kind in ("campus", "university_campus", "playground", "robotics_playground", "proving_ground"):
+            return SkillArbitrationEnv(
+                cfg,
+                scenario=scenario,
+                max_steps=max_steps,
+                seed=seed + rank,
+                training=True,
+            )
         maze_level = int(getattr(getattr(cfg.scenario, "maze", None), "level", 1))
         return SteeringEnv(
             cfg,
@@ -85,6 +104,9 @@ def main():
     log.info(f"Run dir : {run_dir}")
     log.info(f"kind={args.kind}  n_envs={n_envs}  additional_steps={total_steps}  "
              f"decision_every={rl.decision_every}  resume={args.resume or 'no'}")
+    if args.kind in ("campus", "university_campus", "playground", "robotics_playground", "proving_ground"):
+        log.info(f"skill_backend={getattr(rl, 'skill_backend', 'skills_rl')}  "
+                 f"action_mode={getattr(rl, 'action_mode', 'hybrid')}")
 
     # Optional Weights & Biases logging (mirrors the tensorboard metrics).
     use_wandb = bool(getattr(rl, "wandb", True))

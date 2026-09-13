@@ -9,6 +9,8 @@ from __future__ import annotations
 from collections import deque
 import numpy as np
 
+from .hardware import RealisticActuatorModel  # noqa: F401  (re-exported)
+
 from ._gym import gym, spaces
 from .controller import bar_targets, desired_direction
 from .mujoco_env import MujocoRadialSphereEnv
@@ -22,36 +24,6 @@ class SensorNoiseModel:
         noisy_obs = obs.copy()
         noise = self.rng.normal(0.0, self.lidar_noise_std, size=obs.shape)
         return noisy_obs + noise
-
-class RealisticActuatorModel:
-    def __init__(self, n_bars: int = 60, v_max: float = 0.28, a_max: float = 3.5, f_max: float = 50.0, p_battery_max: float = 200.0, dt: float = 0.005):
-        self.n_bars, self.v_max, self.a_max, self.f_max, self.p_battery_max, self.dt = n_bars, v_max, a_max, f_max, p_battery_max, dt
-        self.current_pos = np.full(n_bars, 0.025, dtype=np.float32)
-        self.current_vel = np.zeros(n_bars, dtype=np.float32)
-
-    def apply_dynamics(self, target_pos: np.ndarray, actual_forces: np.ndarray | None = None) -> tuple[np.ndarray, dict]:
-        desired_vel = (target_pos - self.current_pos) / self.dt
-        effective_v_max = self.v_max
-        if actual_forces is not None:
-            load_factor = np.clip(np.abs(actual_forces) / self.f_max, 0.0, 1.0)
-            effective_v_max = self.v_max * (1.0 - 0.5 * load_factor)
-
-        clipped_accel = np.clip((desired_vel - self.current_vel) / self.dt, -self.a_max, self.a_max)
-        achievable_vel = np.clip(self.current_vel + clipped_accel * self.dt, -effective_v_max, effective_v_max)
-
-        if actual_forces is not None:
-            mech_power = np.abs(actual_forces * achievable_vel)
-            total_power = float(np.sum(mech_power))
-            if total_power > self.p_battery_max:
-                achievable_vel *= self.p_battery_max / total_power
-        else:
-            total_power = 0.0
-
-        new_pos = np.clip(self.current_pos + achievable_vel * self.dt, 0.025, 0.160)
-        self.current_vel = (new_pos - self.current_pos) / self.dt
-        self.current_pos = new_pos.copy()
-        return new_pos, {"total_power_w": total_power, "max_actuator_vel": float(np.max(np.abs(self.current_vel)))}
-
 
 N_BASE_OBS = 7
 N_ENDPOINT_OBS = 8
@@ -128,23 +100,45 @@ class MujocoSteeringEnv(gym.Env):
                 seed=42
             )
 
+        # When the base env owns the hardware model, this layer must not apply
+        # a second one on top: the rods would be rate-limited twice and the
+        # latency counted twice.
+        self._env_owns_hardware = getattr(self.env, "hardware", None) is not None
         self.actuator_sim = None
-        if self.enable_sim2real and self.enable_actuator_limits:
+        if self.enable_sim2real and self.enable_actuator_limits and not self._env_owns_hardware:
             self.actuator_sim = RealisticActuatorModel(
                 n_bars=len(self.env.dirs_body),
                 v_max=float(s2r_dict.get("actuator_v_max", 0.28)),
                 a_max=float(s2r_dict.get("actuator_a_max", 3.5)),
                 f_max=float(s2r_dict.get("actuator_force_limit", 50.0)),
                 p_battery_max=float(s2r_dict.get("battery_p_max", 200.0)),
-                dt=float(self.env.model.opt.timestep)
+                # `apply_dynamics` runs once per `self.env.step`, which advances
+                # `action_repeat` mujoco steps, not one. Passing the raw
+                # timestep made every rod 4.1x slower than its own spec: a
+                # 13.5 cm stroke took 2.0 s of sim, an effective 0.068 m/s
+                # against the 0.28 m/s this model is configured with.
+                dt=float(self.env.model.opt.timestep) * int(getattr(self.env, "action_repeat", 1)),
             )
 
+        # Transport latency is applied to the rod targets inside the sub-step
+        # loop, not to the steering command. Two reasons. The delay is on the
+        # bus between the controller and the motors, so rod targets are what
+        # actually arrive late. And a policy step is 100 ms here, so a 25 ms
+        # delay cannot be represented at policy granularity at all -- the old
+        # code tried, and rounded it to nothing.
+        #
+        # It was also a pass-through: appending to a deque and immediately
+        # popping the left of it returns the item just added, whatever `maxlen`
+        # says, so the measured latency was 0 ms rather than 25 ms.
         self.delay_steps = 0
         self.action_queue = None
-        if self.enable_sim2real and self.enable_latency:
+        if self.enable_sim2real and self.enable_latency and not self._env_owns_hardware:
             latency_ms = float(s2r_dict.get("action_delay_ms", 25.0))
-            self.delay_steps = max(1, int(np.round(latency_ms / (float(self.env.model.opt.timestep) * 1000.0))))
-            self.action_queue = deque(maxlen=self.delay_steps + 1)
+            sub_ms = float(self.env.model.opt.timestep) * int(getattr(self.env, "action_repeat", 1)) * 1000.0
+            self.delay_steps = int(np.clip(round(latency_ms / max(sub_ms, 1e-9)), 0, 64))
+            self.actual_latency_ms = self.delay_steps * sub_ms
+            if self.delay_steps > 0:
+                self.action_queue = deque(maxlen=self.delay_steps)
         
         self.power_history = []
         self.max_vel_history = []
@@ -244,9 +238,10 @@ class MujocoSteeringEnv(gym.Env):
             self.max_vel_history = []
 
         if self.enable_sim2real and self.enable_latency and self.action_queue is not None:
+            # Emptied, not primed. The queue now carries rod targets rather
+            # than the 2-vector steering command it once held, and the first
+            # sub-step fills it with whatever the controller actually asks for.
             self.action_queue.clear()
-            for _ in range(self.delay_steps):
-                self.action_queue.append(np.array([1.0, 0.0], dtype=np.float32))
 
         self._last_bar_targets = None
         return full_obs, info
@@ -264,14 +259,6 @@ class MujocoSteeringEnv(gym.Env):
         self._last_raw_cmd = cmd_gf.copy()
         self._last_cmd = d_gf
         self._last_drive = drive
-
-        # 1b. Apply Sim2Real Latency / Delay buffer
-        if self.enable_sim2real and self.enable_latency and self.action_queue is not None:
-            self.action_queue.append(cmd_gf.copy())
-            delayed_cmd_gf = self.action_queue.popleft()
-            cmd_gf = delayed_cmd_gf
-            n = float(np.linalg.norm(cmd_gf))
-            d_gf = cmd_gf / n if n > 1e-6 else np.array([1.0, 0.0], dtype=np.float32)
 
         # Transform goal frame heading into world frame
         g = self._goal_dir(self._info["ball_xy"])
@@ -409,16 +396,30 @@ class MujocoSteeringEnv(gym.Env):
             )
             self._last_bar_targets = ideal_targets.copy()
 
+            # Transport latency: what the motors receive is what the
+            # controller sent `delay_steps` sub-steps ago. The queue is primed
+            # with the first command so the robot does not start from a blank.
+            if self.action_queue is not None:
+                if len(self.action_queue) < self.action_queue.maxlen:
+                    while len(self.action_queue) < self.action_queue.maxlen:
+                        self.action_queue.append(ideal_targets.copy())
+                    sent_targets = ideal_targets
+                else:
+                    sent_targets = self.action_queue[0].copy()
+                    self.action_queue.append(ideal_targets.copy())
+            else:
+                sent_targets = ideal_targets
+
             if self.enable_sim2real and self.enable_actuator_limits and self.actuator_sim is not None:
                 forces = None
                 if hasattr(self.env, "get_rod_contact_forces"):
                     forces = self.env.get_rod_contact_forces()
-                phys_targets, act_metrics = self.actuator_sim.apply_dynamics(ideal_targets, actual_forces=forces)
+                phys_targets, act_metrics = self.actuator_sim.apply_dynamics(sent_targets, actual_forces=forces)
                 self.power_history.append(act_metrics["total_power_w"])
                 self.max_vel_history.append(act_metrics["max_actuator_vel"])
                 _sub_obs, sub_r, sub_term, _sub_trunc, info = self.env.step(phys_targets)
             else:
-                _sub_obs, sub_r, sub_term, _sub_trunc, info = self.env.step(ideal_targets)
+                _sub_obs, sub_r, sub_term, _sub_trunc, info = self.env.step(sent_targets)
 
             total_r += float(sub_r)
             if sub_term:

@@ -657,3 +657,623 @@ def cone_xml(scenario) -> list[str]:
             )
     return walls_xml
 
+
+def campus_features_xml(scenario) -> list[str]:
+    """Realistic University Campus architectural assets and landscape features.
+
+    Clean North-South Central Boulevard:
+      - 3.0m wide continuous paved asphalt promenade from South (0, -8.5) to North (0, 8.5)
+      - Beveled granite curb edgings along both sides (x = -1.5 and x = +1.5)
+      - Paved paver entrance quads at South spawn and North goal
+      - Solid 3D Science & Engineering Hall (West) with ribbon glass and entrance portico
+      - Solid 3D University Library (East) with grand glass atrium and mullion fins
+      - Avenue shade trees planted along lawns at x = +/- 2.8m
+      - Minimalist streetlamps sited strictly along curb edges at x = +/- 1.65m (zero path collisions)
+      - Wooden park benches on lawns facing the promenade (x = +/- 2.2m)
+      - Contiguous stainless-steel handrails along the entire stairs, terrace, and ramp flight
+      - Perpendicular utility pipe hazard line & curb mounting brackets
+    """
+    if getattr(scenario, "kind", "") not in ("campus", "university_campus"):
+        return []
+
+    xml: list[str] = []
+
+    # =========================================================================
+    # 1. Main Promenade Pavement & Curbs (Clean North-South Axis)
+    # =========================================================================
+    # 1a. Central Asphalt Promenade (x in [-1.5, 1.5], y in [-8.5, 8.5], 3.0m wide)
+    xml.append(
+        '<geom name="walkway_promenade" type="box" pos="0.0000 0.0000 0.0030" '
+        'size="1.5000 8.5000 0.0030" material="campus_asphalt_mat" '
+        'friction="0.95 0.015 0.005" condim="4"/>'
+    )
+    # 1b. Granite Curb Edges along the promenade flanks
+    xml.append(
+        '<geom name="curb_west" type="box" pos="-1.5200 0.0000 0.0100" '
+        'size="0.0400 8.5000 0.0100" material="campus_curb_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="curb_east" type="box" pos="1.5200 0.0000 0.0100" '
+        'size="0.0400 8.5000 0.0100" material="campus_curb_mat" condim="3"/>'
+    )
+
+    # 1c. South Spawn Entrance Quad (Paved Granite Pavers)
+    xml.append(
+        '<geom name="plaza_south" type="box" pos="0.0000 -8.0000 0.0040" '
+        'size="2.2000 1.5000 0.0040" material="campus_paver_mat" '
+        'friction="0.95 0.015 0.005" condim="4"/>'
+    )
+    # 1d. North Goal Finish Quad (Paved Granite Pavers)
+    xml.append(
+        '<geom name="plaza_north" type="box" pos="0.0000 8.0000 0.0040" '
+        'size="2.2000 1.5000 0.0040" material="campus_paver_mat" '
+        'friction="0.95 0.015 0.005" condim="4"/>'
+    )
+
+    # =========================================================================
+    # 2. 3D Architectural Buildings (Solid Masses with Windows, Facades, Canopies)
+    # =========================================================================
+    # -------------------------------------------------------------------------
+    # Building 1: Science & Engineering Hall (West: x in [-9.0, -3.5], y in [-2.0, 7.0])
+    # Center: (-6.25, 2.50), size: (2.75, 4.50, 2.40), height: 4.8m
+    # -------------------------------------------------------------------------
+    xml.append(
+        '<geom name="bldg1_plinth" type="box" pos="-6.2500 2.5000 0.2500" '
+        'size="2.8000 4.5500 0.2500" material="stone_facade_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg1_body" type="box" pos="-6.2500 2.5000 2.4000" '
+        'size="2.7500 4.5000 1.9000" material="brick_wall_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg1_roof" type="box" pos="-6.2500 2.5000 4.3500" '
+        'size="2.8200 4.5800 0.0800" material="roof_trim_mat" condim="3"/>'
+    )
+    # Window ribbons facing the central boulevard
+    xml.append(
+        '<geom name="bldg1_win_1f" type="box" pos="-3.4800 2.5000 1.4000" '
+        'size="0.0200 3.8000 0.4000" material="glass_window_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="bldg1_win_2f" type="box" pos="-3.4800 2.5000 3.0000" '
+        'size="0.0200 3.8000 0.4000" material="glass_window_mat" contype="0" conaffinity="0"/>'
+    )
+    # Entrance canopy portico
+    xml.append(
+        '<geom name="bldg1_canopy" type="box" pos="-3.0000 2.5000 2.2000" '
+        'size="0.6000 1.2000 0.0300" material="glass_window_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="bldg1_col_a" type="cylinder" pos="-2.5000 1.4000 1.1000" '
+        'size="0.0400 1.1000" material="lamp_pole_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg1_col_b" type="cylinder" pos="-2.5000 3.6000 1.1000" '
+        'size="0.0400 1.1000" material="lamp_pole_mat" condim="3"/>'
+    )
+
+    # -------------------------------------------------------------------------
+    # Building 2: University Library & Student Center (East: x in [3.5, 9.0], y in [-7.0, 2.0])
+    # Center: (6.25, -2.50), size: (2.75, 4.50, 2.40), height: 4.8m
+    # -------------------------------------------------------------------------
+    xml.append(
+        '<geom name="bldg2_plinth" type="box" pos="6.2500 -2.5000 0.2500" '
+        'size="2.8000 4.5500 0.2500" material="roof_trim_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg2_body" type="box" pos="6.2500 -2.5000 2.4000" '
+        'size="2.7500 4.5000 1.9000" material="stone_facade_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg2_roof" type="box" pos="6.2500 -2.5000 4.3500" '
+        'size="2.8200 4.5800 0.0800" material="roof_trim_mat" condim="3"/>'
+    )
+    # Grand glass atrium wall facing the boulevard
+    xml.append(
+        '<geom name="bldg2_atrium_glass" type="box" pos="3.4800 -2.5000 2.4000" '
+        'size="0.0200 3.8000 1.8000" material="glass_window_mat" contype="0" conaffinity="0"/>'
+    )
+    # Vertical bronze architectural mullion fins
+    for m_i, m_y in enumerate([-5.5, -4.0, -2.5, -1.0, 0.5]):
+        xml.append(
+            f'<geom name="bldg2_mullion_{m_i}" type="box" pos="3.4700 {m_y:.4f} 2.4000" '
+            f'size="0.0350 0.0350 1.8000" material="window_frame_mat" contype="0" conaffinity="0"/>'
+        )
+    # Library entrance canopy
+    xml.append(
+        '<geom name="bldg2_canopy" type="box" pos="3.0000 -2.5000 2.2000" '
+        'size="0.6000 1.2000 0.0300" material="glass_window_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="bldg2_col_a" type="cylinder" pos="2.5000 -1.4000 1.1000" '
+        'size="0.0400 1.1000" material="lamp_pole_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="bldg2_col_b" type="cylinder" pos="2.5000 -3.6000 1.1000" '
+        'size="0.0400 1.1000" material="lamp_pole_mat" condim="3"/>'
+    )
+
+    # =========================================================================
+    # 3. Avenue Shade Trees (Neatly lined along lawns at x = +/- 2.8m)
+    # =========================================================================
+    for t_i, ty in enumerate([-6.5, -3.5, 0.0, 3.5, 6.5]):
+        # West tree
+        xml.append(
+            f'<geom name="tree_trunk_w_{t_i}" type="cylinder" pos="-2.8000 {ty:.4f} 0.7500" '
+            f'size="0.1300 0.7500" material="tree_trunk_mat" friction="0.9 0.01 0.001" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="tree_crown_lower_w_{t_i}" type="sphere" pos="-2.8000 {ty:.4f} 2.1000" '
+            f'size="1.2000" material="tree_foliage_mat" contype="0" conaffinity="0"/>'
+        )
+        xml.append(
+            f'<geom name="tree_crown_upper_w_{t_i}" type="sphere" pos="-2.8000 {ty:.4f} 2.8000" '
+            f'size="0.9000" material="tree_foliage_light_mat" contype="0" conaffinity="0"/>'
+        )
+        # East tree
+        xml.append(
+            f'<geom name="tree_trunk_e_{t_i}" type="cylinder" pos="2.8000 {ty:.4f} 0.7500" '
+            f'size="0.1300 0.7500" material="tree_trunk_mat" friction="0.9 0.01 0.001" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="tree_crown_lower_e_{t_i}" type="sphere" pos="2.8000 {ty:.4f} 2.1000" '
+            f'size="1.2000" material="tree_foliage_mat" contype="0" conaffinity="0"/>'
+        )
+        xml.append(
+            f'<geom name="tree_crown_upper_e_{t_i}" type="sphere" pos="2.8000 {ty:.4f} 2.8000" '
+            f'size="0.9000" material="tree_foliage_light_mat" contype="0" conaffinity="0"/>'
+        )
+
+    # =========================================================================
+    # 4. Pathway Streetlamps (Strictly Sited on Curb Edge at x = +/- 1.65m)
+    # =========================================================================
+    for l_i, ly in enumerate([-5.0, -1.0, 3.0, 7.0]):
+        # West curb streetlamp
+        xml.append(
+            f'<geom name="lamp_pole_w_{l_i}" type="cylinder" pos="-1.6500 {ly:.4f} 1.2500" '
+            f'size="0.0350 1.2500" material="lamp_pole_mat" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="lamp_arm_w_{l_i}" type="capsule" fromto="-1.6500 {ly:.4f} 2.5000 -1.3500 {ly:.4f} 2.5000" '
+            f'size="0.0220" material="lamp_pole_mat" contype="0" conaffinity="0"/>'
+        )
+        xml.append(
+            f'<geom name="lamp_glow_w_{l_i}" type="sphere" pos="-1.3500 {ly:.4f} 2.4400" '
+            f'size="0.0750" material="lamp_glow_mat" contype="0" conaffinity="0"/>'
+        )
+        # East curb streetlamp
+        xml.append(
+            f'<geom name="lamp_pole_e_{l_i}" type="cylinder" pos="1.6500 {ly:.4f} 1.2500" '
+            f'size="0.0350 1.2500" material="lamp_pole_mat" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="lamp_arm_e_{l_i}" type="capsule" fromto="1.6500 {ly:.4f} 2.5000 1.3500 {ly:.4f} 2.5000" '
+            f'size="0.0220" material="lamp_pole_mat" contype="0" conaffinity="0"/>'
+        )
+        xml.append(
+            f'<geom name="lamp_glow_e_{l_i}" type="sphere" pos="1.3500 {ly:.4f} 2.4400" '
+            f'size="0.0750" material="lamp_glow_mat" contype="0" conaffinity="0"/>'
+        )
+
+    # =========================================================================
+    # 5. Teak Wood Park Benches (Sited on Lawns at x = +/- 2.2m Facing Promenade)
+    # =========================================================================
+    for b_i, by in enumerate([-4.5, 4.5]):
+        # West bench (faces East toward promenade)
+        xml.append(
+            f'<geom name="bench_w_seat_{b_i}" type="box" pos="-2.2000 {by:.4f} 0.2200" '
+            f'size="0.2200 0.6500 0.0250" material="bench_slats_mat" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="bench_w_back_{b_i}" type="box" pos="-2.4000 {by:.4f} 0.4200" '
+            f'size="0.0250 0.6500 0.1600" material="bench_slats_mat" condim="3"/>'
+        )
+        # East bench (faces West toward promenade)
+        xml.append(
+            f'<geom name="bench_e_seat_{b_i}" type="box" pos="2.2000 {by:.4f} 0.2200" '
+            f'size="0.2200 0.6500 0.0250" material="bench_slats_mat" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="bench_e_back_{b_i}" type="box" pos="2.4000 {by:.4f} 0.4200" '
+            f'size="0.0250 0.6500 0.1600" material="bench_slats_mat" condim="3"/>'
+        )
+
+    # =========================================================================
+    # 5. Grand Terrace Station: 3-Step Stairs, Elevated Deck & Descent Ramp
+    # =========================================================================
+    # 5a. 3-Step Stairs (Full 3.0m promenade width, ascending along +Y from y=1.0 to 1.75)
+    # Step 1: y in [1.00, 1.25], height 0.05m
+    xml.append(
+        '<geom name="campus_stair_0" type="box" pos="0.0000 1.1250 0.0250" '
+        'size="1.5000 0.1250 0.0250" material="stair_tread_blue_mat" '
+        'friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="campus_stair_nosing_0" type="box" pos="0.0000 1.0150 0.0480" '
+        'size="1.4900 0.0150 0.0030" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+    # Step 2: y in [1.25, 1.50], height 0.10m
+    xml.append(
+        '<geom name="campus_stair_1" type="box" pos="0.0000 1.3750 0.0500" '
+        'size="1.5000 0.1250 0.0500" material="stair_tread_teal_mat" '
+        'friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="campus_stair_nosing_1" type="box" pos="0.0000 1.2650 0.0980" '
+        'size="1.4900 0.0150 0.0030" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+    # Step 3: y in [1.50, 1.75], height 0.15m
+    xml.append(
+        '<geom name="campus_stair_2" type="box" pos="0.0000 1.6250 0.0750" '
+        'size="1.5000 0.1250 0.0750" material="stair_tread_blue_mat" '
+        'friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="campus_stair_nosing_2" type="box" pos="0.0000 1.5150 0.1480" '
+        'size="1.4900 0.0150 0.0030" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+
+    # 5b. Elevated Terrace Deck (z = +0.15m, y in [1.75, 3.50], 3.0m wide)
+    xml.append(
+        '<geom name="campus_terrace_deck" type="box" pos="0.0000 2.6250 0.0750" '
+        'size="1.5000 0.8750 0.0750" material="campus_paver_mat" '
+        'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
+    )
+
+    # 5c. Smooth Descent Ramp (y in [3.50, 4.25], sloping down from z=0.15 to z=0.0)
+    xml.append(
+        '<geom name="campus_descent_ramp" type="box" pos="0.0000 3.8750 0.0750" '
+        'size="1.5000 0.3824 0.0200" euler="11.31 0 0" material="campus_paver_mat" '
+        'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
+    )
+
+    # =========================================================================
+    # 6. Contiguous Stainless-Steel Handrails (Spanning Stairs, Terrace, and Ramp)
+    # =========================================================================
+    # Flanks at x = -1.52 and x = +1.52, covering y from 1.0 to 4.25
+    for s_side, sx in [("west", -1.52), ("east", 1.52)]:
+        # Segment 1: Slanted handrail over 3-step stairs (y: 1.0 -> 1.75, z: 0.85 -> 1.00)
+        xml.append(
+            f'<geom name="handrail_stair_{s_side}" type="capsule" '
+            f'fromto="{sx:.4f} 1.0000 0.8500 {sx:.4f} 1.7500 1.0000" '
+            f'size="0.0250" material="handrail_steel_mat" condim="3"/>'
+        )
+        # Segment 2: Level handrail over terrace platform (y: 1.75 -> 3.50, z: 1.00)
+        xml.append(
+            f'<geom name="handrail_deck_{s_side}" type="capsule" '
+            f'fromto="{sx:.4f} 1.7500 1.0000 {sx:.4f} 3.5000 1.0000" '
+            f'size="0.0250" material="handrail_steel_mat" condim="3"/>'
+        )
+        # Segment 3: Slanted handrail over descent ramp (y: 3.50 -> 4.25, z: 1.00 -> 0.85)
+        xml.append(
+            f'<geom name="handrail_ramp_{s_side}" type="capsule" '
+            f'fromto="{sx:.4f} 3.5000 1.0000 {sx:.4f} 4.2500 0.8500" '
+            f'size="0.0250" material="handrail_steel_mat" condim="3"/>'
+        )
+        # Vertical stanchion posts
+        for p_i, py in enumerate([1.0, 1.75, 2.625, 3.5, 4.25]):
+            pz = 1.0 if (1.75 <= py <= 3.5) else (0.85 if (py == 1.0 or py == 4.25) else 0.925)
+            xml.append(
+                f'<geom name="rail_post_{s_side}_{p_i}" type="cylinder" '
+                f'pos="{sx:.4f} {py:.4f} {pz / 2:.4f}" size="0.0220 {pz / 2:.4f}" '
+                f'material="handrail_steel_mat" condim="3"/>'
+            )
+
+    # =========================================================================
+    # 7. Perpendicular Utility Pipe Hazard Line & Flanges (at y = -3.8)
+    # =========================================================================
+    # Clean, straight yellow warning stripe painted across the promenade
+    xml.append(
+        '<geom name="pipe_hazard_line" type="box" pos="0.0000 -4.1000 0.0050" '
+        'size="1.5000 0.1200 0.0030" material="stair_nosing_mat" contype="0" conaffinity="0"/>'
+    )
+    # Flanged mounting brackets on curb ends
+    xml.append(
+        '<geom name="pipe_bracket_west" type="box" pos="-1.5500 -3.8000 0.0450" '
+        'size="0.0800 0.0600 0.0450" material="pipe_ring_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="pipe_bracket_east" type="box" pos="1.5500 -3.8000 0.0450" '
+        'size="0.0800 0.0600 0.0450" material="pipe_ring_mat" condim="3"/>'
+    )
+
+    # =========================================================================
+    # 8. Recessed Maintenance Pit Frame (at x = 0.55, y = -1.5)
+    # =========================================================================
+    xml.append(
+        '<geom name="pit_frame" type="box" pos="0.5500 -1.5000 0.0040" '
+        'size="0.3800 0.4800 0.0030" material="pipe_ring_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 9. Wooden Delivery Crates (Off-center near Loading Bay at y = 5.5, West side)
+    # =========================================================================
+    xml.append(
+        '<geom name="crate_1" type="box" pos="-0.8500 5.5000 0.2500" '
+        'size="0.3500 0.3500 0.2500" material="wood_crate_mat" '
+        'friction="1.0 0.01 0.001" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="crate_2" type="box" pos="-0.8500 6.2500 0.1800" '
+        'size="0.2500 0.2500 0.1800" material="wood_crate_mat" '
+        'friction="1.0 0.01 0.001" condim="4" priority="1"/>'
+    )
+
+    return xml
+
+
+def playground_features_xml(scenario) -> list[str]:
+    """Robotics Testing Playground: Multi-Turn Street Course with 3-Box Parkour & Deep Valleys.
+
+    Features:
+      - 2.4m wide street corridors with 3 dedicated 90-degree corner turns
+      - Station 1: Launch sprint runway (Leg 1, East)
+      - Station 2: Hurdle leap at x=4.5m, height 0.18m
+      - Station 3: 3-Box Platform Parkour across 2 deep valleys (Leg 2, North, y in [2.2, 6.7])
+                   Box 1 (+0.24m) -> Valley 1 (-0.5m) -> Box 2 (+0.24m) -> Valley 2 (-0.5m) -> Box 3 (+0.24m)
+      - Station 4: 3-Step Stairs & Elevated Deck (Leg 3, West, x in [7.0, 3.5])
+      - Station 5: Rough cobblestone suspension bed (Leg 4, North, y in [10.5, 12.8])
+      - Station 6: Low-clearance transparent conduit (Leg 4, North, y in [13.2, 15.2])
+      - Station 7: Deceleration target bullseye and finish goal beacon at (0.0, 16.5)
+      - Perimeter acrylic guide walls with high-visibility safety top rails
+    """
+    if getattr(scenario, "kind", "") not in ("playground", "robotics_playground", "proving_ground"):
+        return []
+
+    xml: list[str] = []
+    hw = 1.20  # corridor half-width
+
+    # =========================================================================
+    # 1. Asphalt Street Pavement Corridors (Legs 1, 2, 3, 4)
+    # =========================================================================
+    # Leg 1: East corridor (x in [-1.2, 10.2], y in [-1.2, 1.2])
+    xml.append(
+        '<geom name="play_pave_leg1" type="box" pos="4.5000 0.0000 0.0020" '
+        'size="5.7000 1.2000 0.0020" material="playground_runway_mat" '
+        'friction="1.2 0.015 0.005" condim="4"/>'
+    )
+    # Leg 2: North corridor (x in [7.8, 10.2], y in [-1.2, 10.2])
+    xml.append(
+        '<geom name="play_pave_leg2" type="box" pos="9.0000 4.5000 0.0020" '
+        'size="1.2000 5.7000 0.0020" material="playground_runway_mat" '
+        'friction="1.2 0.015 0.005" condim="4"/>'
+    )
+    # Leg 3: West corridor (x in [-1.2, 10.2], y in [7.8, 10.2])
+    xml.append(
+        '<geom name="play_pave_leg3" type="box" pos="4.5000 9.0000 0.0020" '
+        'size="5.7000 1.2000 0.0020" material="playground_runway_mat" '
+        'friction="1.2 0.015 0.005" condim="4"/>'
+    )
+    # Leg 4: North finish corridor (x in [-1.2, 1.2], y in [7.8, 17.5])
+    xml.append(
+        '<geom name="play_pave_leg4" type="box" pos="0.0000 13.0000 0.0020" '
+        'size="1.2000 4.8000 0.0020" material="playground_runway_mat" '
+        'friction="1.2 0.015 0.005" condim="4"/>'
+    )
+
+    # =========================================================================
+    # 2. Station 1: Launch Pad on Leg 1 (x in [0.0, 0.6])
+    # =========================================================================
+    xml.append(
+        '<geom name="play_launch_pad" type="box" pos="0.3000 0.0000 0.0040" '
+        'size="0.3000 1.1000 0.0020" material="launch_pad_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 3. Station 2: Hurdle Jump Station (x = 4.5)
+    # =========================================================================
+    # Takeoff pad
+    xml.append(
+        '<geom name="hurdle_takeoff_pad" type="box" pos="4.0000 0.0000 0.0040" '
+        'size="0.3000 1.1000 0.0020" material="launch_pad_mat" contype="0" conaffinity="0"/>'
+    )
+    # Upright support posts at street flanks
+    for h_side, hy in [("north", hw), ("south", -hw)]:
+        xml.append(
+            f'<geom name="hurdle_base_{h_side}" type="cylinder" pos="4.5000 {hy:.4f} 0.0150" '
+            f'size="0.0900 0.0150" material="bench_iron_mat" condim="3"/>'
+        )
+        xml.append(
+            f'<geom name="hurdle_post_{h_side}" type="cylinder" pos="4.5000 {hy:.4f} 0.1200" '
+            f'size="0.0300 0.1200" material="stair_nosing_mat" condim="3"/>'
+        )
+    # Horizontal cross-bar spanning across the lane at height 0.18m
+    xml.append(
+        '<geom name="hurdle_crossbar" type="cylinder" pos="4.5000 0.0000 0.1800" '
+        'size="0.0350 1.1800" euler="90 0 0" material="stair_nosing_mat" '
+        'friction="0.8 0.005 0.0001" condim="4" priority="1"/>'
+    )
+
+    # Turn 1 Warning Chevron at Corner 1 (9.0, 0.0)
+    xml.append(
+        '<geom name="turn1_chevron" type="box" pos="8.5000 0.0000 0.0040" '
+        'size="0.0400 1.0000 0.0020" material="stair_nosing_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 4. Station 3: The 3-Box Platform Parkour & Deep Valleys (Leg 2, x=9.0)
+    # =========================================================================
+    # Box 1: y in [2.20, 3.40], height 0.24m, center (9.0, 2.80, 0.12)
+    xml.append(
+        '<geom name="parkour_box_1" type="box" pos="9.0000 2.8000 0.1200" '
+        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
+        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
+    )
+    # Box 1 safety nosing strips (front and rear edges)
+    xml.append(
+        '<geom name="box1_nosing_front" type="box" pos="9.0000 2.2150 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="box1_nosing_rear" type="box" pos="9.0000 3.3850 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+
+    # Box 2: y in [3.85, 5.05], height 0.24m, center (9.0, 4.45, 0.12)
+    xml.append(
+        '<geom name="parkour_box_2" type="box" pos="9.0000 4.4500 0.1200" '
+        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
+        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="box2_nosing_front" type="box" pos="9.0000 3.8650 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="box2_nosing_rear" type="box" pos="9.0000 5.0350 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+
+    # Box 3: y in [5.50, 6.70], height 0.24m, center (9.0, 6.10, 0.12)
+    xml.append(
+        '<geom name="parkour_box_3" type="box" pos="9.0000 6.1000 0.1200" '
+        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
+        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
+    )
+    xml.append(
+        '<geom name="box3_nosing_front" type="box" pos="9.0000 5.5150 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="box3_nosing_rear" type="box" pos="9.0000 6.6850 0.2380" '
+        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+    )
+
+    # Padded Landing Zone after Box 3 (y in [7.0, 7.8])
+    xml.append(
+        '<geom name="box3_landing_pad" type="box" pos="9.0000 7.4000 0.0040" '
+        'size="1.1000 0.4000 0.0020" material="launch_pad_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # Turn 2 Warning Chevron at Corner 2 (9.0, 9.0)
+    xml.append(
+        '<geom name="turn2_chevron" type="box" pos="9.0000 8.5000 0.0040" '
+        'size="1.0000 0.0400 0.0020" material="stair_nosing_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 5. Station 4: 3-Step Stairs & Elevated Deck (Leg 3, y=9.0, heading West)
+    # =========================================================================
+    # 3 Steps: x in [7.0, 6.25], ascending West from z=0 to +0.15m
+    for si in range(3):
+        sx = 7.0 - si * 0.25
+        sz = (si + 1) * 0.05
+        t_mat = "stair_tread_blue_mat" if si % 2 == 0 else "stair_tread_teal_mat"
+        xml.append(
+            f'<geom name="play3_stair_{si}" type="box" pos="{sx - 0.1250:.4f} 9.0000 {sz / 2:.4f}" '
+            f'size="0.1250 1.2000 {sz / 2:.4f}" material="{t_mat}" '
+            f'friction="1.35 0.02 0.005" condim="4" priority="1"/>'
+        )
+        xml.append(
+            f'<geom name="play3_nosing_{si}" type="box" pos="{sx - 0.0150:.4f} 9.0000 {sz - 0.003:.4f}" '
+            f'size="0.0150 1.1800 0.0030" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
+        )
+    # Elevated Deck: x in [4.5, 6.25], height +0.15m
+    xml.append(
+        '<geom name="play3_deck" type="box" pos="5.3750 9.0000 0.0750" '
+        'size="0.8750 1.2000 0.0750" material="campus_paver_mat" '
+        'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
+    )
+    # Descent Ramp: x in [3.5, 4.5], slope down to ground
+    xml.append(
+        '<geom name="play3_ramp" type="box" pos="4.0000 9.0000 0.0750" '
+        'size="0.5050 1.2000 0.0200" euler="0 -8.53 0" material="campus_paver_mat" '
+        'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
+    )
+    # Handrails flanking Leg 3 stairs & deck at y = 9.0 +/- 1.22m
+    for s_side, sy in [("north", 9.0 + hw), ("south", 9.0 - hw)]:
+        xml.append(
+            f'<geom name="play3_rail_{s_side}" type="capsule" '
+            f'fromto="7.0000 {sy:.4f} 0.8500 3.5000 {sy:.4f} 0.8500" '
+            f'size="0.0250" material="handrail_steel_mat" condim="3"/>'
+        )
+
+    # Turn 3 Warning Chevron at Corner 3 (0.0, 9.0)
+    xml.append(
+        '<geom name="turn3_chevron" type="box" pos="0.5000 9.0000 0.0040" '
+        'size="0.0400 1.0000 0.0020" material="stair_nosing_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 6. Station 5 & 6: Rough Bed & Low Conduit (Leg 4, x=0.0, heading North)
+    # =========================================================================
+    # Rough Cobblestone Bed: y in [10.5, 12.8]
+    xml.append(
+        '<geom name="gravel_border_s" type="box" pos="0.0000 10.4500 0.0150" '
+        'size="1.1500 0.0400 0.0150" material="pipe_ring_mat" condim="3"/>'
+    )
+    xml.append(
+        '<geom name="gravel_border_n" type="box" pos="0.0000 12.8500 0.0150" '
+        'size="1.1500 0.0400 0.0150" material="pipe_ring_mat" condim="3"/>'
+    )
+
+    # Low Conduit Flange Rings (Leg 4, x=0, y=13.2, 14.2, 15.2)
+    for cy in [13.2, 14.2, 15.2]:
+        xml.append(
+            f'<geom name="conduit_ring_{int(cy*10)}" type="cylinder" pos="0.0000 {cy:.4f} 0.3800" '
+            f'size="0.4100 0.0250" material="pipe_ring_mat" euler="90 0 0" condim="3"/>'
+        )
+
+    # =========================================================================
+    # 7. Station 7: Deceleration Target Zone & Goal Bullseye (0.0, 16.5)
+    # =========================================================================
+    xml.append(
+        '<geom name="brake_pad" type="box" pos="0.0000 15.5000 0.0035" '
+        'size="1.1000 0.8000 0.0020" material="brake_checker_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="target_outer_ring" type="cylinder" pos="0.0000 16.5000 0.0040" '
+        'size="0.9000 0.0020" material="target_ring_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="target_mid_ring" type="cylinder" pos="0.0000 16.5000 0.0045" '
+        'size="0.5500 0.0020" material="target_mid_mat" contype="0" conaffinity="0"/>'
+    )
+    xml.append(
+        '<geom name="target_bullseye" type="cylinder" pos="0.0000 16.5000 0.0050" '
+        'size="0.2500 0.0020" material="goal_pad_mat" contype="0" conaffinity="0"/>'
+    )
+
+    # =========================================================================
+    # 8. Perimeter Guide Walls (h = 0.40m, transparent acrylic + yellow rail)
+    # =========================================================================
+    # Define bounding wall segments around the 2.4m corridor
+    wall_segs = [
+        # Outer Boundary Segments
+        ((-1.2, -hw), (9.0 + hw, -hw)),
+        ((9.0 + hw, -hw), (9.0 + hw, 9.0 + hw)),
+        ((9.0 + hw, 9.0 + hw), (0.0 + hw, 9.0 + hw)),
+        ((0.0 + hw, 9.0 + hw), (0.0 + hw, 17.5)),
+        ((0.0 + hw, 17.5), (-hw, 17.5)),
+        ((-hw, 17.5), (-hw, 9.0 - hw)),
+        ((-hw, 9.0 - hw), (-1.2, 9.0 - hw)),
+        ((-1.2, -hw), (-1.2, hw)),
+        # Inner Corner Segments
+        ((-1.2, hw), (9.0 - hw, hw)),
+        ((9.0 - hw, hw), (9.0 - hw, 9.0 - hw)),
+        ((9.0 - hw, 9.0 - hw), (-hw, 9.0 - hw)),
+    ]
+
+    for w_i, ((wx1, wy1), (wx2, wy2)) in enumerate(wall_segs):
+        wcx, wcy = (wx1 + wx2) / 2.0, (wy1 + wy2) / 2.0
+        w_len = float(np.hypot(wx2 - wx1, wy2 - wy1))
+        w_yaw = float(np.degrees(np.arctan2(wy2 - wy1, wx2 - wx1)))
+        if w_len < 0.05:
+            continue
+        # Transparent acrylic panel
+        xml.append(
+            f'<geom name="wall_panel_{w_i}" type="box" pos="{wcx:.4f} {wcy:.4f} 0.2000" '
+            f'size="{w_len / 2:.4f} 0.0150 0.2000" euler="0 0 {w_yaw:.2f}" '
+            f'material="acrylic_wall_mat" condim="4"/>'
+        )
+        # Safety yellow top capping rail
+        xml.append(
+            f'<geom name="wall_rail_{w_i}" type="capsule" '
+            f'fromto="{wx1:.4f} {wy1:.4f} 0.4100 {wx2:.4f} {wy2:.4f} 0.4100" '
+            f'size="0.0220" material="stair_nosing_mat" condim="3"/>'
+        )
+
+    return xml
+
+
+

@@ -1,0 +1,7 @@
+defaults:
+  - playground_parkour
+  - _self_
+
+rl:
+  skill_backend: skills
+  action_mode: macro

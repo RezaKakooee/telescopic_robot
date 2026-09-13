@@ -1,0 +1,13 @@
+defaults:
+  - playground_explore
+  - _self_
+
+rl:
+  # Training only: half the episodes retain the complete course from spawn.
+  # Evaluation environments default to training=false and always use spawn.
+  training_start_probability: 0.5
+  training_start_points:
+    - [9.0, 2.8]    # First box: learn to cross the next gap before falling in.
+    - [9.0, 3.625]  # First valley: practice recovering onto the second box.
+    - [9.0, 4.45]   # Second box: learn the next crossing.
+    - [9.0, 5.275]  # Second valley: practice recovering onto the third box.

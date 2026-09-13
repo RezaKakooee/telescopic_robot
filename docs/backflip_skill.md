@@ -1,9 +1,15 @@
 # Backflip skill
 
-> **The code this describes has been removed.** `skills/somersault.py` and
-> `scripts/skills/run_somersault.py` are gone, and no somersault or backflip
-> skill is in `SKILL_REGISTRY`. The commands below will not run. Kept as a
-> record of the approach and the measurements.
+> **The code this describes does not exist yet.** `skills/somersault.py` and
+> `scripts/skills/run_somersault.py` were removed, and no somersault or
+> backflip skill is in `SKILL_REGISTRY`. No command below will run today.
+>
+> The file is kept on purpose. The backflip is going to be built again, and
+> this is the specification for it: the sign convention that tells a backflip
+> from a frontflip, why the maneuver needs a rebound, and the measurements the
+> first version reached. Read it as the plan, not as a description of the
+> code. When the skill comes back, the paths above will need updating to
+> wherever it lands under `skills/low_level/`.
 
 
 This document is the implementation and verification reference for the radial

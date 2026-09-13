@@ -1,0 +1,24 @@
+# Knobs for scripts/rl/train_maze_bank.py.
+# Override on the command line, for example:
+#     python scripts/rl/train_maze_bank.py steps=250000 n_envs=8
+
+#: scenario + rl config; names the rod build and the hyperparameters
+config: configs/rl/maze_bank_multistage.yaml
+
+#: task bank written by scripts/rl/build_maze_bank.py
+bank: storage_local/maze_task_bank/tasks.json
+
+#: null takes n_envs from the config
+n_envs: null
+
+#: null takes total_steps from the config
+steps: null
+
+#: null takes device from the config
+device: null
+
+#: episodes to keep a task before drawing another. Each switch rebuilds the
+#: MuJoCo scene, measured at 0.26 s against 0.01 s for a plain reset.
+resample_every: 1
+
+seed: 101

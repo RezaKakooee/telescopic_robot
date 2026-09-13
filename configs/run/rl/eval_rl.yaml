@@ -5,8 +5,8 @@
 #: training run dir (with checkpoints/final.zip + vecnormalize.pkl)
 run: null
 
-#: scenario kind to evaluate on
-kind: "goal"
+#: scenario kind to evaluate on (null uses the training/config scenario kind)
+kind: null
 
 #: or a fixed scenario JSON
 scenario: null

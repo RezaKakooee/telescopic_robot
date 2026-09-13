@@ -1,0 +1,32 @@
+defaults:
+  - maze_bank_multistage
+  - _self_
+
+# =====================================================================
+# The same mazes, with the floor swept clean.
+#
+# `maze_bank_multistage` scatters roughly 700 rocks through the corridors plus
+# 4 cast-steel bollards, 2 gaps, a step and 2 sand patches. This turns all of
+# that off and leaves the walls.
+#
+# The layouts, the routes and the start/goal pairs are untouched, because those
+# come from the task bank's (layout_seed, endpoint_seed) and not from the
+# hazards. So a policy can be scored on exactly the same 500 tasks with and
+# without terrain, and the difference is the terrain.
+#
+# Read the result carefully: a policy trained with hazards and evaluated
+# without them is being tested off its training distribution. An easier one,
+# but off it all the same. A large improvement here says the terrain is what
+# was stopping it; little change says the difficulty is the navigation.
+# =====================================================================
+
+scenario:
+  hazards:
+    enabled: false
+    rocky_corridors: false
+    n_rocks_per_cell: 0
+    n_blockers: 0
+    n_gaps: 0
+    n_steps: 0
+    n_stones: 0
+    n_sand: 0

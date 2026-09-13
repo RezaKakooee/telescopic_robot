@@ -1,0 +1,18 @@
+# Camera + language skill selection, or labeled demonstration collection.
+source: vlm                    # vlm | teacher
+teacher_run: null              # PPO run directory; required for source=teacher
+config: null
+config_name: null              # default: playground_parkour_skills, or teacher's saved config
+instruction: "Follow the playground route, cross the obstacles and valleys, and reach the green finish."
+seed: 100
+max_decisions: 300
+camera: chase
+history: true                  # previous decision image + current image
+video: true
+output_dir: null               # default: a fresh timestamped directory
+model_id: HuggingFaceTB/SmolVLM-Instruct
+device: cuda
+cache_dir: storage_local/model_cache
+allow_download: false          # explicitly enable on first model download
+max_new_tokens: 64
+max_invalid_commands: 3

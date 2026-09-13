@@ -286,6 +286,13 @@ def stay_in_boundary(
        `turn` for sharp angular deflection, `curve` for tangential deflection,
        or `move` for inward cruising).
 
+    Once the line has actually been crossed, none of that applies. Recovery
+    is `move` along the inward normal at the full commanded speed, because it
+    is the only primitive that can reverse outward momentum: `stop` holds a
+    stance and still creeps outward on rough ground, and `turn` steers
+    relative to the current heading with a 55 degree clip, so it can only
+    angle away.
+
     Parameters
     ----------
     quat : (4,) body orientation quaternion [w, x, y, z].
@@ -401,8 +408,28 @@ def stay_in_boundary(
         # Commanded safe speed scales down smoothly near the line
         v_contain = float(np.clip(speed * (0.25 + 0.60 * (1.0 - s)), 0.18, speed))
 
+        if d_edge <= 0.0:
+            # Already past the line. Recovery drives straight back in at the
+            # full commanded speed, and it has to be `move`.
+            #
+            # Neither of the branches below can do it. `stop` holds a stance,
+            # which on rough ground still creeps outward, and `d_edge < 0.28`
+            # stays true at any distance beyond the line, so the brake
+            # re-triggers forever. `turn` steers relative to the current
+            # heading and clips at 55 degrees, so a robot running straight out
+            # can only ever angle away from the circle, never back into it.
+            # `move` takes an absolute world direction, so it can push against
+            # the outward momentum.
+            sub_skill = "move"
+            action_name = "boundary_recover_inward"
+            targets = move(
+                quat, dirs_body, max_extend, n_in,
+                speed=speed,
+                lin_vel=lin_vel,
+                rod_mechanism=rod_mechanism,
+            )
         # Critical proximity brake: if close to line and moving outward with momentum
-        if (d_edge < 0.28 and v_radial > 0.08) or (d_edge < 0.16 and v_radial > 0.02):
+        elif (d_edge < 0.28 and v_radial > 0.08) or (d_edge < 0.16 and v_radial > 0.02):
             sub_skill = "stop"
             action_name = "boundary_emergency_brake"
             targets = stop(
@@ -565,8 +592,13 @@ def stay_in_boundary(
                     rod_mechanism=rod_mechanism,
                 )
 
+    # `stop` is excluded on purpose. The correction below only extends the
+    # trailing support rods, and a trailing rod pushed into the ground drives
+    # the robot forward -- that is how the rolling gait works. Adding it to a
+    # stance therefore propels the very skill whose job is to hold still. On
+    # the stone field that costs about 0.15 m/s of steady creep.
     suspension_meta = {}
-    if (enable_suspension and not suspension_applied
+    if (enable_suspension and not suspension_applied and sub_skill != "stop"
             and (core_z is not None or terrain_clearances is not None
                  or contact_forces is not None)):
         dirs_world = dirs_body @ quat_to_rotmat(quat).T

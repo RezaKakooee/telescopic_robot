@@ -36,26 +36,41 @@ from .geometry import (
     sample_path,
     sample_roundtrip,
 )
-from .mjcf import build_robot_mjcf, rolling_radius
 from .observation import ObservationModel
-from .radial_sphere import RadialSphereEnv, GymCompatWrapper, make_compat_env
-from .render import Renderer, VideoRecorder, MultiVideoRecorder
+try:
+    from .render import Renderer, VideoRecorder, MultiVideoRecorder
+except (ModuleNotFoundError, ImportError):
+    Renderer = VideoRecorder = MultiVideoRecorder = None
+try:
+    from .radial_sphere import RadialSphereEnv, GymCompatWrapper, make_compat_env
+except ModuleNotFoundError:
+    RadialSphereEnv = GymCompatWrapper = make_compat_env = None
 from .reward import RewardModel
 from .scenario import (Scenario, generate_scenario, path_scenario, goal_scenario,
                        roundtrip_scenario, obstacle_scenario, maze_scenario, KINDS)
 from .log import setup_logging
 from .run_id import build_run_id, normalize_name
 from .snapshot import make_run_dir, save_code
-from .steering import SteeringEnv
+try:
+    from .steering import SteeringEnv
+except ModuleNotFoundError:
+    SteeringEnv = None
 from .mujoco_mjcf import build_mujoco_scene_mjcf
 from .mujoco_env import MujocoRadialSphereEnv
 from .mujoco_steering import MujocoSteeringEnv
 from .mujoco_lowlevel_env import MujocoLowLevelEnv
+from .vision_wrapper import RoboBallVisionWrapper, make_vision_env
+try:
+    from .skill_arbitration_env import SkillArbitrationEnv
+except (ModuleNotFoundError, ImportError):
+    SkillArbitrationEnv = None
 from ._gym import gym
 
 __all__ = [
     "RadialSphereEnv", "GymCompatWrapper", "make_compat_env", "SteeringEnv",
-    "MujocoRadialSphereEnv", "MujocoSteeringEnv", "MujocoLowLevelEnv", "build_mujoco_scene_mjcf",
+    "MujocoRadialSphereEnv", "MujocoSteeringEnv", "MujocoLowLevelEnv", "SkillArbitrationEnv",
+    "RoboBallVisionWrapper", "make_vision_env",
+    "build_mujoco_scene_mjcf",
     "load_config", "load_config_cli", "load_config_dict",
     "setup_logging", "build_run_id", "normalize_name",
     "Scenario", "generate_scenario", "path_scenario", "goal_scenario",

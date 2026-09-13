@@ -19,4 +19,13 @@ sim2real:
   rubber_friction_sliding: 1.25
   rubber_friction_torsional: 0.05
   rubber_friction_rolling: 0.005
-  actuator_force_limit: 100.0
+  # 200 N, not the 100 N the other courses use. The wall push is the most
+  # force-hungry move in the library: it has to throw the whole robot up the
+  # shaft in one stroke. The multi-stage rod raised that cost. Its passive
+  # middle stage sits in series with the actuator through a soft equality
+  # constraint, so an impulse against the wall is partly absorbed there
+  # instead of reaching the ball. At 100 N the climb stalls at 0.82 m against
+  # a 3.3 m lip. At 200 N it clears the lip and lands on the box top on 5 of
+  # 6 orientation seeds. Raising the limit past 200 N changes nothing, so the
+  # actuator no longer saturates there.
+  actuator_force_limit: 200.0

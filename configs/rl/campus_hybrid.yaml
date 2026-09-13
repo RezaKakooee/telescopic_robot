@@ -1,0 +1,6 @@
+defaults:
+  - campus
+  - _self_
+
+rl:
+  action_mode: hybrid

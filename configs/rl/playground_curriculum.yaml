@@ -1,0 +1,10 @@
+defaults:
+  - playground
+  - _self_
+
+rl:
+  action_mode: "macro"
+  ent_coef: 0.02
+  forward_incentive: true
+  anti_stagnation: true
+  stage_rewards: true

@@ -119,6 +119,18 @@ class MujocoRadialSphereEnv(gym.Env):
         self.model = mujoco.MjModel.from_xml_string(xml_str)
         self.data = mujoco.MjData(self.model)
 
+        # Motors and bus latency, only when the config asks. `dt` is the
+        # interval between `step` calls, not the MuJoCo timestep: this env
+        # advances `action_repeat` steps per call, and passing the raw timestep
+        # is what once made every rod 4x slower than its own spec.
+        self.hardware = None
+        if bool(s2r_dict.get("actuator_in_env", False)):
+            from .hardware import HardwareModel
+            self.hardware = HardwareModel.from_config(
+                self.cfg, n_bars=len(dirs),
+                dt=float(self.model.opt.timestep) * int(self.action_repeat),
+                max_extend=self.max_extend, min_ext=0.025)
+
         # Cache IDs
         self.core_body_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, "core")
         self.core_geom_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "core_geom")
@@ -246,7 +258,11 @@ class MujocoRadialSphereEnv(gym.Env):
             self.data.ctrl[:] = self.base_ext
             mujoco.mj_step(self.model, self.data)
 
+        if self.hardware is not None:
+            self.hardware.reset()
+
         self.step_count = 0
+        self._cam_azimuth_smooth = None
         ball_xy = self.data.qpos[0:2]
         self._prev_dist = self._nav_distance(ball_xy)
         self._info = self._get_info(wall_contact=False, goal_contact=False)
@@ -267,6 +283,15 @@ class MujocoRadialSphereEnv(gym.Env):
                 targets = (act_arr + 1.0) * 0.5 * self.max_extend
             else:
                 targets = np.clip(act_arr, 0.0, self.max_extend)
+
+        # Hardware, when the config asks for it. Off by default so every
+        # existing demo keeps the numbers it was tuned against; see
+        # `sim2real.actuator_in_env`. `MujocoSteeringEnv` applies the same
+        # model itself when this is off, and steps aside when it is on, so the
+        # rods are never limited twice.
+        if self.hardware is not None:
+            forces = self.get_rod_contact_forces() if hasattr(self, "get_rod_contact_forces") else None
+            targets = self.hardware.apply(targets, contact_forces=forces)
 
         self.data.ctrl[:] = targets
 
@@ -756,27 +781,27 @@ class MujocoRadialSphereEnv(gym.Env):
             img_rear = self.render(camera_name="underbelly_rear_low")
             return np.concatenate([img_side, img_rear], axis=1)
 
-        # Tracking cameras
+        # Tracking cameras (MuJoCo convention: azim=heading places camera behind robot looking forward along heading)
         side_camera_offsets = {
-            "chase": -90.0,
-            "cinematic_chase_3d": -90.0,        # 👈 Elevated rear chase looking down into hallway
-            "cinematic_diagonal_3d": -45.0,     # 👈 Rear-quarter angled corridor chase
-            "side_rear": -90.0,
-            "side_front": 90.0,
-            "side_right": 0.0,
-            "side_left": 180.0,
-            "side_front_right_30deg": 45.0,
+            "chase": 0.0,
+            "cinematic_chase_3d": 0.0,          # 👈 Elevated rear chase looking down into hallway
+            "cinematic_diagonal_3d": -35.0,     # 👈 Rear-quarter angled corridor chase
+            "side_rear": 0.0,
+            "side_front": 180.0,
+            "side_right": -90.0,
+            "side_left": 90.0,
+            "side_front_right_30deg": -135.0,
             "side_front_left_30deg": 135.0,
             "side_rear_right_30deg": -45.0,
-            "side_rear_left_30deg": -135.0,
-            "side_right_30deg": 0.0,
-            "side_left_30deg": 180.0,
-            "side_front_30deg": 90.0,
-            "side_rear_30deg": -90.0,
+            "side_rear_left_30deg": 45.0,
+            "side_right_30deg": -90.0,
+            "side_left_30deg": 90.0,
+            "side_front_30deg": 180.0,
+            "side_rear_30deg": 0.0,
             # Ground-Level Underbelly Close-Up Cameras (Low horizontal angle to see ground contact)
-            "underbelly_side_low": 0.0,
-            "underbelly_rear_low": -90.0,
-            "underbelly_front_low": 90.0,
+            "underbelly_side_low": -90.0,
+            "underbelly_rear_low": 0.0,
+            "underbelly_front_low": 180.0,
             "underbelly_quarter_low": -45.0,
         }
 
@@ -792,16 +817,45 @@ class MujocoRadialSphereEnv(gym.Env):
                 cam.distance = 1.15     # Close macro view of the ground contact patch
                 cam.elevation = -4.0    # Near-horizontal angle: reveals the full underside forest of rods
             else:
-                cam.distance = 1.45
-                cam.elevation = -30.0  # 30-degree downward angle
+                cam.distance = 1.85
+                cam.elevation = -26.0  # 26-degree downward angle: frames ball and course ahead
 
-            # Compute target yaw from travel or path direction
-            v = self.data.qvel[0:2]
-            if np.linalg.norm(v) > 0.08:
-                target_yaw = float(np.degrees(np.arctan2(v[1], v[0])))
+            # Compute target yaw for tracking camera:
+            # Anchor to course waypoints (path_pts) if available, so camera stays behind
+            # the robot facing forward down the track/corridor, instead of spinning to the
+            # side when the rolling ball collides, rebounds, or wobbles.
+            pos = self.data.qpos[:2]
+            v = self.data.qvel[:2]
+            if hasattr(self, "path_pts") and len(self.path_pts) > 1:
+                dists = np.linalg.norm(self.path_pts - pos, axis=1)
+                idx = int(np.argmin(dists))
+                lookahead_idx = min(idx + 12, len(self.path_pts) - 1)
+                fwd = self.path_pts[lookahead_idx] - pos
+                if np.linalg.norm(fwd) < 0.2:
+                    fwd = self.path_pts[-1] - self.path_pts[-2]
+                path_yaw = float(np.degrees(np.arctan2(fwd[1], fwd[0])))
+                path_dir = np.array([np.cos(np.radians(path_yaw)), np.sin(np.radians(path_yaw))])
+
+                # If moving forward along path, gently blend with velocity
+                forward_speed = float(np.dot(v, path_dir))
+                if forward_speed > 0.3:
+                    v_yaw = float(np.degrees(np.arctan2(v[1], v[0])))
+                    ang_diff = (v_yaw - path_yaw + 180.0) % 360.0 - 180.0
+                    if abs(ang_diff) < 40.0:
+                        target_yaw = path_yaw + 0.25 * ang_diff
+                    else:
+                        target_yaw = path_yaw
+                else:
+                    target_yaw = path_yaw
             else:
-                g = self.scenario.goal[:2] - self.data.qpos[:2]
-                target_yaw = float(np.degrees(np.arctan2(g[1], g[0])))
+                speed = float(np.linalg.norm(v))
+                if speed > 0.15:
+                    target_yaw = float(np.degrees(np.arctan2(v[1], v[0])))
+                elif hasattr(self, "scenario") and hasattr(self.scenario, "goal"):
+                    g = self.scenario.goal[:2] - pos
+                    target_yaw = float(np.degrees(np.arctan2(g[1], g[0])))
+                else:
+                    target_yaw = 0.0
 
             # Steadicam angular filter for smooth gimbal tracking
             if not hasattr(self, "_cam_azimuth_smooth") or self._cam_azimuth_smooth is None:

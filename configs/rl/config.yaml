@@ -94,6 +94,17 @@ controller:               # physical peristaltic cam locomotion
 # --- Modular 100% Sim-to-Real Hardware Modeling (Default: false) ---
 sim2real:
   enabled: false                       # Master Sim-to-Real switch
+  # Where the actuator and latency models are applied.
+  #   false (default) -- only `MujocoSteeringEnv` applies them, so a trained
+  #     steering policy meets the hardware and a hand-written skill called
+  #     against the base env does not. This is how every demo in the repo was
+  #     tuned, so it stays the default.
+  #   true -- `MujocoRadialSphereEnv` applies them itself, so every caller gets
+  #     them: demos, `skills/`, `skills_rl/` and the steering env alike. The
+  #     steering env detects this and steps aside rather than limiting twice.
+  # Turn it on to measure or close a sim-to-real gap; expect skills tuned
+  # without it to travel less far and jump lower.
+  actuator_in_env: false
   # 1. Actuator Hardware Limits
   enable_actuator_limits: true
   actuator_v_max: 0.28                 # m/s max linear velocity
@@ -214,6 +225,7 @@ camera:                   # follows the sphere; looks toward the goal.
   bird_margin: 0.35       # border around the arena in bird_fixed / isometric view (m)
 
 rl:                       # high-level steering policy (train_rl.py / eval_rl.py)
+  skill_backend: skills_rl # playground/campus: skills_rl primitives | skills controllers + jump options
   decision_every: 10      # low-level env steps one RL action is held for
   include_drive: true     # RL also commands speed (drive), not just direction
   obs_obstacles: 3        # nearest pillars in the observation (3 dims each)

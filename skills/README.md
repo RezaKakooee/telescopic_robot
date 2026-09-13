@@ -159,7 +159,7 @@ better in a plan, not because they are different gaits.
 | 14 | `circle` | Continuous circular orbit with pure-pursuit lead & dynamic understeer compensation. Holds radius to within ±1.5 cm. | `ball_xy`, `center_xy`, `radius`, `speed`, `clockwise` |
 | 15 | `straddle_gap` | Dual-flank outrigger locomotion across a central hole/trench between two platforms (Box 1 & Box 2). Tucks central underbelly while driving on lateral flanks with active heading centering. | `d_hat`, `speed`, `lateral_offset`, `min_lat` |
 | 16 | `chimney_climb` | Between two walls, under free physics: `launch` off the floor, `push`/`fly` wall-jump zig-zag up, `hold` (clamp both walls, ~1 kN), `descend` (clamp extension servoed on vz). Exits over the LOWER wall onto its top. | `wall_axis`, `phase`, `side`, `clamp_ext`, `push_frac`, `x_off` |
-| 17 | `backflip` | Rightward rebound with counter-clockwise airborne pitch; aliases: `somersault`, `flip`. | `phase`, `direction`, `launch_power`, `launch_torque` |
+| 17 | `backflip` | **Planned, not built.** The code was removed and no `backflip`, `somersault` or `flip` name is in the registry today. `docs/backflip_skill.md` is the specification it will be rebuilt from. | `phase`, `direction`, `launch_power`, `launch_torque` |
 | 18 | `stairs` | Dispatches a composed stair traversal: planned `jump_to` hops, `stop`, `move`, and controlled `fall_down` drops; aliases: `climb_stairs`, `step_vault`. | `phase`, `d_hat`, live velocity, planned takeoff/drop values |
 
 
@@ -494,6 +494,70 @@ Over 14 orientation-randomized seeds (`--seed N`): 14/14 complete, 10 with
 no intervention at all. `--demo-recovery` stages a fall so the recovery can
 be seen.
 
+## Planning: `go_to_goal`
+
+`skills/high_level/goal_seeking.py` holds the first high-level skill. It does
+not return rod targets. It returns a skill *name* and its arguments, which is
+what the level is for:
+
+```python
+from skills.high_level import go_to_goal
+
+cmd = go_to_goal(
+    ball_xy=env.data.qpos[:2],
+    goal_xy=scenario.goal,
+    lin_vel=env.data.qvel[:2],
+    obstacles=scenario.obstacles,   # (K, 3) as (x, y, radius)
+    steps=scenario.steps,           # (K, 5) as (x, y, hx, hy, height)
+)
+env.step(execute_skill(cmd.skill, quat, dirs_body, max_extend, **cmd.kwargs))
+```
+
+`obstacles` and `steps` take `Scenario` fields unchanged. The command is one
+of `stop`, `climb_stairs` or `follow_path`, and `cmd.reason` says why.
+
+Two decisions live there:
+
+- **Route.** The straight line is used while it is clear. An obstacle on it
+  gets a detour waypoint beside it, and the check repeats. `cmd.meta["route"]`
+  is the polyline, `cmd.meta["route_clear"]` says whether it really cleared
+  everything.
+- **Over or around.** A box is measured against
+  `jump_planner.max_clearable`, the tallest thing this build can guarantee to
+  clear. Low enough and the route stays straight and the command becomes
+  `climb_stairs`. Too tall and the box becomes one more circle to route
+  around. That question needs the jump calibration and the map together, so
+  it can only be answered above `mid_level`.
+
+It does **not** time the phases of a hop. `climb_stairs` takes a `phase`, and
+stepping through crouch, take-off, airborne and landing needs a counter these
+pure functions cannot keep. The command carries the approach phase and the
+`JumpPlan` in `cmd.meta["jump_plan"]`; the caller drives the phases, as
+`demos/stairs/runner.py` already does.
+
+`go_to_goal` is deliberately **not** in `SKILL_REGISTRY`. Every name there
+returns a `(n_bars,)` array, and `execute_skill` summarises those targets as
+telemetry. A planner returns a command instead.
+
+Measured on `configs/rl/obstacle_realistic.yaml` (seed 3, four 0.22 m
+pillars): the goal is reached in 2.9 s, 6 cm out, with the closest approach
+to any pillar surface at 0.39 m against a commanded clearance of 0.35 m.
+`tests/test_goal_seeking.py` checks the route property on 200 random maps.
+
+`demos/goal_seeking/` runs it. The video pairs a chase camera with a plan
+view that draws the inflated pillars, the chosen polyline and the path
+actually taken, so the plan is visible rather than described.
+
+```bash
+PYTHONPATH=. python scripts/run_demo.py demo=goal_seeking video=true
+```
+
+One call costs 0.06-0.19 ms, so it is safe to run every control step. Two
+lookups are cached for the stock calibration to get there. `max_clearable`
+re-plans a jump at every height from 5 cm to 80 cm, which is 57 ms; a single
+`plan_jump` is 0.8 ms. Neither input changes between steps. Passing an
+explicit `calibration` skips both caches.
+
 ## Adding skill 13
 
 Three steps.
@@ -510,3 +574,10 @@ Three steps.
    `NEEDS_WALL_NORMAL`, or `PHASE_SKILLS`).
 
 Then add a check to `tests/test_skills.py` so it stays verified.
+
+## RL integration
+
+Playground/campus policies can select these controllers with
+`rl.skill_backend=skills`; `rl.skill_backend=skills_rl` keeps the primitive
+backend. See [RL skill backends](../docs/rl_skill_backends.md) for supported
+actions, jump sequencing, configuration, and training/evaluation commands.

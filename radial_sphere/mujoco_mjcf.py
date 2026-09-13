@@ -427,14 +427,18 @@ def build_mujoco_scene_mjcf(
     walls_xml.extend(features.steps_xml(scenario))
     walls_xml.extend(features.gaps_xml(scenario))
     walls_xml.extend(features.sand_patch_xml(scenario))
-    walls_xml.extend(features.stone_field_xml(scenario))
-    walls_xml.extend(features.ramp_xml(scenario))
-    walls_xml.extend(features.staircase_xml(scenario))
+    is_campus = getattr(scenario, "kind", "") in ("campus", "university_campus")
+    is_playground = getattr(scenario, "kind", "") in ("playground", "robotics_playground", "proving_ground")
+    if not is_campus and not is_playground:
+        walls_xml.extend(features.ramp_xml(scenario))
+        walls_xml.extend(features.staircase_xml(scenario))
     walls_xml.extend(features.pipe_xml(scenario))
     walls_xml.extend(features.yardline_xml(scenario))
     walls_xml.extend(features.vertical_cylinder_xml(scenario))
     walls_xml.extend(features.motordrome_xml(scenario))
     walls_xml.extend(features.cone_xml(scenario))
+    walls_xml.extend(features.campus_features_xml(scenario))
+    walls_xml.extend(features.playground_features_xml(scenario))
     # 5. Goal Marker & Pad (optional)
     gx, gy = (float(scenario.goal[0]), float(scenario.goal[1])) if scenario.goal is not None else (spawn_xy[0] + 5.0, spawn_xy[1])
     has_goal = getattr(scenario, "has_goal", True) and scenario.goal is not None
@@ -506,6 +510,9 @@ def build_mujoco_scene_mjcf(
             gx, gy, ghx, ghy = float(h[0]), float(h[1]), float(h[2]), float(h[3])
             hole_rects.append((gx - ghx, gx + ghx, gy - ghy, gy + ghy))
 
+        is_campus = getattr(scenario, "kind", "") in ("campus", "university_campus")
+        floor_mat = "campus_grass_mat" if is_campus else "grid"
+
         arena_limit = min(float(floor_half), 40.0)
         slabs = _decompose_floor_slabs((-arena_limit, arena_limit), (-arena_limit, arena_limit), hole_rects)
         floor_elements = [
@@ -520,20 +527,39 @@ def build_mujoco_scene_mjcf(
                 f'<geom name="floor_slab_{s_i}" type="box" '
                 f'pos="{scx:.4f} {scy:.4f} {-slab_half_thickness:.4f}" '
                 f'size="{shx:.4f} {shy:.4f} {slab_half_thickness:.4f}" '
-                f'material="grid" friction="0.85 0.015 0.005" condim="4"/>'
+                f'material="{floor_mat}" friction="0.85 0.015 0.005" condim="4"/>'
             )
         floor_geom_xml = "\n        ".join(floor_elements)
     else:
-        floor_geom_xml = f'<geom name="floor" type="plane" size="{floor_half:.1f} {floor_half:.1f} 0.1" material="grid" friction="0.85 0.015 0.005" condim="4"/>'
+        is_campus = getattr(scenario, "kind", "") in ("campus", "university_campus")
+        floor_mat = "campus_grass_mat" if is_campus else "grid"
+        floor_geom_xml = f'<geom name="floor" type="plane" size="{floor_half:.1f} {floor_half:.1f} 0.1" material="{floor_mat}" friction="0.85 0.015 0.005" condim="4"/>'
+
+    stat_extent = max(4.0, span * 1.25)
+    sky_rgb1 = "0.32 0.58 0.88" if is_campus else "0.20 0.35 0.55"
+    sky_rgb2 = "0.78 0.84 0.90" if is_campus else "0.04 0.07 0.12"
+
+    if is_campus:
+        lighting_xml = f"""
+        <light pos="6 -8 16" dir="-0.35 0.4 -0.85" directional="true"
+               diffuse="1.05 1.02 0.95" specular="0.35 0.35 0.35" castshadow="true"/>
+        <light pos="-6 8 12" dir="0.35 -0.4 -0.8" directional="true"
+               diffuse="0.40 0.42 0.48" specular="0.15 0.15 0.15"/>
+        """
+    else:
+        lighting_xml = f"""
+        <light pos="{cx_arena:.2f} {cy_arena:.2f} 12" dir="0 0 -1" directional="true"
+               diffuse="0.90 0.90 0.90" specular="0.3 0.3 0.3"/>
+        <light pos="0 0 8" dir="0 0 -1" directional="false"
+               diffuse="0.40 0.40 0.40" specular="0.2 0.2 0.2"/>
+        """
 
     xml_str = f"""<mujoco model="radial_sphere_arena">
     <compiler angle="degree" coordinate="local"/>
     <option timestep="{timestep:.5f}" gravity="0 0 -9.81" integrator="implicitfast"/>
 
-    <!-- Pin the model extent to robot scale. MuJoCo derives the near/far clip
-         planes from it, so without this a large floor plane pushes znear past
-         the close-up cameras and the robot disappears from the render. -->
-    <statistic extent="4" center="0 0 0.4"/>
+    <!-- Pin the model extent to arena scale so znear stays tight and wide shots aren't clipped -->
+    <statistic extent="{stat_extent:.1f}" center="{cx_arena:.2f} {cy_arena:.2f} 0.4"/>
 
     <default>
         <geom contype="2" conaffinity="1"/>
@@ -549,7 +575,7 @@ def build_mujoco_scene_mjcf(
         <texture name="grid" type="2d" builtin="checker" width="512" height="512"
                  rgb1="{grid_rgb1}" rgb2="{grid_rgb2}"/>
         <texture name="skybox" type="skybox" builtin="gradient"
-                 rgb1="0.20 0.35 0.55" rgb2="0.04 0.07 0.12" width="512" height="512"/>
+                 rgb1="{sky_rgb1}" rgb2="{sky_rgb2}" width="512" height="512"/>
         <material name="grid" texture="grid" texrepeat="{grid_repeat:.4f} {grid_repeat:.4f}" reflectance="0.08" texuniform="true"/>
         <material name="pit_floor_mat" rgba="0.10 0.12 0.16 1" specular="0.2" shininess="0.3" reflectance="0.04"/>
         <material name="wall_mat" rgba="0.68 0.64 0.58 1" specular="0.2" shininess="0.3" reflectance="0.06"/>
@@ -578,16 +604,42 @@ def build_mujoco_scene_mjcf(
         <material name="stair_tread_blue_mat" rgba="0.10 0.28 0.58 1.0" specular="0.25" shininess="0.35"/>
         <material name="stair_tread_teal_mat" rgba="0.05 0.48 0.58 1.0" specular="0.25" shininess="0.35"/>
         <material name="stair_nosing_mat" rgba="1.00 0.76 0.00 1.0" emission="0.12" specular="0.5" shininess="0.7"/>
+        <!-- Realistic Campus Architectural & Landscape Materials -->
+        <material name="campus_grass_mat" rgba="0.24 0.46 0.20 1.0" specular="0.04" shininess="0.1" reflectance="0.01"/>
+        <material name="campus_asphalt_mat" rgba="0.22 0.23 0.26 1.0" specular="0.2" shininess="0.3" reflectance="0.04"/>
+        <material name="campus_paver_mat" rgba="0.75 0.73 0.68 1.0" specular="0.25" shininess="0.3" reflectance="0.06"/>
+        <material name="campus_curb_mat" rgba="0.82 0.82 0.82 1.0" specular="0.3" shininess="0.4"/>
+        <material name="brick_wall_mat" rgba="0.62 0.25 0.17 1.0" specular="0.15" shininess="0.2" reflectance="0.03"/>
+        <material name="stone_facade_mat" rgba="0.78 0.76 0.72 1.0" specular="0.2" shininess="0.3" reflectance="0.05"/>
+        <material name="glass_window_mat" rgba="0.12 0.26 0.42 0.88" specular="0.95" shininess="0.95" reflectance="0.40"/>
+        <material name="window_frame_mat" rgba="0.15 0.16 0.18 1.0" specular="0.5" shininess="0.7"/>
+        <material name="roof_trim_mat" rgba="0.26 0.28 0.30 1.0" specular="0.2" shininess="0.3"/>
+        <material name="tree_trunk_mat" rgba="0.32 0.22 0.14 1.0" specular="0.1" shininess="0.1"/>
+        <material name="tree_foliage_mat" rgba="0.16 0.38 0.14 1.0" specular="0.1" shininess="0.1"/>
+        <material name="tree_foliage_light_mat" rgba="0.24 0.48 0.19 1.0" specular="0.1" shininess="0.1"/>
+        <material name="lamp_pole_mat" rgba="0.15 0.16 0.18 1.0" specular="0.6" shininess="0.8"/>
+        <material name="lamp_glow_mat" rgba="1.00 0.96 0.85 1.0" emission="0.85" specular="0.5"/>
+        <material name="bench_slats_mat" rgba="0.58 0.36 0.18 1.0" specular="0.3" shininess="0.4"/>
+        <material name="bench_iron_mat" rgba="0.12 0.13 0.15 1.0" specular="0.5" shininess="0.7"/>
+        <material name="handrail_steel_mat" rgba="0.78 0.80 0.82 1.0" specular="0.85" shininess="0.9" reflectance="0.35"/>
+        <material name="steel_conduit_mat" rgba="0.65 0.68 0.72 1.0" specular="0.8" shininess="0.85" reflectance="0.25"/>
+        <material name="wood_crate_mat" rgba="0.68 0.50 0.30 1.0" specular="0.2" shininess="0.3"/>
+        <!-- Robotics Testing Playground Materials -->
+        <material name="playground_runway_mat" rgba="0.16 0.18 0.22 1.0" specular="0.2" shininess="0.3" reflectance="0.04"/>
+        <material name="yardline_white_mat" rgba="0.94 0.95 0.96 1.0" emission="0.05" specular="0.3"/>
+        <material name="launch_pad_mat" rgba="0.95 0.42 0.10 1.0" specular="0.4" shininess="0.5"/>
+        <material name="acrylic_wall_mat" rgba="0.80 0.88 0.96 0.32" specular="0.9" shininess="0.95" reflectance="0.3"/>
+        <material name="brake_checker_mat" rgba="0.28 0.29 0.32 1.0" specular="0.2" shininess="0.3"/>
+        <material name="target_ring_mat" rgba="0.90 0.22 0.20 0.85" specular="0.3"/>
+        <material name="target_mid_mat" rgba="0.96 0.96 0.96 0.90" specular="0.3"/>
     </asset>
 
     <worldbody>
-        <light pos="{cx_arena:.2f} {cy_arena:.2f} 12" dir="0 0 -1" directional="true"
-               diffuse="0.90 0.90 0.90" specular="0.3 0.3 0.3"/>
-        <light pos="0 0 8" dir="0 0 -1" directional="false"
-               diffuse="0.40 0.40 0.40" specular="0.2 0.2 0.2"/>
+        {lighting_xml}
 
         <!-- Floor Plane -->
         {floor_geom_xml}
+
 
         <!-- Maze Walls -->
         {''.join(walls_xml)}

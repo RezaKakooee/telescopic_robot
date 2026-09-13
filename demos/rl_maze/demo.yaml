@@ -1,0 +1,36 @@
+# rl_maze: everything about showing one skill.
+#   python scripts/run_demo.py demo=rl_maze
+# `knobs` is what this demo's own runner.py reads.
+#
+# Cross a maze using nothing but the seven primitives in `skills_rl/`. The
+# chooser in runner.py is deliberately small and hand-written: its job is to
+# show that the basis is sufficient, not to be a good controller. An RL policy
+# would replace exactly that function and nothing else.
+#
+# The maze comes from the task bank, so the run is reproducible: a task is the
+# pair (layout_seed, endpoint_seed), and `generate_scenario` is deterministic
+# in both.
+#
+# Reference run (layout 43, endpoints 2, hardware profile): a 45 m route, and
+# the ball is still going at the two-minute mark.
+
+description: Cross a maze using only the skills_rl primitives.
+runner: true
+knobs:
+  profile: hardware      # "hardware" applies the actuator model; "ideal" does not
+  layout_seed: 43        # from storage_local/maze_task_bank/tasks.json
+  endpoint_seed: 2
+  seconds: 120           # recorded length, at 1x
+  video: false
+  fps: 25
+  frame_every: 4         # env step is 10 ms, so 4 frames at 25 fps is real time
+  lookahead: 0.9
+  stuck_speed: 0.08      # below this for `stuck_steps` counts as jammed
+  stuck_steps: 60
+  # Rod ray height above which the ground counts as rough enough to conform to.
+  # Measured on this maze: about half the steps clear this.
+  rough_clearance: 0.03
+  # Boost on the rods bearing against a rock face, used on rough ground only.
+  # Without it the rolling wave is stopped by a 2 cm kerb; 4.0 clears 6 cm,
+  # which covers the 5.5 cm stones this maze scatters.
+  vault: 4.0
