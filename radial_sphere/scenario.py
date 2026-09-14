@@ -27,7 +27,10 @@ import numpy as np
 
 from .geometry import sample_path, sample_roundtrip
 
-KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary", "campus", "university_campus", "playground", "robotics_playground")
+KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary", "campus", "university_campus", "playground", "robotics_playground",
+         "inspection_warehouse", "inspection_pipe_alley", "inspection_tank_farm", "inspection_substation",
+         "inspection_loading_dock", "inspection_boiler_house", "inspection_utility_tunnel",
+         "inspection_solar_farm", "inspection_quarry", "inspection_rubble_site")
 
 
 
@@ -65,6 +68,7 @@ class Scenario:
     wall_height: float = 0.0       # Wall-run geom height; 0 for scenarios that do not expose it
     wall_thickness: float = 0.0    # Wall-run geom thickness; used for surface rather than centre-line distance
     geo_field: np.ndarray = None   # (H, W) geodesic distance to goal; -1 = blocked
+    monotonic_path: bool = False   # route crosses or retraces itself: track it in order, not by nearest point
 
     geo_origin: np.ndarray = None  # (2,) world xy of field cell (0, 0) centre
     geo_res: float = 0.0           # field cell size (m); 0 = no field
@@ -2083,7 +2087,7 @@ def playground_scenario(cfg, *, rng=None, name: str = "playground") -> Scenario:
       - Leg 1 (East, y=0.0): Spawn (0,0) -> Hurdle (x=4.5, h=0.18m) -> Turn 1 (9.0, 0.0)
       - Leg 2 (North, x=9.0): Turn 1 -> 3-Box Parkour across 2 deep valleys (y in [2.2, 6.7]) -> Turn 2 (9.0, 9.0)
       - Leg 3 (West, y=9.0): Turn 2 -> 3-Step Stairs (x in [7.0, 6.25]) -> Deck -> Ramp -> Turn 3 (0.0, 9.0)
-      - Leg 4 (North, x=0.0): Turn 3 -> Rough Bed (y in [10.5, 12.8]) -> Low Conduit (y in [13.2, 15.2]) -> Goal (0.0, 16.5)
+      - Leg 4 (North, x=0.0): Turn 3 -> Rough Bed (y in [10.5, 12.8]) -> Jump Wall (y = 14.2) -> Goal (0.0, 16.5)
     """
     rng = rng if rng is not None else np.random.default_rng()
     spawn = np.array([0.0, 0.0], dtype=np.float32)
@@ -2109,7 +2113,7 @@ def playground_scenario(cfg, *, rng=None, name: str = "playground") -> Scenario:
         [0.0, 9.0],    # Turn 3 Apex
         [0.0, 10.2],   # Exit Turn 3 onto Leg 4
         [0.0, 11.6],   # Rough Cobblestone Bed (Station 5)
-        [0.0, 14.2],   # Low-Clearance Conduit (Station 6)
+        [0.0, 14.2],   # Jump Wall (Station 6)
         [0.0, 15.8],   # Deceleration Pad
         [0.0, 16.5],   # Goal Beacon (Station 7)
     ], dtype=np.float32)
@@ -2141,21 +2145,18 @@ def playground_scenario(cfg, *, rng=None, name: str = "playground") -> Scenario:
         [9.0 - hw, 9.0 - hw, -hw, 9.0 - hw],
     ], dtype=np.float32)
 
-    # 2. Deep Valleys between the 3 Boxes on Leg 2 (x=9.0):
-    # Valley 1: y in [3.40, 3.85] (center y=3.625, half_y=0.225, half_x=1.2, depth=0.50m)
-    # Valley 2: y in [5.05, 5.50] (center y=5.275, half_y=0.225, half_x=1.2, depth=0.50m)
+    # 2. Valleys between the 3 boxes on Leg 2 and the stairs on Leg 3: sizes from
+    # playground_course (the geometry itself is built in mjcf_features.playground_xml).
+    from . import playground_course as PC
     gaps = [
-        [9.0, 3.625, 1.20, 0.225, 0.50],
-        [9.0, 5.275, 1.20, 0.225, 0.50],
+        [PC.LEG2_X, vy, PC.BOX_HALF_W, PC.GAP_W / 2, PC.GAP_DEPTH] for vy in PC.VALLEY_CENTER_Y
     ]
-
-    # 3. Station 4: 3-Step Stairs & Elevated Deck on Leg 3 (y=9.0, heading -X / West):
     staircases = [
-        [7.0, 9.0, 3, 0.05, 0.25, 2.4, 180.0, False],
+        [PC.STAIR_X0, PC.LEG3_Y, PC.STAIR_N, PC.STAIR_RISE, PC.STAIR_RUN, 2.4, 180.0, False],
     ]
     ramps = [
-        [5.375, 9.0, 1.75, 2.4, 0.15, 0.0, 180.0],
-        [4.0, 9.0, 1.0, 2.4, 0.0, -8.53, 180.0],
+        [(PC.DECK_X0 + PC.DECK_X1) / 2, PC.LEG3_Y, PC.DECK_X1 - PC.DECK_X0, 2.4, PC.STAIR_TOP, 0.0, 180.0],
+        [(PC.RAMP_X0 + PC.RAMP_X1) / 2, PC.LEG3_Y, PC.RAMP_X1 - PC.RAMP_X0, 2.4, 0.0, -PC.RAMP_PITCH_DEG, 180.0],
     ]
 
     # 4. Station 5: Rough Cobblestone Bed on Leg 4 (x=0.0, y in [10.5, 12.8]):
@@ -2163,10 +2164,8 @@ def playground_scenario(cfg, *, rng=None, name: str = "playground") -> Scenario:
         [0.0, 11.65, 1.0, 1.15, 45, 0.040],
     ]
 
-    # 5. Station 6: Low-Clearance Conduit Tunnel on Leg 4 (x=0.0, y in [13.2, 15.2], length 2.0m, heading +Y):
-    pipes = [
-        [0.0, 13.2, 2.0, 0.380, 0.395, 90.0],
-    ]
+    # 5. Station 6: 0.20 m jump wall across Leg 4 at y = 14.2 (built in mjcf_features.playground_xml).
+    pipes = []
 
     return Scenario(
         kind="playground",
@@ -2211,6 +2210,10 @@ _GENERATORS = {
     "campus": campus_scenario, "university_campus": campus_scenario, "university": campus_scenario,
     "playground": playground_scenario, "robotics_playground": playground_scenario, "proving_ground": playground_scenario,
 }
+
+# Industrial inspection courses (radial_sphere/inspection_scenarios.py).
+from .inspection_scenarios import INSPECTION_SCENARIOS  # noqa: E402
+_GENERATORS.update(INSPECTION_SCENARIOS)
 
 
 

@@ -1,7 +1,8 @@
 # Handoff — current state
 
-Date: 2026-09-11. Supersedes the 2026-09-09 handoff (that story is in
-`docs/project_journey/02_skill_library_and_the_skill_course.md`).
+Date: 2026-09-14. Supersedes earlier handoffs.
+The VLA work (skills for a policy, the playground course, the ten inspection
+courses, the generic expert, demo collection for SFT) is in `HANDOFF_VLA_RL.md`.
 
 A 60-rod spherical robot in MuJoCo. It moves by extending and retracting
 telescopic rods; there are no wheels and no legs. On top of that sits a
@@ -11,8 +12,9 @@ library of motion skills, a set of demos that prove them, and an RL stack.
 
 | Where | What |
 |---|---|
-| `radial_sphere/` | The robot and the runtime: MuJoCo env, MJCF builder, scenarios, the shared gait maths, the demo runner. |
-| `skills/low_level/` | 9 modules. State in, 60 rod targets out. One behaviour each, no branching. |
+| `radial_sphere/` | The robot and the runtime: MuJoCo env, MJCF builder, scenarios, the shared gait maths, the demo runner. Also `inspection_scenarios.py` (ten courses), `inspection_oracle.py` (generic expert), `playground_course.py` (course dimensions). |
+| `skills/low_level/` | 10 modules. State in, 60 rod targets out. One behaviour each, no branching. `pipe_crawling.py` is the newest. |
+| `skills_vla/` | The policy-facing skill layer: six classes with bounded params, each a thin wrapper over `skills`. |
 | `skills/mid_level/` | 4 modules. Choose a low-level skill each step and delegate: `follow_path`, `stay_in_boundary`, `climb_stairs`, plus the jump planners. |
 | `skills/high_level/` | 1 module. `go_to_goal` plans a route and answers with a skill name plus arguments, never rod targets. |
 | `demos/<name>/` | 17 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
@@ -30,7 +32,7 @@ No command-line flags anywhere. Every entry script takes `key=value`
 overrides, and `--help` prints its full knob list with current values.
 
 ```bash
-PYTHONPATH=. python scripts/run_tests.py              # 82 tests, ~30 s
+PYTHONPATH=. python scripts/run_tests.py              # 190 tests, ~60 s
 PYTHONPATH=. python scripts/run_tests.py all=true     # plus the ~10 min drivers
 
 PYTHONPATH=. python scripts/run_demo.py list=true     # what demos exist
@@ -52,8 +54,30 @@ BLOG_ASSETS_DIR=$PWD/regen_check python docs/blog/render_wall_push.py
 
 ## State
 
-`main` is at `f43f2c8`. The working tree has the four fixes below, uncommitted.
-95 tests pass.
+`main` is at `3f2e637`. The working tree holds one day of VLA work,
+uncommitted; see `HANDOFF_VLA_RL.md` for what it is. 190 tests pass.
+
+## Just done (2026-09-14, VLA day)
+
+Short list; details in `HANDOFF_VLA_RL.md`.
+
+- **The macro running jump was an accident.** Its sprint phase kicked a
+  rolling ball into the air with the rods out. Fixed in
+  `radial_sphere/handcrafted_skill_backend.py`; the option now also waits
+  for the ball to settle before it ends.
+- **Obstacle hits are measured.** `info["obstacle_hit"]` in the env, a
+  reward penalty, and "clean success" in the evaluations.
+- **`crawl_pipe`.** Rolling inside a round conduit down to 0.22 m radius.
+- **Playground course** parametrised in `radial_sphere/playground_course.py`
+  and pushed to the jump's limits. The conduit became a wall.
+- **Ten inspection courses** with short and tour routes, a generic expert
+  that reads the obstacles from the scenario, and a demo collector.
+  216 tour demos (108k frames) are in
+  `storage_local/20260914_1612__local__generate_inspection_demos__30ep/`.
+- **Three builder bugs.** Stone fields were never built into the MJCF;
+  staircases ignored `yaw`; the pipe builder ignored `yaw`.
+- **Every experiment folder has a timestamp** now; old folders were renamed
+  by their mtime.
 
 ## Just fixed
 

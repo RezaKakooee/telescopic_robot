@@ -24,6 +24,7 @@ SKILL_DESCRIPTIONS = {
     "jump_forward_while_stopped": "Execute a full forward jump from rest toward the next waypoint.",
     "jump_forward_while_moving": "Execute a full running forward jump, including run-up; requires clear space.",
     "jump_to": "Execute a forward jump with velocity feedback, toward the next waypoint.",
+    "crawl_pipe": "Roll through a round pipe or conduit along its axis, centred, without touching its walls.",
 }
 
 

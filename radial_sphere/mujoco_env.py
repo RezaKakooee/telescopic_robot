@@ -25,6 +25,19 @@ from .reward import RewardModel
 from .scenario import generate_scenario
 
 
+
+#: Course features that must be cleared, not pushed. Contacts with a sideways
+#: normal against these count as an obstacle hit (see _check_contacts).
+HIT_GEOM_PREFIXES = ("hurdle_", "parkour_box_", "glass_facet_", "conduit_ring_",
+                     "pillar_", "bollard_", "obstacle_", "barrier_")
+#: |normal_z| below this means the contact pushes on a face, not a top.
+HIT_NORMAL_Z_MAX = 0.6
+#: Pipe and ring pieces centred below this height are floor, not obstacle.
+HIT_MIN_GEOM_Z = 0.08
+#: A contact is a hit only when the core moves into the face faster than this
+#: (m/s). Brushing a ledge while rolling away from it does not count.
+HIT_MIN_APPROACH_SPEED = 0.05
+
 class MujocoRadialSphereEnv(gym.Env):
     """OpenAI-Gym-compatible environment running directly on native MuJoCo."""
 
@@ -89,6 +102,9 @@ class MujocoRadialSphereEnv(gym.Env):
         """Compile MJCF XML and initialize MuJoCo Model, Data, and Geom IDs."""
         wall_h = getattr(self.cfg.scenario, "maze", self.cfg.scenario)
         wall_height = float(getattr(wall_h, "wall_height", getattr(self.cfg.scenario, "wall_height", 0.22)))
+        # A scenario may ask for taller walls than the config (fences the ball must not jump).
+        if float(getattr(scenario, "wall_height", 0.0) or 0.0) > 0.0:
+            wall_height = float(scenario.wall_height)
         wall_thickness = float(getattr(wall_h, "wall_thickness",
                                        getattr(self.cfg.scenario, "wall_thickness", 0.06)))
         sim2real_cfg = getattr(self.cfg, "sim2real", None)
@@ -168,6 +184,19 @@ class MujocoRadialSphereEnv(gym.Env):
                 elif gname.startswith(("pillar_", "bollard_", "obstacle_", "barrier_")):
                     self.wall_geom_ids.add(i)
                     self.obstacle_geom_ids.add(i)
+        # Course features the robot must clear without touching their faces.
+        # Supporting contact (a box top, the pipe floor) is fine; a sideways
+        # push against them is a hit. See _check_contacts.
+        self.hit_geom_names: dict[int, str] = {}
+        for i in range(self.model.ngeom):
+            gname = mujoco.mj_id2name(self.model, mujoco.mjtObj.mjOBJ_GEOM, i)
+            if gname and gname.startswith(HIT_GEOM_PREFIXES):
+                # Pieces lying on the floor (pipe floor facet, ring bottom) are a
+                # small curb the robot drives over, not a face to avoid.
+                if float(self.model.geom_pos[i][2]) < HIT_MIN_GEOM_Z and gname.startswith(("glass_", "conduit_")):
+                    continue
+                self.hit_geom_names[i] = gname
+        self.hit_geoms_this_step: set[str] = set()
 
         # Include all descendants, including middle stages and the visual hub.
         robot_bodies = {self.core_body_id}
@@ -265,6 +294,7 @@ class MujocoRadialSphereEnv(gym.Env):
         self._cam_azimuth_smooth = None
         ball_xy = self.data.qpos[0:2]
         self._prev_dist = self._nav_distance(ball_xy)
+        self.hit_geoms_this_step = set()
         self._info = self._get_info(wall_contact=False, goal_contact=False)
         obs = self._get_obs()
         return obs, self._info
@@ -300,6 +330,7 @@ class MujocoRadialSphereEnv(gym.Env):
         goal_contact = False
         obstacle_contact = False
         total_substep_reward = 0.0
+        self.hit_geoms_this_step = set()
 
         for _ in range(self.action_repeat):
             mujoco.mj_step(self.model, self.data)
@@ -342,8 +373,15 @@ class MujocoRadialSphereEnv(gym.Env):
     # ------------------------------------------------------------------
     # Contact Detection
     # ------------------------------------------------------------------
-    def _check_contacts(self) -> tuple[bool, bool]:
-        """Inspect MuJoCo contacts for robot-wall and robot-goal collisions."""
+    def _check_contacts(self) -> tuple[bool, bool, bool]:
+        """Inspect MuJoCo contacts for robot-wall, robot-goal and obstacle-hit collisions.
+
+        Obstacle hits (course features in ``hit_geom_names``) are collected in
+        ``hit_geoms_this_step``. A contact counts as a hit when the robot is
+        moving into the geom and the contact normal is mostly horizontal, i.e.
+        it pushed into a face instead of resting on top or rolling off a
+        ledge. Hurdle parts count from any direction.
+        """
         wall_contact = False
         obstacle_contact = False
         goal_contact = False
@@ -362,6 +400,14 @@ class MujocoRadialSphereEnv(gym.Env):
                     obstacle_contact = True
             elif other == self.goal_geom_id:
                 goal_contact = True
+            name = self.hit_geom_names.get(other)
+            if name is not None:
+                # Contact normal pointing from the obstacle towards the robot.
+                n_to_robot = con.frame[:3] if r2 else -con.frame[:3]
+                moving_into = float(np.dot(self.data.qvel[:3], n_to_robot)) < -HIT_MIN_APPROACH_SPEED
+                sideways = abs(float(n_to_robot[2])) < HIT_NORMAL_Z_MAX
+                if moving_into and (sideways or name.startswith("hurdle_")):
+                    self.hit_geoms_this_step.add(name)
 
         return wall_contact, goal_contact, obstacle_contact
 
@@ -451,6 +497,8 @@ class MujocoRadialSphereEnv(gym.Env):
             "goal_contact": bool(goal_contact),
             "wall_contact": bool(wall_contact),
             "obstacle_contact": bool(obstacle_contact),
+            "obstacle_hit": bool(self.hit_geoms_this_step),
+            "obstacle_hit_geoms": sorted(self.hit_geoms_this_step),
             "success": bool(success),
             "step_count": int(self.step_count),
         }

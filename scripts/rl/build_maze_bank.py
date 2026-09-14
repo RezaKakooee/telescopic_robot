@@ -21,7 +21,7 @@ from radial_sphere.scenario import generate_scenario
 
 CONFIG = "configs/rl/maze_complex_blockers_random_endpoints.yaml"
 N_LAYOUTS, N_ENDPOINTS, N_HELDOUT = 100, 5, 20
-OUT = Path("storage_local/maze_task_bank")
+OUT = Path("storage_local/20260910_0959__local__build_maze_bank__maze_task_bank")
 #: Reachable from anywhere; the bank path is what radial_sphere.task_bank reads.
 OUT.mkdir(parents=True, exist_ok=True)
 

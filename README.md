@@ -15,18 +15,26 @@ steering policy (PPO).
   `low_level/` computes one behaviour, `mid_level/` chooses a low-level
   skill each step and delegates, `high_level/` is reserved for planning.
   See `skills/README.md`.
+- `skills_vla/` — six policy-facing skills (bounded params, egocentric
+  heading), each a thin wrapper over `skills`. Used by the VLA scripts.
 - `demos/` — one folder per skill demo: `demo.yaml`, plus `runner.py`
   when the control flow is the point. `python scripts/run_demo.py
   list=true` shows them. See `demos/README.md`.
 - `scripts/` — entry points, grouped by family; see `scripts/README.md`.
 - `ops/` — SLURM wrappers (`sbatch ops/sb_train.sh train_rl [config] [args]`);
   job logs land in `storage_local/sci_out/<run id>.out`.
-- `docs/` — environment documentation.
+- `docs/` — environment documentation. `HANDOFF_VLA_RL.md` (repo root) covers
+  the VLA work: the playground course, ten inspection courses, the generic
+  expert, and demo collection for SFT.
 - `notes/` — personal notes (vocabulary, overviews).
 - `storage_local/` — all run outputs (gitignored): videos, checkpoints,
   code+config snapshots.
 
 ## Quick start
+
+    # the scripted expert on the ten inspection courses, with videos
+    MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/run_inspection_oracle.py --tour
+
 
     # scripted baseline, one episode with video
     python scripts/heuristic/heuristic_agent.py

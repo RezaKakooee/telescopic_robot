@@ -274,3 +274,52 @@ class WaypointTracker:
             dir_w[0], dir_w[1], d_w,
             dir_g[0], dir_g[1], d_g,
         ], dtype=np.float32)
+
+
+class MonotonicWaypointTracker(WaypointTracker):
+    """A WaypointTracker for routes that cross or retrace themselves.
+
+    The base tracker takes the closest point on the whole route, so at a
+    crossing it may jump to a later (or earlier) part of the route. This one
+    remembers where it was and only looks in a window around that index:
+    ``back`` points behind and ``ahead`` points in front (0.1 m spacing gives
+    2 m and 4 m). Call ``reset()`` at the start of an episode.
+    """
+
+    def __init__(self, path_pts, goal, lookahead_steps: int = 12, back: int = 20, ahead: int = 40,
+                 back_bias: float = 0.01):
+        super().__init__(path_pts, goal, lookahead_steps)
+        self.back, self.ahead = back, ahead
+        self.back_bias = back_bias     # metres of penalty per index behind the last match: ties go forward
+        self.reset()
+
+    def reset(self) -> None:
+        self._last_idx = 0
+
+    def _closest_index(self, pos: np.ndarray) -> int:
+        lo = max(0, self._last_idx - self.back)
+        hi = min(self.n_pts, self._last_idx + self.ahead + 1)
+        dist = np.linalg.norm(self.path_pts[lo:hi] - pos, axis=1)
+        # Where the route retraces itself (a dead end), the outbound and return
+        # points coincide; the penalty makes the later, return-leg point win.
+        cost = dist + self.back_bias * np.maximum(0, self._last_idx - np.arange(lo, hi))
+        idx = lo + int(np.argmin(cost))
+        self._last_idx = idx
+        return idx
+
+    def get_path_progress(self, core_pos: np.ndarray) -> tuple[int, float]:
+        pos = np.asarray(core_pos[:2], dtype=np.float64)
+        closest_idx = self._closest_index(pos)
+        if self.n_pts == 1:
+            return closest_idx, float(np.linalg.norm(self.path_pts[0] - pos))
+        lo = max(0, closest_idx - self.back)
+        hi = min(self.n_pts - 1, closest_idx + self.ahead)
+        seg = self._segments[lo:hi]
+        lengths_sq = self._segment_lengths[lo:hi] ** 2
+        fractions = np.divide(np.sum((pos - self.path_pts[lo:hi]) * seg, axis=1), lengths_sq,
+                              out=np.zeros_like(lengths_sq), where=lengths_sq > 0.0)
+        fractions = np.clip(fractions, 0.0, 1.0)
+        projections = self.path_pts[lo:hi] + fractions[:, None] * seg
+        k = int(np.argmin(np.sum((projections - pos) ** 2, axis=1)))
+        travelled = self._arc_lengths[lo + k] + fractions[k] * self._segment_lengths[lo + k]
+        return closest_idx, float(self._arc_lengths[-1] - travelled)

@@ -17,9 +17,19 @@ SKILL_NAMES = (
     "move", "stop", "reverse", "follow_path", "straddle_gap",
     "traverse_rough_terrain", "jump_up", "jump_forward_while_stopped",
     "jump_forward_while_moving", "jump_to",
+    "crawl_pipe",      # appended: earlier indices stay valid for old checkpoints
 )
-JUMPS = frozenset(SKILL_NAMES[6:])
+JUMPS = frozenset(SKILL_NAMES[6:10])
 MAX_PARAMS = 3
+#: Above this ground speed a running jump skips its 0.55 s sprint run-up.
+RUNNING_SPEED = 0.5
+#: Macro-mode running jump. Measured on the playground with the oracle in
+#: scripts/data/generate_skills_vla_dataset.py: power 0.9 with a 0.04 landing
+#: rollout clears the hurdle, both boxes, the stairs and the wall without a
+#: touch. Full power (1.0) or the skill's 0.10 rollout carries the ball off the
+#: far end of the 1.2 m boxes; 0.85 and below no longer reaches the box top.
+MACRO_JUMP_POWER = 0.9
+MACRO_ROLLOUT_GAIN = 0.04
 
 
 def action_space(mode):
@@ -34,7 +44,7 @@ def decode(action, mode, waypoint_heading):
         raise ValueError(f"skills backend expects {expected} finite action values")
     index = int(np.argmax(action[:len(SKILL_NAMES)]))
     name = SKILL_NAMES[index]
-    angle, speed, power = waypoint_heading, 1.1, 1.0
+    angle, speed, power = waypoint_heading, 1.1, MACRO_JUMP_POWER
     vx, vz = .6, 2.6
     if mode == "hybrid":
         heading_param, speed_param, power_param = np.clip(action[-MAX_PARAMS:], -1, 1)
@@ -45,8 +55,12 @@ def decode(action, mode, waypoint_heading):
     params = {}
     if name in {"move", "reverse", "follow_path", "traverse_rough_terrain"}:
         params["speed"] = speed
+    if name == "crawl_pipe":
+        params["speed"] = min(speed, 0.8)
     if name in JUMPS - {"jump_to"}:
         params["power"] = power
+    if name == "jump_forward_while_moving":
+        params["rollout_gain"] = MACRO_ROLLOUT_GAIN
     if name == "jump_to":
         params.update(vx_target=vx, vz_target=vz, wall_lock=True)
     heading = np.array([np.cos(angle), np.sin(angle)])
@@ -73,11 +87,17 @@ class SkillOption:
         self.phase = "drive"
         self.landing_started = None
         self.burn_finished = False
+        self.skip_sprint = float(np.linalg.norm(env.data.qvel[:2])) > RUNNING_SPEED
 
     def _jump_phase(self, step):
         elapsed = step * self.dt
         running = self.name == "jump_forward_while_moving"
-        crouch_start, burn_start, burn_end = (.55, .62, .75) if running else (0., .20, .32)
+        if running and self.skip_sprint:
+            # Already rolling: the sprint phase would kick the ball off the
+            # ground with the rods still out. Go straight to dip and launch.
+            crouch_start, burn_start, burn_end = 0., .07, .20
+        else:
+            crouch_start, burn_start, burn_end = (.55, .62, .75) if running else (0., .20, .32)
         if elapsed < crouch_start:
             return "sprint"
         if elapsed < burn_start:
@@ -107,5 +127,13 @@ class SkillOption:
         return skill_targets(self.env, self.name, step, d_hat=self.heading, **call)
 
     def complete(self, steps_executed):
-        return (self.landing_started is not None
-                and steps_executed * self.dt >= self.landing_started + .20)
+        """Done 0.2 s after touchdown, once the ball has stopped bouncing.
+
+        The landing rollout can throw the ball back up; handing control to the
+        next option mid-bounce makes that option fire in the air.
+        """
+        if self.landing_started is None or steps_executed * self.dt < self.landing_started + .20:
+            return False
+        pos = self.env.data.qpos[:3]
+        near_ground = pos[2] <= self.ground_height(pos[:2]) + self.env.sphere_radius + .10
+        return near_ground and abs(float(self.env.data.qvel[2])) < .5

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from . import playground_course as PC
 from .terrain import (Cone, Gap, Motordrome, Pipe, Ramp, SandPatch, Staircase,
                       Step, StoneField, VerticalCylinder, Yardline, rows)
 
@@ -275,6 +276,14 @@ def staircase_xml(scenario) -> list[str]:
             yaw = float(flight.yaw_deg)
             is_down = bool(flight.descending)
 
+            def placed(x, y):
+                """Position rotated by the flight yaw about its start; plus the euler attribute."""
+                if abs(yaw) < 1e-9:
+                    return f'pos="{x:.4f} {y:.4f}', ""
+                c, si = np.cos(np.radians(yaw)), np.sin(np.radians(yaw))
+                dx, dy = x - start_x, y - start_y
+                return f'pos="{start_x + c * dx - si * dy:.4f} {start_y + si * dx + c * dy:.4f}', f'euler="0 0 {yaw:.2f}" '
+
             for step_i in range(n_steps):
                 if is_down:
                     step_h = rise * (n_steps - step_i)
@@ -288,7 +297,7 @@ def staircase_xml(scenario) -> list[str]:
                              else "stair_tread_teal_mat")
                 walls_xml.append(
                     f'<geom name="stair_{st_idx}_{step_i}" type="box" '
-                    f'pos="{step_x:.4f} {step_y:.4f} {step_h / 2.0:.4f}" '
+                    f'{placed(step_x, step_y)[0]} {step_h / 2.0:.4f}" {placed(step_x, step_y)[1]}'
                     f'size="{run / 2.0:.4f} {wid / 2.0:.4f} {step_h / 2.0:.4f}" '
                     f'material="{tread_mat}" friction="1.35 0.02 0.005" condim="4" priority="1"/>'
                 )
@@ -296,7 +305,7 @@ def staircase_xml(scenario) -> list[str]:
                 # small contact strip affects which rods support a landing.
                 walls_xml.append(
                     f'<geom name="stair_nosing_{st_idx}_{step_i}" type="box" '
-                    f'pos="{step_x - run/2.0 + 0.015:.4f} {step_y:.4f} {step_h - 0.003:.4f}" '
+                    f'{placed(step_x - run/2.0 + 0.015, step_y)[0]} {step_h - 0.003:.4f}" {placed(step_x, step_y)[1]}'
                     f'size="0.015 {wid / 2.0 * 0.99:.4f} 0.003" '
                     f'material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
                 )
@@ -305,7 +314,7 @@ def staircase_xml(scenario) -> list[str]:
                 # disabled collision bits leave the calibrated physics alone.
                 walls_xml.append(
                     f'<geom name="stair_nosing_visual_{st_idx}_{step_i}" type="box" '
-                    f'pos="{step_x - run/2.0 + 0.045:.4f} {step_y:.4f} {step_h + 0.004:.4f}" '
+                    f'{placed(step_x - run/2.0 + 0.045, step_y)[0]} {step_h + 0.004:.4f}" {placed(step_x, step_y)[1]}'
                     f'size="0.045 {wid / 2.0 * 0.99:.4f} 0.004" '
                     f'material="stair_nosing_mat" contype="0" conaffinity="0"/>'
                 )
@@ -313,7 +322,7 @@ def staircase_xml(scenario) -> list[str]:
                 # low oblique follow camera as well as from above.
                 walls_xml.append(
                     f'<geom name="stair_riser_band_{st_idx}_{step_i}" type="box" '
-                    f'pos="{step_x - run/2.0 - 0.004:.4f} {step_y:.4f} {max(step_h - 0.045, 0.045):.4f}" '
+                    f'{placed(step_x - run/2.0 - 0.004, step_y)[0]} {max(step_h - 0.045, 0.045):.4f}" {placed(step_x, step_y)[1]}'
                     f'size="0.004 {wid / 2.0 * 0.99:.4f} {min(0.045, step_h / 2.0):.4f}" '
                     f'material="stair_nosing_mat" contype="0" conaffinity="0"/>'
                 )
@@ -335,6 +344,21 @@ def pipe_xml(scenario) -> list[str]:
             cx = start_x + p_len / 2.0
             cy = start_y
             cz = in_rad + 0.02
+            yaw_deg = float(pipe.yaw_deg) if getattr(pipe, "yaw_deg", None) is not None else 0.0
+
+            def placed(x, y, roll_deg):
+                """Position and orientation attributes for a pipe part, rotated by the pipe yaw."""
+                if abs(yaw_deg) < 1e-9:
+                    return f'pos="{x:.4f} {y:.4f}"', f'euler="{roll_deg:.1f} 0 0"'
+                yaw = np.radians(yaw_deg)
+                dx, dy = x - start_x, y - start_y
+                rx = start_x + dx * np.cos(yaw) - dy * np.sin(yaw)
+                ry = start_y + dx * np.sin(yaw) + dy * np.cos(yaw)
+                # quat = Rz(yaw) * Rx(roll)
+                cz_, sz_ = np.cos(yaw / 2), np.sin(yaw / 2)
+                cx_, sx_ = np.cos(np.radians(roll_deg) / 2), np.sin(np.radians(roll_deg) / 2)
+                q = (cz_ * cx_, cz_ * sx_, sz_ * sx_, sz_ * cx_)  # (w, x, y, z)
+                return f'pos="{rx:.4f} {ry:.4f}"', f'quat="{q[0]:.6f} {q[1]:.6f} {q[2]:.6f} {q[3]:.6f}"'
 
             # Regular 16-sided polygonal transparent glass barrel with flat bottom track
             n_facets = 16
@@ -350,11 +374,12 @@ def pipe_xml(scenario) -> list[str]:
                 fy = cy + r_mid * np.sin(angle_rad)
                 fz = cz + r_mid * np.cos(angle_rad)
 
+                f_pos, f_rot = placed(cx, fy, -angle_deg)
                 walls_xml.append(
                     f'<geom name="glass_facet_{p_idx}_{fi}" type="box" '
-                    f'pos="{cx:.4f} {fy:.4f} {fz:.4f}" '
+                    f'{f_pos[:-1]} {fz:.4f}" '
                     f'size="{p_len / 2.0:.4f} {facet_w / 2.0:.4f} {facet_th / 2.0:.4f}" '
-                    f'euler="{-angle_deg:.1f} 0 0" material="glass_pipe_mat" '
+                    f'{f_rot} material="glass_pipe_mat" '
                     f'friction="1.2 0.01 0.001" condim="3" priority="1" solref="0.012 1"/>'
                 )
 
@@ -368,11 +393,12 @@ def pipe_xml(scenario) -> list[str]:
                     r_deg = float(np.degrees(r_angle))
                     r_pos_y = cy + (out_rad + 0.01) * np.sin(r_angle)
                     r_pos_z = cz + (out_rad + 0.01) * np.cos(r_angle)
+                    c_pos, c_rot = placed(rx, r_pos_y, -r_deg)
                     walls_xml.append(
                         f'<geom name="pipe_collar_{p_idx}_{ri}_{rfi}" type="box" '
-                        f'pos="{rx:.4f} {r_pos_y:.4f} {r_pos_z:.4f}" '
+                        f'{c_pos[:-1]} {r_pos_z:.4f}" '
                         f'size="0.025 {facet_w / 2.0 * 1.05:.4f} 0.012" '
-                        f'euler="{-r_deg:.1f} 0 0" material="pipe_ring_mat" '
+                        f'{c_rot} material="pipe_ring_mat" '
                         f'contype="0" conaffinity="0"/>'
                     )
     return walls_xml
@@ -1013,7 +1039,7 @@ def playground_features_xml(scenario) -> list[str]:
                    Box 1 (+0.24m) -> Valley 1 (-0.5m) -> Box 2 (+0.24m) -> Valley 2 (-0.5m) -> Box 3 (+0.24m)
       - Station 4: 3-Step Stairs & Elevated Deck (Leg 3, West, x in [7.0, 3.5])
       - Station 5: Rough cobblestone suspension bed (Leg 4, North, y in [10.5, 12.8])
-      - Station 6: Low-clearance transparent conduit (Leg 4, North, y in [13.2, 15.2])
+      - Station 6: 0.20 m jump wall across the corridor (Leg 4, North, y = 14.2)
       - Station 7: Deceleration target bullseye and finish goal beacon at (0.0, 16.5)
       - Perimeter acrylic guide walls with high-visibility safety top rails
     """
@@ -1093,55 +1119,25 @@ def playground_features_xml(scenario) -> list[str]:
     # =========================================================================
     # 4. Station 3: The 3-Box Platform Parkour & Deep Valleys (Leg 2, x=9.0)
     # =========================================================================
-    # Box 1: y in [2.20, 3.40], height 0.24m, center (9.0, 2.80, 0.12)
-    xml.append(
-        '<geom name="parkour_box_1" type="box" pos="9.0000 2.8000 0.1200" '
-        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
-        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
-    )
-    # Box 1 safety nosing strips (front and rear edges)
-    xml.append(
-        '<geom name="box1_nosing_front" type="box" pos="9.0000 2.2150 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
-    xml.append(
-        '<geom name="box1_nosing_rear" type="box" pos="9.0000 3.3850 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
+    # Three boxes with valleys between them; sizes from playground_course.
+    for bi in range(3):
+        y0, y1, cy, bh = PC.BOX_Y0[bi], PC.BOX_Y1[bi], PC.BOX_CENTER_Y[bi], PC.BOX_HEIGHTS[bi]
+        xml.append(
+            f'<geom name="parkour_box_{bi + 1}" type="box" pos="{PC.LEG2_X:.4f} {cy:.4f} {bh / 2:.4f}" '
+            f'size="{PC.BOX_HALF_W:.4f} {PC.BOX_LEN / 2:.4f} {bh / 2:.4f}" material="ramp_mat" '
+            'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
+        )
+        # Safety nosing strips on the front and rear top edges
+        for tag, ny in (("front", y0 + 0.015), ("rear", y1 - 0.015)):
+            xml.append(
+                f'<geom name="box{bi + 1}_nosing_{tag}" type="box" pos="{PC.LEG2_X:.4f} {ny:.4f} {bh - 0.002:.4f}" '
+                f'size="{PC.BOX_HALF_W - 0.02:.4f} 0.0150 0.0040" material="stair_nosing_mat" '
+                'friction="1.2 0.01 0.001" condim="3"/>'
+            )
 
-    # Box 2: y in [3.85, 5.05], height 0.24m, center (9.0, 4.45, 0.12)
+    # Padded Landing Zone after Box 3
     xml.append(
-        '<geom name="parkour_box_2" type="box" pos="9.0000 4.4500 0.1200" '
-        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
-        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
-    )
-    xml.append(
-        '<geom name="box2_nosing_front" type="box" pos="9.0000 3.8650 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
-    xml.append(
-        '<geom name="box2_nosing_rear" type="box" pos="9.0000 5.0350 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
-
-    # Box 3: y in [5.50, 6.70], height 0.24m, center (9.0, 6.10, 0.12)
-    xml.append(
-        '<geom name="parkour_box_3" type="box" pos="9.0000 6.1000 0.1200" '
-        'size="1.2000 0.6000 0.1200" material="ramp_mat" '
-        'friction="1.4 0.02 0.005" condim="4" priority="1"/>'
-    )
-    xml.append(
-        '<geom name="box3_nosing_front" type="box" pos="9.0000 5.5150 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
-    xml.append(
-        '<geom name="box3_nosing_rear" type="box" pos="9.0000 6.6850 0.2380" '
-        'size="1.1800 0.0150 0.0040" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
-    )
-
-    # Padded Landing Zone after Box 3 (y in [7.0, 7.8])
-    xml.append(
-        '<geom name="box3_landing_pad" type="box" pos="9.0000 7.4000 0.0040" '
+        f'<geom name="box3_landing_pad" type="box" pos="{PC.LEG2_X:.4f} {PC.BOX_Y1[2] + 0.5:.4f} 0.0040" '
         'size="1.1000 0.4000 0.0020" material="launch_pad_mat" contype="0" conaffinity="0"/>'
     )
 
@@ -1152,39 +1148,42 @@ def playground_features_xml(scenario) -> list[str]:
     )
 
     # =========================================================================
-    # 5. Station 4: 3-Step Stairs & Elevated Deck (Leg 3, y=9.0, heading West)
     # =========================================================================
-    # 3 Steps: x in [7.0, 6.25], ascending West from z=0 to +0.15m
-    for si in range(3):
-        sx = 7.0 - si * 0.25
-        sz = (si + 1) * 0.05
+    # 5. Station 4: High 3-Step Stairs & Elevated Deck (Leg 3, y=9.0, heading West)
+    # =========================================================================
+    # Steps ascending West from the ground to STAIR_TOP; sizes from playground_course.
+    for si in range(PC.STAIR_N):
+        sx = PC.STAIR_X0 - si * PC.STAIR_RUN
+        sz = (si + 1) * PC.STAIR_RISE
         t_mat = "stair_tread_blue_mat" if si % 2 == 0 else "stair_tread_teal_mat"
         xml.append(
-            f'<geom name="play3_stair_{si}" type="box" pos="{sx - 0.1250:.4f} 9.0000 {sz / 2:.4f}" '
-            f'size="0.1250 1.2000 {sz / 2:.4f}" material="{t_mat}" '
+            f'<geom name="play3_stair_{si}" type="box" pos="{sx - PC.STAIR_RUN / 2:.4f} {PC.LEG3_Y:.4f} {sz / 2:.4f}" '
+            f'size="{PC.STAIR_RUN / 2:.4f} 1.2000 {sz / 2:.4f}" material="{t_mat}" '
             f'friction="1.35 0.02 0.005" condim="4" priority="1"/>'
         )
         xml.append(
-            f'<geom name="play3_nosing_{si}" type="box" pos="{sx - 0.0150:.4f} 9.0000 {sz - 0.003:.4f}" '
+            f'<geom name="play3_nosing_{si}" type="box" pos="{sx - 0.0150:.4f} {PC.LEG3_Y:.4f} {sz - 0.003:.4f}" '
             f'size="0.0150 1.1800 0.0030" material="stair_nosing_mat" friction="1.2 0.01 0.001" condim="3"/>'
         )
-    # Elevated Deck: x in [4.5, 6.25], height +0.15m
+    # Elevated deck at the stair top height
+    deck_c = (PC.DECK_X0 + PC.DECK_X1) / 2
     xml.append(
-        '<geom name="play3_deck" type="box" pos="5.3750 9.0000 0.0750" '
-        'size="0.8750 1.2000 0.0750" material="campus_paver_mat" '
+        f'<geom name="play3_deck" type="box" pos="{deck_c:.4f} {PC.LEG3_Y:.4f} {PC.STAIR_TOP / 2:.4f}" '
+        f'size="{(PC.DECK_X1 - PC.DECK_X0) / 2:.4f} 1.2000 {PC.STAIR_TOP / 2:.4f}" material="campus_paver_mat" '
         'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
     )
-    # Descent Ramp: x in [3.5, 4.5], slope down to ground
+    # Descent ramp from the deck down to the ground
+    ramp_len = float(np.hypot(PC.RAMP_X1 - PC.RAMP_X0, PC.STAIR_TOP))
     xml.append(
-        '<geom name="play3_ramp" type="box" pos="4.0000 9.0000 0.0750" '
-        'size="0.5050 1.2000 0.0200" euler="0 -8.53 0" material="campus_paver_mat" '
+        f'<geom name="play3_ramp" type="box" pos="{(PC.RAMP_X0 + PC.RAMP_X1) / 2:.4f} {PC.LEG3_Y:.4f} {PC.STAIR_TOP / 2:.4f}" '
+        f'size="{ramp_len / 2:.4f} 1.2000 0.0200" euler="0 {-PC.RAMP_PITCH_DEG:.2f} 0" material="campus_paver_mat" '
         'friction="1.25 0.02 0.005" condim="4" priority="1"/>'
     )
-    # Handrails flanking Leg 3 stairs & deck at y = 9.0 +/- 1.22m
+    # Handrails flanking Leg 3 stairs & deck at y = 9.0 +/- 1.22m, elevated for 0.30m deck
     for s_side, sy in [("north", 9.0 + hw), ("south", 9.0 - hw)]:
         xml.append(
             f'<geom name="play3_rail_{s_side}" type="capsule" '
-            f'fromto="7.0000 {sy:.4f} 0.8500 3.5000 {sy:.4f} 0.8500" '
+            f'fromto="7.0000 {sy:.4f} 1.0000 3.5000 {sy:.4f} 1.0000" '
             f'size="0.0250" material="handrail_steel_mat" condim="3"/>'
         )
 
@@ -1203,35 +1202,38 @@ def playground_features_xml(scenario) -> list[str]:
         'size="1.1500 0.0400 0.0150" material="pipe_ring_mat" condim="3"/>'
     )
     xml.append(
-        '<geom name="gravel_border_n" type="box" pos="0.0000 12.8500 0.0150" '
-        'size="1.1500 0.0400 0.0150" material="pipe_ring_mat" condim="3"/>'
+        '<geom name="gravel_border_n" type="box" pos="0.0000 12.8500 0.0080" '
+        'size="1.1500 0.0400 0.0080" material="pipe_ring_mat" condim="3"/>'
     )
 
-    # Low Conduit Flange Rings (Leg 4, x=0, y=13.2, 14.2, 15.2)
-    for cy in [13.2, 14.2, 15.2]:
-        xml.append(
-            f'<geom name="conduit_ring_{int(cy*10)}" type="cylinder" pos="0.0000 {cy:.4f} 0.3800" '
-            f'size="0.4100 0.0250" material="pipe_ring_mat" euler="90 0 0" condim="3"/>'
-        )
+    # Station 6: Jump Wall (Leg 4, x=0). A solid wall across the
+    # corridor. The only way past is a forward jump; touching it counts as a hit
+    # (the "barrier_" prefix, see MujocoRadialSphereEnv.HIT_GEOM_PREFIXES).
+    xml.append(
+        f'<geom name="barrier_wall_s6" type="box" pos="0.0000 {PC.WALL_Y:.4f} {PC.WALL_H / 2:.4f}" '
+        f'size="1.1800 {PC.WALL_HALF_T:.4f} {PC.WALL_H / 2:.4f}" material="stair_nosing_mat" condim="3"/>'
+    )
+    # Takeoff pad in front of the wall
+    xml.append(
+        f'<geom name="wall_takeoff_pad" type="box" pos="0.0000 {PC.WALL_Y - 0.5:.4f} 0.0040" '
+        'size="1.1000 0.3000 0.0020" material="launch_pad_mat" contype="0" conaffinity="0"/>'
+    )
 
     # =========================================================================
-    # 7. Station 7: Deceleration Target Zone & Goal Bullseye (0.0, 16.5)
+    # 7. Station 7: Deceleration Zone & Pure Green Goal Target Pad (0.0, 16.5)
     # =========================================================================
     xml.append(
         '<geom name="brake_pad" type="box" pos="0.0000 15.5000 0.0035" '
         'size="1.1000 0.8000 0.0020" material="brake_checker_mat" contype="0" conaffinity="0"/>'
     )
+    # Clean emerald-green goal bullseye and pad (no red)
     xml.append(
-        '<geom name="target_outer_ring" type="cylinder" pos="0.0000 16.5000 0.0040" '
-        'size="0.9000 0.0020" material="target_ring_mat" contype="0" conaffinity="0"/>'
-    )
-    xml.append(
-        '<geom name="target_mid_ring" type="cylinder" pos="0.0000 16.5000 0.0045" '
-        'size="0.5500 0.0020" material="target_mid_mat" contype="0" conaffinity="0"/>'
+        '<geom name="target_green_ring" type="cylinder" pos="0.0000 16.5000 0.0040" '
+        'size="0.7500 0.0020" material="goal_pad_mat" contype="0" conaffinity="0"/>'
     )
     xml.append(
         '<geom name="target_bullseye" type="cylinder" pos="0.0000 16.5000 0.0050" '
-        'size="0.2500 0.0020" material="goal_pad_mat" contype="0" conaffinity="0"/>'
+        'size="0.3500 0.0020" material="goal_mat" contype="0" conaffinity="0"/>'
     )
 
     # =========================================================================

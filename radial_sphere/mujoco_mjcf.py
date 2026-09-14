@@ -432,6 +432,7 @@ def build_mujoco_scene_mjcf(
     if not is_campus and not is_playground:
         walls_xml.extend(features.ramp_xml(scenario))
         walls_xml.extend(features.staircase_xml(scenario))
+        walls_xml.extend(features.stone_field_xml(scenario))   # campus/playground build their own rocks
     walls_xml.extend(features.pipe_xml(scenario))
     walls_xml.extend(features.yardline_xml(scenario))
     walls_xml.extend(features.vertical_cylinder_xml(scenario))
@@ -579,8 +580,8 @@ def build_mujoco_scene_mjcf(
         <material name="grid" texture="grid" texrepeat="{grid_repeat:.4f} {grid_repeat:.4f}" reflectance="0.08" texuniform="true"/>
         <material name="pit_floor_mat" rgba="0.10 0.12 0.16 1" specular="0.2" shininess="0.3" reflectance="0.04"/>
         <material name="wall_mat" rgba="0.68 0.64 0.58 1" specular="0.2" shininess="0.3" reflectance="0.06"/>
-        <material name="goal_mat" rgba="0.0 0.85 0.90 0.60" reflectance="0.1"/>
-        <material name="goal_pad_mat" rgba="0.0 0.85 0.90 0.35" reflectance="0.05"/>
+        <material name="goal_mat" rgba="0.10 0.90 0.35 0.75" reflectance="0.2"/>
+        <material name="goal_pad_mat" rgba="0.10 0.90 0.35 0.45" reflectance="0.1"/>
         <material name="core_mat" rgba="{core_rgba}" specular="0.6" shininess="0.8" reflectance="0.12"/>
         <!-- Realistic Industrial Blocker Materials -->
         <material name="bollard_mat" rgba="0.20 0.22 0.25 1" specular="0.5" shininess="0.7" reflectance="0.12"/>

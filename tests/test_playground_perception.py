@@ -3,6 +3,8 @@ import unittest
 
 import numpy as np
 
+from radial_sphere import playground_course as PC
+
 from radial_sphere.config import load_config
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.skill_arbitration_env import SkillArbitrationEnv
@@ -26,8 +28,8 @@ class PlaygroundPerceptionTests(unittest.TestCase):
 
     def test_pipe_and_parkour_boxes_are_visible(self):
         self.assertGreater(self.height((4.5, 0)), .19)
-        for y in (2.8, 4.45, 6.1):
-            self.assertAlmostEqual(self.height((9, y)), .24, places=3)
+        for y, h in zip(PC.BOX_CENTER_Y, PC.BOX_HEIGHTS):
+            self.assertAlmostEqual(self.height((9, y)), h, places=3)
 
     def test_downsampling_preserves_thin_hurdle_from_approach(self):
         m = self.env.patch_extractor
@@ -38,7 +40,7 @@ class PlaygroundPerceptionTests(unittest.TestCase):
 
     def test_downsampling_preserves_both_narrow_valleys(self):
         m = self.env.patch_extractor
-        for y in (3.625, 3.675, 5.275, 5.325):
+        for y in [v + d for v in PC.VALLEY_CENTER_Y for d in (0.0, 0.05)]:
             with self.subTest(y=y):
                 patch = m.get_patch(np.array([9., y, .18]))
                 terrain = patch[0, 6:10, 7:9] + .18
@@ -47,7 +49,7 @@ class PlaygroundPerceptionTests(unittest.TestCase):
 
     def test_map_covers_finish_and_excludes_robot(self):
         self.assertGreater(self.env.patch_extractor.ymax, 17.5)
-        self.assertGreater(self.height((0, 14.2)), .7)
+        self.assertGreater(self.height((0, PC.WALL_Y)), .15)  # Station 6 jump wall
         self.assertLess(self.height((0, 0)), .02)
 
     def test_calibration_matches_actuator_model(self):
@@ -109,7 +111,7 @@ class PlaygroundTrainingStartTests(unittest.TestCase):
             expected_xy = self.env.training_start_points[index]
             pos = self.env.env.data.qpos[:3]
             np.testing.assert_allclose(pos[:2], expected_xy, atol=.08)
-            ground = .24 if index in (0, 2) else .004
+            ground = {0: PC.BOX_HEIGHTS[0], 2: PC.BOX_HEIGHTS[1]}.get(index, .004)
             self.assertGreater(pos[2], ground + .12)
             self.assertLess(pos[2], ground + .25)
             self.assertFalse(self.env._outside_playground(pos))

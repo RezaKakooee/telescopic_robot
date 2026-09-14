@@ -13,7 +13,7 @@ config: configs/rl/maze_level3_large_active_braking_multiaxis.yaml
 #: (layout_seed, endpoint_seed) picks the same start and goal
 bank_config: configs/rl/maze_bank_multistage.yaml
 
-bank: storage_local/maze_task_bank/tasks.json
+bank: storage_local/20260910_0959__local__build_maze_bank__maze_task_bank/tasks.json
 split: heldout
 
 #: comma separated. `single_stage` is what this checkpoint was trained on;

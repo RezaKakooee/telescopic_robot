@@ -18,7 +18,7 @@ description: Cross a maze using only the skills_rl primitives.
 runner: true
 knobs:
   profile: hardware      # "hardware" applies the actuator model; "ideal" does not
-  layout_seed: 43        # from storage_local/maze_task_bank/tasks.json
+  layout_seed: 43        # from storage_local/20260910_0959__local__build_maze_bank__maze_task_bank/tasks.json
   endpoint_seed: 2
   seconds: 120           # recorded length, at 1x
   video: false

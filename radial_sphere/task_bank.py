@@ -31,7 +31,7 @@ import gymnasium as gym
 import numpy as np
 
 #: Where `scripts/rl/build_maze_bank.py` writes by default.
-DEFAULT_BANK = Path("storage_local/maze_task_bank/tasks.json")
+DEFAULT_BANK = Path("storage_local/20260910_0959__local__build_maze_bank__maze_task_bank/tasks.json")
 
 
 @dataclass(frozen=True)

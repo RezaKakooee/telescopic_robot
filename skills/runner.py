@@ -30,6 +30,7 @@ NEEDS_HEADING = {
     "jump_forward_while_stopped", "jump_forward_while_moving", "fall_down",
     "jump_to", "straddle_gap", "straddle",
     "traverse_rough_terrain", "rough_terrain", "active_suspension",
+    "crawl_pipe", "pipe_crawl", "in_pipe",
 }
 
 
@@ -45,7 +46,7 @@ SELF_DRIVEN = {
 }
 
 # Skills that read the robot's own velocity.
-NEEDS_VELOCITY = {"stop", "move", "move_forward", "turn", "follow_path", "track_path", "traverse_rough_terrain", "rough_terrain", "active_suspension", "stay_in_boundary", "stay_within_boundary", "boundary_containment"}
+NEEDS_VELOCITY = {"stop", "move", "move_forward", "turn", "follow_path", "track_path", "traverse_rough_terrain", "rough_terrain", "active_suspension", "stay_in_boundary", "stay_within_boundary", "boundary_containment", "crawl_pipe", "pipe_crawl", "in_pipe"}
 
 # Skills that need to know where the wall is.
 NEEDS_WALL_NORMAL = {"push_against_wall"}
@@ -123,8 +124,33 @@ def skill_targets(env, name, step=0, *, d_hat=None, wall_normal=None, **kwargs):
     if name in NEEDS_VELOCITY and "lin_vel" not in call:
         call["lin_vel"] = env.data.qvel[0:2].copy()
 
-    if name in {"move", "move_forward", "turn", "curve", "curved_movement"}:
+    if name in {"move", "move_forward", "turn", "curve", "curved_movement", "crawl_pipe", "pipe_crawl", "in_pipe"}:
         call.setdefault("rod_mechanism", getattr(env.cfg.robot, "rod_mechanism", "single_stage"))
+
+    if name in {"crawl_pipe", "pipe_crawl", "in_pipe"}:
+        # Pipe geometry from the scenario: axis direction, radius and the ball's
+        # place in the cross-section. Outside any pipe the skill is a plain move.
+        from .low_level.pipe_crawling import pipe_frame
+        frame = pipe_frame(getattr(getattr(env, "scenario", None), "pipes", None), env.data.qpos[0:3])
+        if frame is not None:
+            from .low_level.pipe_crawling import ENTRY_ZONE
+            axis, radius, offset, along, length = frame
+            travel = np.asarray(call["d_hat"], dtype=np.float64)
+            if float(travel @ axis) < 0:                    # travelling against the pipe's start->end
+                axis, offset, along = -axis, (-offset[0], offset[1]), length - along
+            call["d_hat"] = axis
+            call.setdefault("axis_offset", offset)
+            if along < ENTRY_ZONE:
+                # Approach: line up with the axis first; no cap, or the rim stops the ball.
+                call.setdefault("pipe_radius", 1e3)
+                call.setdefault("centering_gain", 1.6)
+                call.setdefault("centering_damp", 1.0)
+                call.setdefault("max_steer_rad", 0.6)
+            elif along <= length:
+                call.setdefault("pipe_radius", radius)
+            else:
+                call.setdefault("pipe_radius", 1e3)         # past the far end: plain centred rolling
+        call.setdefault("core_radius", float(getattr(env.cfg.robot, "sphere_radius", 0.15)))
 
     # jump_to servos its burn against the live velocity.
     if name == "jump_to" and "vel" not in call:

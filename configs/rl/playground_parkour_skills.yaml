@@ -5,3 +5,5 @@ defaults:
 rl:
   skill_backend: skills
   action_mode: macro
+  # Pushing into a hurdle, box side, pipe wall, or ring costs this much per macro step.
+  obstacle_hit_penalty: 5.0

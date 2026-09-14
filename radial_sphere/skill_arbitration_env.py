@@ -11,7 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from ._gym import gym, spaces
-from .map_perception import LocalMapPatchExtractor, WaypointTracker
+from .map_perception import LocalMapPatchExtractor, MonotonicWaypointTracker, WaypointTracker
 from .mujoco_env import MujocoRadialSphereEnv
 import skills_rl as S
 
@@ -78,7 +78,8 @@ class SkillArbitrationEnv(gym.Env):
         if self.scenario.kind == "playground" and hasattr(self.env, "model"):
             self.patch_extractor.rasterize_physics(
                 self.env.model, self.env.data, self.env._terrain_ray_groups)
-        self.waypoint_tracker = WaypointTracker(self.scenario.path_pts, self.scenario.goal)
+        tracker_cls = MonotonicWaypointTracker if getattr(self.scenario, "monotonic_path", False) else WaypointTracker
+        self.waypoint_tracker = tracker_cls(self.scenario.path_pts, self.scenario.goal)
 
         # 1. Action Space Setup
         if self.handcrafted:
@@ -120,6 +121,10 @@ class SkillArbitrationEnv(gym.Env):
         self.progress_anchor = 0.0
         self.no_progress_steps = 0
         self.cleared_milestones: set[str] = set()
+        # Reward for pushing into an obstacle face (hurdle, box side, pipe wall, ring).
+        # Charged once per macro step in which a hit happened; zero keeps old behaviour.
+        self.obstacle_hit_penalty = float(getattr(rl, "obstacle_hit_penalty", 0.0))
+        self.episode_hits = 0
 
     def _get_obs(self) -> np.ndarray:
         pos = self.env.data.qpos[:3].copy()
@@ -196,6 +201,8 @@ class SkillArbitrationEnv(gym.Env):
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
         _obs, info = self.env.reset(seed=seed)
+        if hasattr(self.waypoint_tracker, "reset"):
+            self.waypoint_tracker.reset()
         training_start = None
         if self.training_start_probability and self.np_random.random() < self.training_start_probability:
             import mujoco
@@ -226,6 +233,7 @@ class SkillArbitrationEnv(gym.Env):
         self.last_skill_name = "stop" if self.handcrafted else "stance"
         self.stagnant_steps = 0
         self.cleared_milestones = set()
+        self.episode_hits = 0
 
         obs = self._get_obs()
         info["skill_name"] = self.last_skill_name
@@ -288,6 +296,7 @@ class SkillArbitrationEnv(gym.Env):
 
         # Step native MuJoCo physics for k decision substeps
         wall_contact = False
+        hit_geoms: set[str] = set()
         out_of_bounds = False
         term = trunc = False
         sub_info = {}
@@ -302,6 +311,7 @@ class SkillArbitrationEnv(gym.Env):
                 self.on_control_step(self)
             if int(sub_info.get("wall_contact", 0)) or int(sub_info.get("n_wall_contacts", 0) > 0):
                 wall_contact = True
+            hit_geoms.update(sub_info.get("obstacle_hit_geoms", ()))
             out_of_bounds = self._outside_playground(self.env.data.qpos[:3])
             if term or trunc or out_of_bounds:
                 break
@@ -406,11 +416,17 @@ class SkillArbitrationEnv(gym.Env):
         truncated = bool(trunc)
         success = bool(sub_info.get("success", False))
 
+        if hit_geoms:
+            self.episode_hits += 1
+            reward -= self.obstacle_hit_penalty
+
         if out_of_bounds:
             reward -= 20.0
             terminated = True
             success = False
-        elif success or new_dist_goal < 0.50:
+        elif (success or new_dist_goal < 0.50) and (
+                not getattr(self.scenario, "monotonic_path", False) or path_dist_remaining < 1.0):
+            # On a tour that passes the goal early, only the end of the route counts.
             reward += 100.0
             terminated = True
             success = True
@@ -437,6 +453,9 @@ class SkillArbitrationEnv(gym.Env):
             "stalled": bool(stalled and not success and not out_of_bounds),
             "no_progress_steps": self.no_progress_steps,
             "wall_contact": int(wall_contact),
+            "obstacle_hit": int(bool(hit_geoms)),
+            "obstacle_hit_geoms": sorted(hit_geoms),
+            "episode_hits": self.episode_hits,
             "skill_name": skill_name,
             "action_mode": self.action_mode,
             "skill_backend": self.skill_backend,

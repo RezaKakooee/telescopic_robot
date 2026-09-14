@@ -37,7 +37,8 @@ def select_patient_skill(pos: np.ndarray, guidance: np.ndarray) -> tuple[str, st
 
     # 1. Leg 1: (0, 0) -> (9.0, 0.0) heading East (+X)
     if y < 1.0 and x < 8.0:
-        if 3.4 <= x <= 4.6:
+        # Hurdle is at x=4.5. Trigger at x in [3.4, 4.4] to maintain momentum and clear hurdle cleanly
+        if 3.4 <= x <= 4.4:
             return "jump_forward_while_moving", "Station 2: Hurdle Leap (0.18m)"
         return "move", "Station 1: Patient Street Cruising"
 
@@ -62,7 +63,7 @@ def select_patient_skill(pos: np.ndarray, guidance: np.ndarray) -> tuple[str, st
     # 3. Leg 3: y ~ 9.0, moving West (-X)
     if y > 7.5 and 1.5 < x <= 7.2:
         if 6.3 <= x <= 7.2:
-            return "jump_forward_while_moving", "Station 4: Stair Ascent (3 Steps)"
+            return "jump_forward_while_moving", "Station 4: High Stair Ascent (0.30m)"
         return "move", "Station 4: Terrace Deck & Ramp"
 
     # Turn 3: Corner 3 near (0.0, 9.0) turning North (+Y)
@@ -70,17 +71,16 @@ def select_patient_skill(pos: np.ndarray, guidance: np.ndarray) -> tuple[str, st
         return "move", "Turn 3: Rounding Corner North"
 
     # 4. Leg 4: x around 0.0, moving North (+Y)
-    if 10.5 <= y < 12.4:
+    if 10.5 <= y < 12.6:
         return "traverse_rough_terrain", "Station 5: Rough Cobblestones"
-    if 12.4 <= y <= 13.0:
-        return "jump_forward_while_moving", "Station 5: Curb Vault into Conduit"
-    if 13.0 < y < 14.4:
-        return "move", "Station 6: Low-Clearance Conduit"
-    if 14.4 <= y <= 15.2:
-        return "jump_forward_while_moving", "Station 6: Ring Barrier Vault to Goal"
+    if 12.6 <= y <= 13.2:
+        return "move", "Station 5: Conduit Approach"
+    if 13.2 < y < 16.0:
+        # LOW-CLEARANCE CONDUIT: Roll smoothly along centerline with ZERO JUMPS inside pipe to avoid hitting pipe ceiling
+        return "move", "Station 6: Low-Clearance Conduit Transit (Clean Roll)"
 
-    # Final straightaway to Station 7
-    return "move", "Station 7: Terminal Goal Approach"
+    # Final straightaway to Station 7 (Green Goal Pad)
+    return "move", "Station 7: Terminal Green Goal Pad"
 
 
 def render_vla_frame(env, width: int = 384, height: int = 384) -> np.ndarray:

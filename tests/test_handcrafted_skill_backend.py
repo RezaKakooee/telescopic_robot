@@ -37,6 +37,8 @@ class OptionTests(unittest.TestCase):
             option.env.data.qvel[2] = .5  # bouncing must not restart flight
             self.assertEqual(option._jump_phase(51), "landing")
             self.assertFalse(option.complete(60))
+            self.assertFalse(option.complete(71))  # still bouncing: the next option must not fire mid-air
+            option.env.data.qvel[2] = .1
             self.assertTrue(option.complete(71))
 
     def test_running_jump_and_changed_control_interval(self):

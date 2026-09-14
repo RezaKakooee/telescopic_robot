@@ -38,6 +38,7 @@ from .low_level.locomotion import (
     surface_drive,
 )
 from .low_level.terrain_following import traverse_rough_terrain
+from .low_level.pipe_crawling import crawl_pipe
 from .mid_level.navigation import follow_path, stay_in_boundary
 from .low_level.bowl_riding import (
     wall_of_death,
@@ -98,6 +99,9 @@ SKILL_REGISTRY: dict[str, callable] = {
     "traverse_rough_terrain": traverse_rough_terrain,
     "rough_terrain": traverse_rough_terrain,
     "active_suspension": traverse_rough_terrain,
+    "crawl_pipe": crawl_pipe,
+    "pipe_crawl": crawl_pipe,
+    "in_pipe": crawl_pipe,
     "stay_in_boundary": stay_in_boundary,
     "stay_within_boundary": stay_in_boundary,
     "boundary_containment": stay_in_boundary,

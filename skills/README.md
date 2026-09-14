@@ -161,6 +161,7 @@ better in a plan, not because they are different gaits.
 | 16 | `chimney_climb` | Between two walls, under free physics: `launch` off the floor, `push`/`fly` wall-jump zig-zag up, `hold` (clamp both walls, ~1 kN), `descend` (clamp extension servoed on vz). Exits over the LOWER wall onto its top. | `wall_axis`, `phase`, `side`, `clamp_ext`, `push_frac`, `x_off` |
 | 17 | `backflip` | **Planned, not built.** The code was removed and no `backflip`, `somersault` or `flip` name is in the registry today. `docs/backflip_skill.md` is the specification it will be rebuilt from. | `phase`, `direction`, `launch_power`, `launch_torque` |
 | 18 | `stairs` | Dispatches a composed stair traversal: planned `jump_to` hops, `stop`, `move`, and controlled `fall_down` drops; aliases: `climb_stairs`, `step_vault`. | `phase`, `d_hat`, live velocity, planned takeoff/drop values |
+| 19 | `crawl_pipe` | Rolls inside a round conduit without touching its walls: the `move` gait with every rod capped at the free length to the wall, and the heading steered to the axis. Works down to a 0.22 m radius (the tucked ball is 0.40 m wide). | `d_hat` (axis), `pipe_radius`, `axis_offset`, `speed` |
 
 
 
@@ -410,6 +411,7 @@ function that actually ran, and `meta["requested_as"]` the name you used.
 | `slalom` | `training_cones`, `curved_slalom`, `curved_training_cones` | `cone_courses.py` |
 | `follow_path` | `track_path` | `navigation.py` |
 | `traverse_rough_terrain` | `rough_terrain`, `active_suspension` | `terrain_following.py` |
+| `crawl_pipe` | `pipe_crawl`, `in_pipe` | `pipe_crawling.py` |
 | `stay_in_boundary` | `stay_within_boundary`, `boundary_containment` | `navigation.py` |
 | `push_against_wall` | — | `climbing.py` |
 | `chimney_climb` | `chimney`, `vertical_climb` | `climbing.py` |
@@ -469,6 +471,31 @@ targets, meta = execute_skill(
     return_metadata=True,
 )
 ```
+
+## In-pipe crawling (`crawl_pipe`)
+
+The plain gait scrapes a pipe: sitting at the bottom of a curve, a rod only
+50 degrees from straight down already reaches the wall, and nothing steers a
+diagonal entry back to the axis. `crawl_pipe` keeps the calibrated `move`
+gait and adds two things. Every rod's extension is capped at the free length
+between the core and the wall along that rod, from the pipe radius and the
+ball's place in the cross-section; rods within 55 degrees of straight down
+keep a 4 cm push into the floor (that is the stroke that rolls the ball),
+side rods stop 2 cm short of the wall. The heading is steered to the axis
+from the lateral offset, with velocity damping.
+
+The runner fills in the pipe geometry from `scenario.pipes`. Two metres
+before the mouth the rods are not capped yet (the rim would stop the ball)
+and the steering is strong; this approach zone is on the entry side only,
+relative to the travel direction, so a pipe can be crawled both ways.
+
+```python
+run_skill(env, "crawl_pipe", steps=800, d_hat=[1, 0], speed=0.7)
+```
+
+Measured in `tests/test_crawl_pipe.py` and `scratch/test_crawl_pipe_radius.py`:
+a 35 degree entry into a 0.44 m tunnel, zero wall hits at 0.7 m/s; a 0.22 m
+pipe with four light touches over 6 m; 0.20 m is the physical limit.
 
 ## The pillar course (standing hops)
 

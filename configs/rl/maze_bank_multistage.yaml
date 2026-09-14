@@ -10,7 +10,7 @@ defaults:
 #
 # 1. Those runs pinned `layout_seed`, so every episode was the same labyrinth
 #    and only the endpoints moved. This one draws its maze from
-#    `storage_local/maze_task_bank/tasks.json`: 400 training tasks over 80
+#    `storage_local/20260910_0959__local__build_maze_bank__maze_task_bank/tasks.json`: 400 training tasks over 80
 #    layouts, with 20 layouts held back so the eval afterwards can tell
 #    navigation from memorisation.
 # 2. Those runs had no `rod_mechanism` key at all, so they silently trained on
