@@ -64,6 +64,7 @@ from .low_level.jumping import (
 from .low_level.cone_courses import slalom, training_cones, curved_slalom
 
 from .mid_level.stair_climbing import climb_stairs
+from .mid_level.shaft_climbing import zigzag_climb, wall_jump_climb
 
 # ---------------------------------------------------------------------------
 # Skill Registry — string name → callable
@@ -110,6 +111,14 @@ SKILL_REGISTRY: dict[str, callable] = {
     "chimney_climb": chimney_climb,
     "chimney": chimney_climb,
     "vertical_climb": chimney_climb,
+    # The phase machine around chimney_climb: zig-zag up, out onto the top.
+    "zigzag_climb": zigzag_climb,
+    "zigzag": zigzag_climb,
+    "chimney_zigzag": zigzag_climb,
+    # The same machine across a wide gap, flying freely between pushes.
+    "wall_jump_climb": wall_jump_climb,
+    "wall_jump": wall_jump_climb,
+    "wide_zigzag": wall_jump_climb,
     # Jumping
     "jump_up": jump_up,
     "jump_forward_while_stopped": jump_forward_while_stopped,

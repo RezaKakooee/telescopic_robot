@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from . import execute_skill
+from . import SKILL_REGISTRY, execute_skill
 
 # Skills that steer relative to a heading vector.
 NEEDS_HEADING = {
@@ -43,6 +43,8 @@ NEEDS_POSITION = {"circle", "curve", "curved_movement", "slalom", "training_cone
 SELF_DRIVEN = {
     "wall_of_death", "motordrome", "wall_run", "horizontal_wall_run",
     "stairs", "climb_stairs", "step_vault",
+    "zigzag_climb", "zigzag", "chimney_zigzag",
+    "wall_jump_climb", "wall_jump", "wide_zigzag",
 }
 
 # Skills that read the robot's own velocity.
@@ -273,4 +275,75 @@ def run_program(env, program, *, on_frame=None):
     for entry in program:
         name, steps, kw = (list(entry) + [None, {}])[:3]
         out.append(run_skill(env, name, steps, on_frame=on_frame, **(kw or {})))
+    return out
+
+
+def run_shaft_climb(env, shaft, *, skill="zigzag_climb", tuning=None, frame=None,
+                    max_steps=3500, trace=False):
+    """Drive a wall-jump climb (`zigzag_climb` or `wall_jump_climb`) up `shaft`.
+
+    The phase machine is the skill's own (`skills.mid_level.shaft_climbing`);
+    this loop feeds it position and velocity, steps the env, and keeps score.
+    `frame(phase, side, step, z, vz, lat)` is called after every step, for
+    video. Returns a dict of measurements. Nothing is pinned; the skill reads
+    position and velocity each step and reacts.
+    """
+    from .mid_level.shaft_climbing import (TUNING, WIDE_TUNING, initial_state,
+                                           next_phase)
+    if tuning is None:
+        tuning = WIDE_TUNING if SKILL_REGISTRY[skill].__name__ == "wall_jump_climb" else TUNING
+    E = env.max_extend
+    dt = float(env.model.opt.timestep * env.action_repeat)
+    axis, along_dir = shaft.unit_axis, shaft.unit_along
+    state = initial_state(tuning)
+    peak = 0.0
+    out = {"peak": 0.0, "reached": False, "hold_creep": None, "landed": False,
+           "land_vz": None, "t_up": None, "t_down": None, "max_down_vz": 0.0,
+           "on_top": False, "top_y": None, "relaunches": 0, "recentres": 0,
+           "pushes": 0}
+    for step in range(max_steps):
+        pos = env.data.qpos[0:3].copy()
+        vel = env.data.qvel[0:3].copy()
+        z, vz = float(pos[2]), float(vel[2])
+        lat = float(pos[:2] @ axis)
+        peak = max(peak, z)
+
+        prev = state
+        state = next_phase(prev, pos=pos, vel=vel, shaft=shaft, max_extend=E, tuning=tuning)
+
+        # Bookkeeping on the transitions the skill made.
+        if prev.phase != state.phase:
+            if state.phase in ("hold", "land", "brake") and not out["reached"]:
+                out["reached"], out["t_up"] = True, step * dt
+            if state.phase in ("push", "exit"):
+                out["pushes"] += 1
+            if prev.phase == "fly" and state.phase in ("launch", "crouch", "recentre"):
+                out["relaunches"] += 1
+                out["recentres"] += state.phase == "recentre"
+            if prev.phase == "exit":
+                out["exit_v"] = (round(float(vel[:2] @ axis), 2), round(vz, 2), round(z, 2))
+            if prev.phase == "hold" and state.phase == "descend":
+                out["hold_creep"] = state.hold_z - z
+            if prev.phase in ("land", "brake") and state.phase == "stand":
+                out["on_top"], out["top_y"], out["landed"] = True, lat, True
+                out["t_down"] = step * dt
+            if prev.phase == "descend" and state.phase == "stand":
+                out["landed"], out["land_vz"], out["t_down"] = True, vz, step * dt
+        if state.phase == "descend":
+            out["max_down_vz"] = max(out["max_down_vz"], -vz)
+        if state.phase == "done":
+            break
+
+        targets = execute_skill(
+            skill, env.data.qpos[3:7].copy(), env.dirs_body, E,
+            phase=state.phase, side=state.side, wall_axis=axis,
+            lin_vel=vel, along_off=float(pos[:2] @ along_dir),
+            core_z=z, clamp_ext=state.clamp_ext, tuning=tuning)
+        env.step(targets)
+        if trace and step % 25 == 0:
+            print(f"    t={step*dt:4.1f} {state.phase:8s} x {float(pos[0]):+.2f} "
+                  f"y {float(pos[1]):+.2f} z {z:.2f} vz {vz:+.1f}")
+        if frame is not None:
+            frame(state.phase, state.side, step, z, vz, lat)
+    out["peak"] = peak
     return out

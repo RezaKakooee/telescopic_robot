@@ -29,7 +29,10 @@ from .scenario import generate_scenario
 #: Course features that must be cleared, not pushed. Contacts with a sideways
 #: normal against these count as an obstacle hit (see _check_contacts).
 HIT_GEOM_PREFIXES = ("hurdle_", "parkour_box_", "glass_facet_", "conduit_ring_",
-                     "pillar_", "bollard_", "obstacle_", "barrier_")
+                     "pillar_", "bollard_", "obstacle_", "barrier_",
+                     "wood_plank_", "wood_cap_",          # `steps`: slabs, beams, pallets, crates, trucks
+                     "stair_", "play3_stair_", "play3_nosing_",   # stair risers (treads are tops: not a hit)
+                     "ramp_curb_")                        # ramp side curbs
 #: |normal_z| below this means the contact pushes on a face, not a top.
 HIT_NORMAL_Z_MAX = 0.6
 #: Pipe and ring pieces centred below this height are floor, not obstacle.

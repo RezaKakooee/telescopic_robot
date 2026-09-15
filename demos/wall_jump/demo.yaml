@@ -1,0 +1,13 @@
+# wall_jump: everything about showing one skill.
+#   python scripts/run_demo.py demo=wall_jump
+# `knobs` is what this demo's own runner.py reads.
+
+description: Wall-jump zig-zag across a 1 m gap (wall_jump_climb) and out onto a wall top.
+runner: true
+knobs:
+  config: configs/rl/wall_jump.yaml
+  seed: null
+  trace: false
+  video: false
+  fps: 25
+  frame_every: 4

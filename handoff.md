@@ -54,8 +54,10 @@ BLOG_ASSETS_DIR=$PWD/regen_check python docs/blog/render_wall_push.py
 
 ## State
 
-`main` is at `3f2e637`. The working tree holds one day of VLA work,
-uncommitted; see `HANDOFF_VLA_RL.md` for what it is. 190 tests pass.
+`main` is at `ab6a22e` (the VLA day). The working tree holds the SmolVLA
+evaluator and round-2 tooling (mine, see `HANDOFF_VLA_RL.md` section 10) plus
+files from another session (`wall_jump`, `shaft_climbing`, chimney demo)
+that were not reviewed here. 190 tests passed before those files appeared.
 
 ## Just done (2026-09-14, VLA day)
 
@@ -78,6 +80,14 @@ Short list; details in `HANDOFF_VLA_RL.md`.
   staircases ignored `yaw`; the pipe builder ignored `yaw`.
 - **Every experiment folder has a timestamp** now; old folders were renamed
   by their mtime.
+- **SmolVLA fine-tuned on 216 tour demos.** Skill agreement with the expert
+  96 %, but only 5/10 courses reached on the short routes: the policy misses
+  the moment of the rare skills. Round 2 (433 demos, rare windows
+  oversampled 4x) reaches 6/10 with 98 % agreement. Three jump-drill
+  courses (hurdle lane, trench field, box steps) were added for jump data;
+  the obstacle-hit detector was missing the inspection object names, so all
+  hit counts before 2026-09-15 evening are too low. MuJoCo must stay at 3.8.1 in the
+  LeRobot venv; 3.13 changes the contacts enough to break the expert.
 
 ## Just fixed
 

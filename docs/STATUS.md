@@ -1,7 +1,8 @@
 # Project status — what was done and where we are
 
-*Last update: 2026-08-13. Written as a handover so work can continue on any
-server without the old chat history.*
+*Last update: 2026-08-13 (this file). The 2026-09 work on skills for a
+policy, the inspection courses, the expert and SmolVLA fine-tuning is in
+`HANDOFF_VLA_RL.md` at the repo root; `handoff.md` is the general handover.*
 
 ## What this project is
 

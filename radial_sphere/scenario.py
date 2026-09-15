@@ -30,7 +30,8 @@ from .geometry import sample_path, sample_roundtrip
 KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slopes", "stairs", "glass_pipe", "extreme_gauntlet", "skill_course", "platform_course", "pillar_course", "circle_track", "gap_bridge", "chimney", "vertical_cylinder", "motordrome", "wall_run", "training_cones", "slalom", "curved_cones", "curved_training_cones", "uneven_slalom", "boundary", "stay_in_boundary", "circular_boundary", "campus", "university_campus", "playground", "robotics_playground",
          "inspection_warehouse", "inspection_pipe_alley", "inspection_tank_farm", "inspection_substation",
          "inspection_loading_dock", "inspection_boiler_house", "inspection_utility_tunnel",
-         "inspection_solar_farm", "inspection_quarry", "inspection_rubble_site")
+         "inspection_solar_farm", "inspection_quarry", "inspection_rubble_site",
+         "inspection_hurdle_lane", "inspection_trench_field", "inspection_box_steps")
 
 
 
@@ -1114,11 +1115,16 @@ def chimney_scenario(cfg, *, rng=None, name: str = "chimney", shaft_width: float
     Box 1 (Left) and Box 2 (Right) stand vertically with an open shaft of width `shaft_width`
     (default 0.40m) between them. The ball climbs up and down by pressing outward against both faces.
     """
+    # The gap, wall height and wall length come from the config's
+    # `scenario.chimney` block when it has them, else from the arguments.
+    ch = getattr(getattr(cfg, "scenario", None), "chimney", None)
+    shaft_width = float(getattr(ch, "shaft_width", shaft_width))
+    shaft_height = float(getattr(ch, "shaft_height", shaft_height))
+    shaft_length = float(getattr(ch, "shaft_length", shaft_length))
     half_gap = shaft_width / 2.0
     # Box (wall) thickness. The climb exits over the lip with about 1.5 m/s of
     # sideways carry and lands 0.6-0.9 m out; a 0.5 m top was narrower than
     # the landing scatter, so the default is a full-width wall top.
-    ch = getattr(getattr(cfg, "scenario", None), "chimney", None)
     box_w = float(getattr(ch, "box_width", 1.30))
     # The two walls are NOT the same height. A wall push lifts the ball at
     # most ~0.17 m above the push point, so it can never clear a lip level

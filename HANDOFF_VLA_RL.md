@@ -1,6 +1,8 @@
-# Handoff: VLA skills, inspection courses, expert demos
+# Handoff: VLA skills, inspection courses, expert demos, SmolVLA SFT
 
-Date: 2026-09-14. Supersedes the earlier version of this file.
+Date: 2026-09-15 (evening). Supersedes the earlier version of this file.
+Committed as `ab6a22e` on `main`; the SmolVLA evaluator, the demo video
+export and the round-2 changes are in the working tree (see section 10).
 Environment: conda `roboverse`, run from the repo root with `MUJOCO_GL=egl PYTHONPATH=.`.
 LeRobot / SmolVLA live in a separate venv: `/home/storage_group/envs/lerobot/bin/python`.
 
@@ -58,6 +60,16 @@ pipe floor, or brushing a ledge while leaving it are not hits.
   `configs/rl/playground_parkour_skills.yaml`)
 - `eval_skills_vla.py` reports `clean_success` (goal reached with zero hits)
 
+Bug fixed on 2026-09-15: `HIT_GEOM_PREFIXES` only listed the playground
+names, so on the inspection courses hits on slabs, beams, pallets, trucks
+(`wood_plank_`), stair risers and ramp curbs were never counted. Every hit
+number recorded before that fix (expert tables, demo `hit_flags`, the
+SmolVLA evaluations of rounds 1 and 2) is too low; success flags are right.
+Corrected expert hits on the short routes, seed 7: quarry 0; warehouse,
+dock 1; tank farm, substation, tunnel 2; boiler, rubble 3; solar 4;
+pipe alley 10 (light touches at the conduit mouth; the entry is sensitive to
+the approach angle and three route variants did not improve it).
+
 ## 3. Courses
 
 ### Playground (`playground`)
@@ -99,6 +111,14 @@ Simple objects, industrial situations, each with its own layout:
 | solar_farm | open field, snake | post rows, ditch, mud |
 | quarry | switchback hill | slopes, hairpin, rock fall, potholes |
 | rubble_site | open square, diagonal | random slabs, beam, crack, collapsed wall |
+| hurdle_lane (drill) | 45 m lane | 14 beams 0.10-0.20 m; tour = there and back, 42 jumps |
+| trench_field (drill) | four 20 m lanes, snake | 12 trenches 0.30-0.50 m; tour = the same snake |
+| box_steps (drill) | 33 m lane | 5 low walls + 5 gaps; tour = there and back, 30 jumps |
+
+The three drills exist to get jump examples: a pass gives 36 jumps against
+about 5 on a normal course. Rule from building them: the first obstacle
+after a 90 degree corner needs 5 m; the turn swings the ball almost 1 m off
+the lane.
 
 `tour=True` gives a long route (30 to 150 m) that revisits obstacles and may
 cross itself. Tours set `monotonic_path=True`, which makes the env use
@@ -136,27 +156,109 @@ approach. A turn right before a jump or a pipe mouth fails.
 
 ## 5. Demonstrations for VLA SFT
 
-`scripts/data/generate_inspection_demos.py --episodes 30 --workers 10`
+`scripts/data/generate_inspection_demos.py --episodes 30 --workers 10 [--seed-offset N]`
 (no chase video; 10 minutes for 300 episodes). Per macro step: policy camera
 256x256, 13-D state, skill class, params, the oracle's reason text, hit flag.
 Jitter per episode: start pose, camera pose, course seed. Only episodes that
 reach the goal are kept.
 
-Latest dataset: `storage_local/20260914_1612__local__generate_inspection_demos__30ep/`
-(216 of 300 episodes kept, 108k frames, 2.4 GB). Keep rates: tank farm,
-substation, boiler, rubble about 30/30; quarry 25; pipe alley 20; solar 18;
-warehouse 17; tunnel 10; loading dock 8. Failures are stalls; the dock ramp
-and the tunnel pipes are sensitive to the start jitter.
+| Run | Seeds | Kept | Frames |
+|---|---|---|---|
+| `storage_local/20260914_1612__local__generate_inspection_demos__30ep/` | 1000+ | 216 / 300 | 108k |
+| `storage_local/20260914_2331__local__generate_inspection_demos__30ep/` | 2000+ | 217 / 300 | ~107k |
+| `storage_local/20260915_0942__local__generate_inspection_demos__30ep/` (3 drills only) | 3000+ | running at handoff | ~2,500 jumps |
 
-`scripts/data/convert_inspection_demos_to_lerobot.py --demos <run dir>`
+Keep rates by course (both runs alike): tank farm 30, substation, rubble,
+boiler, quarry 27-30, pipe alley 20, solar 18-20, warehouse 16-17,
+tunnel 10-12, loading dock 8. Failures are stalls; the dock ramp and the
+tunnel pipes are sensitive to the start jitter.
+
+`scripts/data/export_demo_videos.py --demos <run dir> --per-course 2` writes
+the policy camera of demo episodes as H.264 with a skill HUD (what the VLA
+sees). Chase-camera videos of the same tours: run the expert with
+`run_inspection_oracle.py --tour`.
+
+`scripts/data/convert_inspection_demos_to_lerobot.py --demos <run dirs...> [--oversample 4 --window 10]`
 (LeRobot venv) writes a LeRobotDataset: `observation.image`,
 `observation.state` (13), `action` (10 = one-hot skill + params), `task`,
-`reason`. Argmax of the first six action entries gives the skill.
+`reason`. Argmax of the first six action entries gives the skill. With
+`--oversample N` every switch into a rare skill (jump, gap, pipe, rough)
+becomes a short extra episode written N-1 more times: rare decisions are
+about 1 % of the frames and this is the only class weighting the LeRobot
+trainer allows without patching it.
 
-Rough SFT budget: 30 to 50 demos per course, 300 to 500 episodes, 150k to
-250k frames. Jumps are about 1 % of the decisions; weight or oversample them.
+## 6. SmolVLA fine-tuning (round 1) and what it showed
 
-## 6. Earlier VLA / RL results (playground, before the inspection courses)
+Environment: `/home/storage_group/envs/lerobot` (lerobot 0.4.4, torch 2.10,
+MuJoCo pinned to 3.8.1: with MuJoCo 3.13 the expert itself failed three
+courses, so the skills are tied to 3.8.1; `ops/setup_lerobot_env.sh` pins it).
+
+Training (70 min on the A100 for 20k steps, batch 32):
+
+```bash
+lerobot-train --policy.path=lerobot/smolvla_base --policy.push_to_hub=false --policy.device=cuda \
+  --dataset.repo_id=roboball/inspection_tours --dataset.root=<lerobot dir> \
+  --rename_map='{"observation.image": "observation.images.camera1"}' \
+  --batch_size=32 --steps=20000 --save_freq=5000 --output_dir=<run>/train --wandb.enable=false
+```
+
+Round 1: `storage_local/20260914_1639__local__train_smolvla__inspection_tours_216ep/`
+(216 episodes, no oversampling; loss 0.63 -> 0.026; the 20k checkpoint is
+under `train/checkpoints/020000/pretrained_model`).
+
+Closed loop (`scripts/vla/eval_smolvla_inspection.py --checkpoint ... [--tour] [--video] --replan K`,
+LeRobot venv; same courses, same hit metric; videos at 25 fps with the
+policy camera as an inset; `agreement` = fraction of steps where the policy's
+skill equals the expert's on the same state):
+
+| Route | Re-plan | Goals | Clean | Agreement |
+|---|---|---|---|---|
+| short | every 5 steps | 3/10 | 1 | 95 % |
+| short | every step | 5/10 | 1 | 96 % |
+| tour | every 5 steps | 3/10 | 2 | 96 % |
+
+The expert reaches 10/10 on the same seed. The policy picks the right skill
+class almost always; it misses the moment of the rare ones (warehouse: never
+jumps the beam; boiler: fails at the stairs; tunnel: leaves crawl mode early;
+rubble: mistimes the crack). Re-planning every step (one forward pass per
+macro step, ~3.7x slower evaluation) is clearly better than chunk execution.
+
+## 7. Round 2: more demos, rare windows oversampled
+
+Chain: `ops/round2_smolvla_chain.sh`. Dataset
+`storage_local/20260915_0002__local__lerobot_dataset__inspection_tours_x2_os4/lerobot`
+(433 full episodes, 221k frames, plus 7,371 short rare-window episodes, 153k
+frames, from `--oversample 4`; the conversion took two hours because every
+short episode is its own video file). Training:
+`storage_local/20260915_0203__local__train_smolvla__inspection_tours_x2_os4/`
+(20k steps, 70 min). Evaluation (re-plan every step, short routes, seed 7):
+`storage_local/20260915_0313__local__eval_smolvla_inspection__short__playground_parkour_skills/`.
+
+| Policy | Goals | Clean | Agreement |
+|---|---|---|---|
+| round 1, re-plan 1 | 5/10 | 1 | 96 % |
+| round 2, re-plan 1 | 6/10 | 2 | 98 % |
+| expert | 10/10 | 5 | - |
+
+Round 2 passes pipe alley, tank farm, substation, boiler house, solar farm,
+quarry. Still failing: warehouse (rolls into the beam, never jumps),
+loading dock (stalls at the ramp), tunnel (leaves crawl mode early),
+rubble (mistimes the crack). More data and oversampling helped a little;
+the failure mode is unchanged: the moment of a rare skill.
+
+Round 3 plan (not started): convert all three demo runs (10 courses x 2 +
+the 3 drills) with `--oversample 4`, train 20k steps, evaluate with
+`--replan 1 --video` on all 13 courses. The drills add about 2,500 jump
+decisions, the thing the policy gets wrong. Other levers after that: the
+10k/15k checkpoints; a smaller action chunk (`--policy.chunk_size 10`);
+a "distance to next obstacle" state feature (the expert uses exactly that);
+hybrid mode (the VLA picks speed and power too).
+
+Also fixed on 2026-09-15: a tour that passes the goal position early no
+longer ends there (`SkillArbitrationEnv` gates the low-level goal
+termination on `path_dist_remaining < 1.0` for monotonic routes).
+
+## 8. Earlier VLA / RL results (playground, before the inspection courses)
 
 - BC on the clean playground demos: 100 % clean success on 3 seeds.
 - PPO fine-tuning of that policy (`scripts/vla/train_rl_skills_vla.py`,
@@ -164,14 +266,34 @@ Rough SFT budget: 30 to 50 demos per course, 300 to 500 episodes, 150k to
   weak KL it forgot the box jump; with the hit penalty on the old (accidental)
   jumps it got stuck. RL has nothing to fix while BC is already clean.
 
-## 7. Storage layout
+## 9. Storage layout
 
 Every experiment folder is `storage_local/<YYYYMMDD_HHMM>__local__<script>__<tag>/`.
 All VLA scripts default to a new timestamped run dir. Exceptions kept on
 purpose: `storage_local/_assets` (blog scripts), `storage_local/sci_out`
 (SLURM logs).
 
-## 8. Open
+## 10. Working tree at handoff
+
+Uncommitted and mine (evening): the hit-prefix fix in `mujoco_env.py`,
+the goal gating in `skill_arbitration_env.py`, the three drill courses and
+the dock/pipe-alley tweaks in `inspection_scenarios.py`, the drill task
+texts in `generate_inspection_demos.py`, plus (afternoon):
+`scripts/vla/eval_smolvla_inspection.py`,
+`scripts/data/export_demo_videos.py`, the `--oversample` converter,
+`run_inspection_oracle.py` (`--seed=N`, `--no-video`), `ops/watch.sh`,
+`ops/setup_lerobot_env.sh`, `skills/__init__.py` and `skills/runner.py`
+(crawl_pipe entry-zone fix), `radial_sphere/scenario.py`.
+
+Uncommitted and from another session (not reviewed here):
+`configs/rl/wall_jump.yaml`, `demos/wall_jump/`, `demos/chimney/*`,
+`skills/mid_level/shaft_climbing.py`, `skills/mid_level/__init__.py`,
+`tests/test_skills.py`, `tests/test_zigzag_skill.py`.
+
+The disk filled up once (shared machine); it was expanded to 495 GB.
+Each SmolVLA checkpoint is 1.3 GB with its optimizer state.
+
+## 11. Open
 
 - Loading dock and utility tunnel keep rates (8/30, 10/30). Longer straight
   approaches or a smaller start jitter would help.
@@ -180,12 +302,16 @@ purpose: `storage_local/_assets` (blog scripts), `storage_local/sci_out`
 - `jump_to` (aimed hop) is unused: unreliable from a rolling start.
 - Hybrid mode (the VLA also picks speed and power) is not wired for demos.
   Today one power serves every jump.
-- SmolVLA fine-tuning on the LeRobot dataset is the next step.
+- SmolVLA reaches 6/10 short routes after round 2; the failures are the
+  timing of rare skills, not class confusion. See section 7 for the levers.
 
-## 9. Quick checks
+## 12. Quick checks
 
 ```bash
 MUJOCO_GL=egl PYTHONPATH=. python scripts/run_tests.py                       # 190 tests, ~60 s
 MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/run_inspection_oracle.py --tour  # 10 tours with videos
 MUJOCO_GL=egl PYTHONPATH=. python scratch/record_oracle_video.py             # playground oracle video
+MUJOCO_GL=egl PYTHONPATH=. /home/storage_group/envs/lerobot/bin/python scripts/vla/eval_smolvla_inspection.py \
+    --checkpoint storage_local/20260914_1639__local__train_smolvla__inspection_tours_216ep/train/checkpoints/020000/pretrained_model \
+    --replan 1 --video inspection_tank_farm                                   # one course, ~2 min
 ```

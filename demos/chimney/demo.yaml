@@ -2,7 +2,7 @@
 #   python scripts/run_demo.py demo=chimney
 # `knobs` is what this demo's own runner.py reads.
 
-description: Climb a vertical shaft by bracing on two facing walls.
+description: Zig-zag wall-jump up a shaft (zigzag_climb) and out onto the lower wall's top.
 runner: true
 knobs:
   config: configs/rl/chimney.yaml

@@ -1,0 +1,48 @@
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "wall_jump_arena"
+  kind: "chimney"
+  goal_pos: [0.0, 0.0]
+  chimney:
+    # A wide gap: the ball (0.30 m core, 0.47 m with rods out) flies freely
+    # between the walls. Both walls are the same height, so it lands on
+    # whichever top it clears first. The tops are wide because the ball
+    # arrives with 2-3 m/s of sideways carry and brakes on the top. The
+    # walls are long so a drift along the gap does not fall out of the end.
+    shaft_width: 1.0
+    shaft_height: 3.0
+    low_box_height: 3.0
+    box_width: 4.0
+    shaft_length: 4.0
+
+floor:
+  size: [8.0, 8.0]
+  square_m: 0.5
+
+robot:
+  appearance_theme: "realistic"
+  # The one number this course needs. With the default 900 N/m the actuator
+  # never reaches its force limit: a full 0.16 m stroke error is only 144 N,
+  # and the force falls to zero as the rod extends. One wall push then gives
+  # about 1.5 m/s across and 0.8 m/s up, and every crossing of a 1 m gap
+  # loses height. Measured on the 1.0 m gap (peak height before each push,
+  # starting at 1.1 m, force limit 200 N):
+  #   kp  900: 1.12               -> falls to the floor after one push
+  #   kp 2000: 1.13 1.29 1.43 1.82 2.43 3.03 ...
+  #   kp 3000: 1.13 1.39 1.62 1.98 2.51 3.19 ...
+  # 2000 N/m pushes at the 200 N limit for the first 0.06 m of stroke. 3000
+  # climbs faster but throws the ball well past the wall tops.
+  kp: 2000.0
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.25
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  # Same 200 N as the chimney. More force does not help here: at 400 N and
+  # above the rod tips slam the wall and the ball bounces off before the
+  # push has developed.
+  actuator_force_limit: 200.0

@@ -36,14 +36,17 @@ ACTION_NAMES = [f"skill_{s}" for s in SKILLS] + ["heading_ego", "speed", "power"
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--demos", required=True, help="run dir with <course>.h5 files")
+    ap.add_argument("--demos", nargs="+", required=True, help="run dirs with <course>.h5 files")
+    ap.add_argument("--oversample", type=int, default=1,
+                    help="write each rare-decision window (jump, pipe entry, rough-terrain start) this many times")
+    ap.add_argument("--window", type=int, default=10, help="frames on each side of a rare decision (10 = 1 s)")
     ap.add_argument("--repo-id", default="roboball/inspection_tours")
     ap.add_argument("--root", default=None, help="output dir (default: <demos>/lerobot)")
     ap.add_argument("--fps", type=int, default=10)
     ap.add_argument("--max-episodes-per-course", type=int, default=0)
     a = ap.parse_args()
 
-    root = Path(a.root) if a.root else Path(a.demos) / "lerobot"
+    root = Path(a.root) if a.root else Path(a.demos[0]) / "lerobot"
     if root.exists():
         shutil.rmtree(root)
     features = {
@@ -54,8 +57,16 @@ def main():
     }
     ds = LeRobotDataset.create(repo_id=a.repo_id, fps=a.fps, features=features, root=root, robot_type="roboball",
                                use_videos=True, image_writer_threads=4)
-    n_ep, n_frames = 0, 0
-    for h5_path in sorted(glob.glob(str(Path(a.demos) / "inspection_*.h5"))):
+    n_ep, n_frames, n_extra = 0, 0, 0
+    rare = {1, 2, 5, 3}     # jump_forward, jump_gap, crawl_pipe, traverse_rough
+
+    def rare_windows(skills):
+        """Index ranges around every switch into a rare skill."""
+        switches = [t for t in range(len(skills)) if skills[t] in rare and (t == 0 or skills[t - 1] != skills[t])]
+        return [(max(0, t - a.window), min(len(skills), t + a.window + 1)) for t in switches]
+
+    h5_paths = sorted(p for d in a.demos for p in glob.glob(str(Path(d) / "inspection_*.h5")))
+    for h5_path in h5_paths:
         with h5py.File(h5_path, "r") as f:
             keys = sorted(f.keys())
             if a.max_episodes_per_course:
@@ -66,21 +77,32 @@ def main():
                 frames, states = g["frames"][:], g["states"][:]
                 skills, params = g["skills"][:], g["params"][:]
                 reasons = [r.decode() if isinstance(r, bytes) else str(r) for r in g["reasons"][:]]
-                for t in range(len(frames)):
-                    onehot = np.zeros(6, dtype=np.float32)
-                    onehot[int(skills[t])] = 1.0
-                    ds.add_frame({
-                        "observation.image": frames[t],
-                        "observation.state": states[t].astype(np.float32),
-                        "action": np.concatenate([onehot, params[t]]).astype(np.float32),
-                        "reason": reasons[t],
-                        "task": task,
-                    })
-                ds.save_episode()
+                def write(lo, hi):
+                    for t in range(lo, hi):
+                        onehot = np.zeros(6, dtype=np.float32)
+                        onehot[int(skills[t])] = 1.0
+                        ds.add_frame({
+                            "observation.image": frames[t],
+                            "observation.state": states[t].astype(np.float32),
+                            "action": np.concatenate([onehot, params[t]]).astype(np.float32),
+                            "reason": reasons[t],
+                            "task": task,
+                        })
+                    ds.save_episode()
+
+                write(0, len(frames))
                 n_ep += 1
                 n_frames += len(frames)
-                print(f"{Path(h5_path).stem} {k}: {len(frames)} frames")
-    print(f"wrote {n_ep} episodes, {n_frames} frames to {root}")
+                extra = 0
+                # Oversampling: each rare window becomes its own short episode, repeated.
+                for lo, hi in rare_windows(skills) if a.oversample > 1 else []:
+                    for _ in range(a.oversample - 1):
+                        write(lo, hi)
+                        n_ep += 1
+                        extra += hi - lo
+                n_extra += extra
+                print(f"{Path(h5_path).stem} {k}: {len(frames)} frames, {extra} oversampled")
+    print(f"wrote {n_ep} episodes, {n_frames} original frames + {n_extra} oversampled to {root}")
 
 
 if __name__ == "__main__":

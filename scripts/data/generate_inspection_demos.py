@@ -53,6 +53,9 @@ TASK_TEXT = {
     "inspection_solar_farm": "Inspect the solar farm. Snake through the post rows, cross the ditch, mind the mud.",
     "inspection_quarry": "Inspect the quarry road. Climb the hill, take the hairpin, descend, avoid the potholes.",
     "inspection_rubble_site": "Inspect the rubble site. Jump the beam and the crack, pass the collapsed wall.",
+    "inspection_hurdle_lane": "Run the hurdle lane. Jump every beam.",
+    "inspection_trench_field": "Cross the trench field. Jump every trench.",
+    "inspection_box_steps": "Run the box lane. Jump the walls and the gaps.",
 }
 
 # env option name -> skills_vla class; jumps are split by station kind below

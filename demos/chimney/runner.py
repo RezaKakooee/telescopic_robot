@@ -1,9 +1,15 @@
-"""Climb a chimney and come back down, under free physics.
+"""Zig-zag wall-jump up a chimney and out onto the top, under free physics.
 
 Two facing walls 0.40 m apart. The ball wall-jumps up -- push off one wall,
-fly to the other, push again -- until it reaches the target height, clamps
-both walls and hangs there, then slides down on a friction servo and lands.
-Nothing is pinned or teleported; the ball rotates and drifts as physics says.
+fly to the other, push again -- until it is level with the lower wall's lip,
+bursts out over it and lands on the wall top. With `--target` it instead
+clamps both walls at that height, hangs, and slides back down on a friction
+servo. Nothing is pinned or teleported; the ball rotates and drifts as
+physics says.
+
+The phase machine is the `zigzag_climb` skill and the loop that drives it
+is `skills.runner.run_shaft_climb`. This script only builds the arena and
+records what happened.
 
     python demos/chimney/runner.py --video
     python demos/chimney/runner.py --seed 3 --target 3.0
@@ -24,157 +30,11 @@ from radial_sphere.config import load_config, demo_config
 from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from radial_sphere.demo import Recorder
-from skills import execute_skill
+from skills.mid_level.shaft_climbing import Shaft, ZigzagTuning, on_wall_top, shaft_from_boxes
+from skills.runner import run_shaft_climb
 from radial_sphere.overlay import annotate
 
 AXIS = np.array([0.0, 1.0])
-
-
-def climb_chimney(env, *, target_z=None, top=None, box_y=(0.20, 0.70), low_sign=+1,
-                  descent_vz=-0.4, hold_steps=150, frame=None,
-                  max_steps=3500, push_frac=1.0, trace=False,
-                  exit_band=(0.45, 0.20, 0.85), exit_from=0.02):
-    """Zig-zag up the chimney, then either
-
-    * `top` given  -- burst out over the lip and land on a box top, brake,
-      stop there (the default course);
-    * `target_z`   -- clamp both walls at that height, hang, and slide back
-      down on the friction servo (the up-and-down demo).
-
-    Returns a dict of measurements. Nothing is pinned; the state machine
-    reads position and velocity and reacts.
-    """
-    q = lambda: env.data.qpos[3:7].copy()
-    E = env.max_extend
-    state, side, timer = "launch", +1, 0
-    peak, hold_z0, ext = 0.0, None, E
-    out = {"peak": 0.0, "reached": False, "hold_creep": None, "landed": False,
-           "land_vz": None, "t_up": None, "t_down": None, "max_down_vz": 0.0,
-           "on_top": False, "top_y": None, "relaunches": 0, "recentres": 0}
-    for step in range(max_steps):
-        x, y, z = (float(v) for v in env.data.qpos[0:3])
-        vx, vy, vz = (float(v) for v in env.data.qvel[0:3])
-        peak = max(peak, z)
-        kw = {}
-        skill = "chimney_climb"
-
-        if target_z is not None and state in ("push", "fly") and z >= target_z:
-            state, timer = "hold", 0             # arrived: clamp on
-            out["reached"], out["t_up"] = True, step * 0.01
-            hold_z0 = z
-        # Exit: pushing off the TALL wall, toward the low box, from above its lip.
-        if (top is not None and state == "push" and timer == 0 and side == -low_sign
-                and z >= top + exit_from):
-            state = "exit"
-        if (top is not None and state in ("exit", "fly_out", "fly", "push")
-                and low_sign * y > box_y[0] + 0.02 and z < top + 0.35 and vz < 0):
-            state, timer = "land", 0             # coming down over a box top
-            out["reached"], out["t_up"] = True, step * 0.01
-
-        if state == "recentre":
-            # Drifted along the shaft toward an open end: roll back to the
-            # middle before launching again. `move` at a crawl, then stop.
-            timer += 1
-            skill = "move" if abs(x) > 0.05 else "stop"
-            kw = (dict(d_hat=np.array([-np.sign(x), 0.0]), speed=0.45) if skill == "move"
-                  else dict(lin_vel=env.data.qvel[0:2].copy()))
-            if abs(x) < 0.05 and abs(vx) < 0.1 and timer > 10:
-                state, timer = "launch", 0
-        elif state == "launch":
-            # From the floor the wall-push rods point at the FLOOR, not the
-            # wall: a wall push down there just rattles the ball sideways.
-            # Jump straight up first, then start the zig-zag in the air.
-            timer += 1
-            kw = dict(phase="launch")
-            if timer > 14 or (timer > 4 and vz < 0.2 and z > 0.35):
-                state, timer = "fly", 0
-                side = +1 if y >= 0 else -1
-        elif state == "push":
-            timer += 1
-            if (timer > 4 and side * vy < -0.4) or timer > 25:
-                state, timer = "fly", 0
-            kw = dict(phase="push", side=side, push_frac=push_frac,
-                      x_off=float(env.data.qpos[0]))
-        elif state == "fly":
-            timer += 1
-            if side > 0 and y < -0.02 and vy < 0:
-                side, state, timer = -1, "push", 0
-            elif side < 0 and y > 0.02 and vy > 0:
-                side, state, timer = +1, "push", 0
-            elif z < 0.30 and abs(vy) < 0.15 and timer > 20:
-                out["relaunches"] += 1
-                if abs(x) > 0.12:
-                    out["recentres"] += 1
-                    state, timer = "recentre", 0
-                else:
-                    state, timer = "launch", 0      # back on the floor: relaunch
-            kw = dict(phase="fly")
-        elif state == "exit":
-            # The final wall push, made as high as the wall allows. The normal
-            # band measured the most lift (steeper bands gave less); the
-            # sideways carry it leaves is absorbed by a wide box top.
-            timer += 1
-            kw = dict(phase="push", side=side, push_lat=exit_band[0],
-                      push_z_lo=exit_band[1], push_z_hi=exit_band[2],
-                      x_off=float(env.data.qpos[0]))
-            if timer > 14 or (timer > 4 and side * vy < -0.25):
-                state, timer = "fly_out", 0
-                out["exit_v"] = (round(vy, 2), round(vz, 2), round(z, 2))
-        elif state == "fly_out":
-            timer += 1
-            kw = dict(phase="fly")
-            if abs(y) < box_y[0] and vz < 0 and z < top:
-                state, timer = "fly", 0             # fell back in: resume the zig-zag
-        elif state == "land":
-            # On the box top: gear underneath, and brake the sideways carry
-            # before it runs off the far edge. `stop` is the kickstand.
-            timer += 1
-            if z > top + 0.10 and abs(vz) < 0.6:
-                skill, kw = "stop", dict(lin_vel=env.data.qvel[0:2].copy(), stop_distance=0.12)
-            else:
-                kw = dict(phase="hold", clamp_ext=0.0, near_floor=True)
-            if timer > 120:
-                settled = abs(vy) < 0.15 and abs(vz) < 0.15
-                on = settled and top + 0.10 < z < top + 0.55 and box_y[0] < low_sign * y < box_y[1]
-                out["on_top"], out["top_y"], out["landed"] = on, y, on
-                out["t_down"] = step * 0.01
-                if on:
-                    state, timer = "stand", 0
-                elif abs(y) < box_y[0] and z < top:
-                    state, timer = "fly", 0
-                else:
-                    break
-        elif state == "hold":
-            timer += 1
-            kw = dict(phase="hold")
-            if timer >= hold_steps:
-                out["hold_creep"] = hold_z0 - z
-                state, timer, ext = "descend", 0, E
-        elif state == "descend":
-            # Friction servo: loosen while falling slower than wanted,
-            # tighten while faster. Extension is the friction knob.
-            ext = float(np.clip(ext - 0.04 * (vz - descent_vz), 0.02, E))
-            out["max_down_vz"] = max(out["max_down_vz"], -vz)
-            kw = dict(phase="descend", clamp_ext=ext, near_floor=z < 0.45)
-            if z < 0.26 and abs(vz) < 0.3:
-                state, timer = "stand", 0
-                out["landed"], out["land_vz"], out["t_down"] = True, vz, step * 0.01
-        else:
-            timer += 1
-            kw = dict(phase="stand")
-            if timer > 60:
-                break
-
-        if skill == "chimney_climb":
-            env.step(execute_skill(skill, q(), env.dirs_body, E, AXIS, **kw))
-        else:
-            env.step(execute_skill(skill, q(), env.dirs_body, E, **kw))
-        if trace and step % 25 == 0:
-            print(f"    t={step*0.01:4.1f} {state:7s} x {float(env.data.qpos[0]):+.2f} y {y:+.2f} z {z:.2f} vz {vz:+.1f}")
-        if frame is not None:
-            frame(state, side, step, z, vz, y)
-    out["peak"] = peak
-    return out
 
 
 def main():
@@ -194,7 +54,7 @@ def main():
     for _ in range(40):
         env.step(np.zeros(60, dtype=np.float32))
 
-    # Shared plumbing; the climb phase machine below stays this script's own.
+    # Shared plumbing; the climb phase machine is the skill's own.
     recorder = Recorder(env, "run_chimney", tag=f"chimney_seed{args.seed}",
                         enabled=args.video, fps=args.fps, every=1,
                         out_name="chimney_climb")
@@ -216,38 +76,39 @@ def main():
         if recorder is None or step % args.frame_every:
             return
         label = {"launch": "jump up off the floor", "recentre": "roll back to mid-shaft",
+                 "settle": "wait at mid-shaft",
                  "push": f"push off the {'+y' if side > 0 else '-y'} wall",
                  "fly": "fly to the other wall", "exit": "burst out over the lip",
-                 "fly_out": "over the low box", "land": "land on the box, brake",
+                 "fly_out": "over the low wall top", "land": "land on the top",
+                 "brake": "brake on the top",
                  "hold": "clamp both walls, hang", "descend": "friction slide down",
                  "stand": "stopped on top"}.get(state, state)
         if recorder.enabled:
-            recorder.add(annotate(render_pair(), f"chimney_climb [{state}]",
+            recorder.add(annotate(render_pair(), f"zigzag_climb [{state}]",
                               [label, f"height {z:5.2f} m   vz {vz:+4.1f} m/s",
                                f"y {y:+.2f} m",
                                f"t {step * 0.01:5.1f}s"]))
 
-    boxes = np.asarray(scenario.steps, dtype=float)      # [x, y, hx, hy, h]
-    low = boxes[int(np.argmin(boxes[:, 4]))]
-    top = float(low[4]); low_sign = int(np.sign(low[1]))
-    box_y = (float(abs(low[1]) - low[3]), float(abs(low[1]) + low[3]))
+    tuning = ZigzagTuning(push_frac=args.push_frac, exit_band=tuple(args.exit_band),
+                          exit_from=args.exit_from)
+    boxes = np.asarray(scenario.steps, dtype=float)
     if args.target is None:
-        r = climb_chimney(env, top=top, box_y=box_y, low_sign=low_sign, frame=frame,
-                          push_frac=args.push_frac, trace=args.trace,
-                          exit_band=tuple(args.exit_band), exit_from=args.exit_from)
-        print(f"chimney (climb out onto the low box): walls {boxes[:, 4].max():.1f} / "
+        shaft = shaft_from_boxes(boxes, axis=AXIS)
+        top, low_sign, box_y = shaft.top, shaft.low_sign, shaft.box_lat
+        r = run_shaft_climb(env, shaft, skill="zigzag_climb", frame=frame, tuning=tuning, trace=args.trace)
+        print(f"chimney (climb out onto the low wall top): walls {boxes[:, 4].max():.1f} / "
               f"{top:.1f} m, seed {args.seed}, push_frac {args.push_frac}")
         print(f"  ascent : peak {r['peak']:.2f} m, cleared the lip: {r['reached']}"
               + (f" at {r['t_up']:.1f}s" if r["t_up"] else "")
               + f", relaunches {r['relaunches']}, recentres {r['recentres']}")
         print(f"  exit   : (vy, vz, z) at the last push {r.get('exit_v')}")
-        print(f"  landing: on a box top: {r['on_top']}"
-              + (f" at y {r['top_y']:+.2f} (box spans {box_y[0]:.2f}..{box_y[1]:.2f}), "
+        print(f"  landing: on the wall top: {r['on_top']}"
+              + (f" at y {r['top_y']:+.2f} (top spans {box_y[0]:.2f}..{box_y[1]:.2f}), "
                  f"t {r['t_down']:.1f}s" if r["t_down"] else ""))
-        ok = r["on_top"]
+        ok = r["on_top"] and on_wall_top(env.data.qpos[0:3], shaft)
     else:
-        r = climb_chimney(env, target_z=args.target, frame=frame,
-                          push_frac=args.push_frac, trace=args.trace)
+        shaft = Shaft(axis=tuple(AXIS), target_z=float(args.target))
+        r = run_shaft_climb(env, shaft, skill="zigzag_climb", frame=frame, tuning=tuning, trace=args.trace)
         print(f"chimney (hold and descend): target {args.target:.1f} m, seed {args.seed}")
         print(f"  ascent : peak {r['peak']:.2f} m, target reached: {r['reached']}"
               + (f" at {r['t_up']:.1f}s" if r["t_up"] else ""))

@@ -415,6 +415,10 @@ class SkillArbitrationEnv(gym.Env):
         terminated = bool(term)
         truncated = bool(trunc)
         success = bool(sub_info.get("success", False))
+        if getattr(self.scenario, "monotonic_path", False) and path_dist_remaining >= 1.0:
+            # A tour may pass the goal position early: the low-level env's
+            # goal termination does not count until the route is done.
+            terminated, success = False, False
 
         if hit_geoms:
             self.episode_hits += 1

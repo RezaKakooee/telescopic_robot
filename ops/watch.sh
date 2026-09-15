@@ -26,7 +26,7 @@ case "${1:-}" in
 esac
 
 #: Anything that looks like one of our training or evaluation entry points.
-PATTERN='scripts/(rl|imitation|data)/[a-z_]*\.py|train_maze_bank|train_rl|train_mujoco_rl|train_finetune_rl|eval_rl|eval_maze_bank'
+PATTERN='scripts/(rl|imitation|data|vla)/[a-z_]*\.py|train_maze_bank|train_rl|train_mujoco_rl|train_finetune_rl|eval_rl|eval_maze_bank|lerobot-train|lerobot-eval'
 
 snapshot() {
     echo "=== $(date '+%Y-%m-%d %H:%M:%S')   $(hostname) ==="
@@ -73,16 +73,20 @@ snapshot() {
     else
         for d in $dirs; do
             local ck last
-            ck="$(ls -1 "$d"/checkpoints/*.zip 2>/dev/null | wc -l | tr -d ' ')"
-            last="$(ls -1t "$d"/checkpoints/*.zip 2>/dev/null | head -1)"
+            # SB3 runs keep checkpoints/*.zip; LeRobot runs keep train/checkpoints/<step>/;
+            # the torch trainers keep checkpoints/*.pt.
+            ck="$(ls -1d "$d"/checkpoints/*.zip "$d"/checkpoints/*.pt "$d"/train/checkpoints/*/ 2>/dev/null | wc -l | tr -d ' ')"
+            last="$(ls -1dt "$d"/checkpoints/*.zip "$d"/checkpoints/*.pt "$d"/train/checkpoints/*/ 2>/dev/null | head -1)"
             printf "   %-58s %s ckpt" "$(basename "$d")" "$ck"
             [ -n "$last" ] && printf "   latest %s (%s)" \
                 "$(basename "$last")" "$(date -r "$last" '+%H:%M:%S')"
             printf "\n"
             # `train.log` is written by the hydra-based trainers; the newer ones
             # log to stdout, so this is best effort rather than guaranteed.
+            # LeRobot logs carry a progress bar with carriage returns: show the
+            # last "step:" line instead of the last raw line.
             if [ -s "$d/train.log" ]; then
-                sed -n '$p' "$d/train.log" | sed 's/^/      /'
+                tr '\r' '\n' < "$d/train.log" | grep -E 'step:' | tail -1 | cut -c1-140 | sed 's/^/      /'
             fi
         done
     fi

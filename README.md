@@ -35,6 +35,10 @@ steering policy (PPO).
     # the scripted expert on the ten inspection courses, with videos
     MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/run_inspection_oracle.py --tour
 
+    # a fine-tuned SmolVLA policy on the same courses (LeRobot venv)
+    MUJOCO_GL=egl PYTHONPATH=. /home/storage_group/envs/lerobot/bin/python \
+        scripts/vla/eval_smolvla_inspection.py --checkpoint <run>/train/checkpoints/020000/pretrained_model --replan 1
+
 
     # scripted baseline, one episode with video
     python scripts/heuristic/heuristic_agent.py

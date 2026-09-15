@@ -162,6 +162,8 @@ better in a plan, not because they are different gaits.
 | 17 | `backflip` | **Planned, not built.** The code was removed and no `backflip`, `somersault` or `flip` name is in the registry today. `docs/backflip_skill.md` is the specification it will be rebuilt from. | `phase`, `direction`, `launch_power`, `launch_torque` |
 | 18 | `stairs` | Dispatches a composed stair traversal: planned `jump_to` hops, `stop`, `move`, and controlled `fall_down` drops; aliases: `climb_stairs`, `step_vault`. | `phase`, `d_hat`, live velocity, planned takeoff/drop values |
 | 19 | `crawl_pipe` | Rolls inside a round conduit without touching its walls: the `move` gait with every rod capped at the free length to the wall, and the heading steered to the axis. Works down to a 0.22 m radius (the tucked ball is 0.40 m wide). | `d_hat` (axis), `pipe_radius`, `axis_offset`, `speed` |
+| 20 | `zigzag_climb` | The phase machine around `chimney_climb`: `launch` off the floor, then wall-jump zig-zag (`push`, `fly`, `push` ...) up between two walls, `exit` over the lower wall's lip, `land` and `brake` on its top, `stand`. `next_phase` in `shaft_climbing.py` picks the phase from position and velocity. With `Shaft.target_z` it holds and descends instead. Aliases: `zigzag`, `chimney_zigzag`. | `phase`, `side`, `wall_axis`, `lin_vel`, `along_off`, `core_z`, `clamp_ext` |
+| 21 | `wall_jump_climb` | The same machine across a **wide** gap (1 m): `crouch`/`takeoff` jump at the nearer wall, full-power pushes as the ball arrives at each wall, an eased `exit` push from within a metre of the lip, `land`/`brake` on either wall top. Needs the stiffer rod of `configs/rl/wall_jump.yaml` (kp 2000 vs 900); with the default rod every crossing of a wide gap loses height. Aliases: `wall_jump`, `wide_zigzag`. | as `zigzag_climb` |
 
 
 
@@ -420,6 +422,8 @@ function that actually ran, and `meta["requested_as"]` the name you used.
 | `jump_forward_while_moving` | — | `jumping.py` |
 | `jump_to` | — | `jumping.py` |
 | `climb_stairs` | `stairs`, `step_vault` | `stair_climbing.py` |
+| `zigzag_climb` | `zigzag`, `chimney_zigzag` | `shaft_climbing.py` |
+| `wall_jump_climb` | `wall_jump`, `wide_zigzag` | `shaft_climbing.py` |
 | `fall_down` | — | `falling.py` |
 
 Public skill functions that are **not** in the registry, so
@@ -591,8 +595,8 @@ Three steps.
 
 1. Write the function in the module for its family: `locomotion.py`,
    `navigation.py`, `terrain_following.py`, `climbing.py`, `jumping.py`,
-   `falling.py`, `stair_climbing.py`, `cone_courses.py`, `wall_running.py`
-   or `bowl_riding.py`. Never name a module after a skill: see
+   `falling.py`, `stair_climbing.py`, `shaft_climbing.py`, `cone_courses.py`,
+   `wall_running.py` or `bowl_riding.py`. Never name a module after a skill: see
    `test_no_module_is_named_after_a_skill`.
    Keep the contract: state in, `(n_bars,)` targets out.
 2. Add one line to `SKILL_REGISTRY` in `__init__.py`.

@@ -16,7 +16,7 @@ echo "=== 2. Installing LeRobot and VLA dependencies ==="
 "${PIP}" install "lerobot[smolvla]" "opencv-python-headless" "diffusers" "accelerate" "datasets"
 
 echo "=== 3. Installing Simulation & Environment utilities ==="
-"${PIP}" install mujoco gymnasium omegaconf imageio imageio-ffmpeg scipy
+"${PIP}" install "mujoco==3.8.1" gymnasium omegaconf imageio imageio-ffmpeg scipy   # 3.8.1: the skills are calibrated on it; 3.13 changes the contacts
 
 echo "=== 4. Verifying Installation ==="
 "${PYTHON}" -c "

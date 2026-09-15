@@ -128,7 +128,7 @@ def chase_frame(env, renderer, hud: str, minimap: MiniMap | None = None) -> np.n
     return img
 
 
-def run_course(kind: str, cfg, out_dir, max_macro_steps: int = 900, seed: int = 0, tour: bool = False) -> dict:
+def run_course(kind: str, cfg, out_dir, max_macro_steps: int = 900, seed: int = 0, tour: bool = False, video: bool = True) -> dict:
     sc = generate_scenario(kind, cfg, seed=seed, tour=tour)
     max_macro_steps = max(max_macro_steps, int(sc.path_length * 14))      # ~1 m/s at 10 macro steps per second
     env = SkillArbitrationEnv(cfg, scenario=sc, seed=seed, max_steps=4000)
@@ -147,7 +147,8 @@ def run_course(kind: str, cfg, out_dir, max_macro_steps: int = 900, seed: int = 
             frames.append(chase_frame(e, renderer, hud, minimap))
             next_t[0] += 1.0 / FPS
 
-    env.on_control_step = on_control_step
+    if video:
+        env.on_control_step = on_control_step
     hits = 0
     info = {}
     skills_used = {}
@@ -182,8 +183,10 @@ def main():
     out = make_run_dir(build_run_id("run_inspection_oracle", tag="tour" if "--tour" in sys.argv else "short"))
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     tour = "--tour" in sys.argv
+    video = "--no-video" not in sys.argv
+    seed = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--seed=")), 0)
     wanted = args or list(INSPECTION_SCENARIOS)
-    results = [run_course(k, cfg, out, tour=tour) for k in wanted]
+    results = [run_course(k, cfg, out, tour=tour, seed=seed, video=video) for k in wanted]
     with open(out / "summary.json", "w") as f:
         json.dump(results, f, indent=2)
     n_ok = sum(r["success"] for r in results)

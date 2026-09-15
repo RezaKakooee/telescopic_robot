@@ -199,7 +199,7 @@ def pipe_alley(cfg, *, rng=None, name="inspection_pipe_alley", tour: bool = Fals
         t = k * 1.2
         obstacles.append([0.3 + t, 1.6 + t, 0.10])
         obstacles.append([1.6 + t, 0.3 + t, 0.10])
-    steps = [[3.0, 3.0, 0.35, 0.35, 0.10], [5.5, 5.5, 0.35, 0.35, 0.12]]   # pipe saddles across the lane
+    steps = [[3.0, 3.0, 0.35, 0.35, 0.10], [4.9, 5.5, 0.35, 0.35, 0.12]]   # pipe saddles on the lane centre line
     pipes = [[9.0, 8.0, 3.0, 0.44, 0.46, 0.0]]                             # conduit x in [9, 12] at y = 8
     lane = [(0.0, 0.0), (4.4, 4.4), (5.4, 6.6), (6.6, 7.8), (8.0, 8.0), (12.5, 8.0)]   # gentle arc, then straight into the mouth
     route = lane
@@ -260,7 +260,7 @@ def loading_dock(cfg, *, rng=None, name="inspection_loading_dock", tour: bool = 
     steps = [
         [2.5, 1.5, 1.6, 0.9, 0.55], [8.5, 1.5, 1.6, 0.9, 0.55],                # two parked trucks (tall blocks)
         [6.0, 6.3, 0.45, 0.35, h + 0.15], [8.0, 5.7, 0.45, 0.35, h + 0.15],    # crates on the dock
-        [12.5, 3.0, 0.5, 0.4, 0.14],                                            # pallet near the exit
+        [13.6, 4.6, 0.5, 0.4, 0.14],                                            # pallet by the wall near the exit
     ]
     cones = [[5.0, 3.0, 0.10], [5.6, 3.6, 0.10]]
     dock = [(1.5, 6.0), (10.5, 6.0), (11.5, 6.0), (11.5, 3.0)]
@@ -374,6 +374,56 @@ def rubble_site(cfg, *, rng=None, name="inspection_rubble_site", tour: bool = Fa
     return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps, stones=stones)
 
 
+# --------------------------------------------------------------------------- #
+# 11-13. Jump drills: many jumps in a row, 3 m of straight approach each
+# --------------------------------------------------------------------------- #
+def hurdle_lane(cfg, *, rng=None, name="inspection_hurdle_lane", tour: bool = False):
+    """A long lane with 14 beams across it, heights between 0.10 and 0.20 m."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    walls = _boundary(-1.5, -1.5, 46.5, 1.5)
+    steps = [_beam(3.0 + 3.0 * i, 0.0, "y", float(rng.uniform(0.10, 0.20)), 2.8, 0.10) for i in range(14)]
+    route = [(0.0, 0.0), (45.0, 0.0)]
+    if tour:   # there and back: 28 jumps
+        route = [(0.0, 0.0), (45.0, 0.0), (45.0, 0.6), (0.0, 0.6), (0.0, 0.0), (45.0, 0.0)]
+    return _make(name, route, walls, tour=tour, steps=steps)
+
+
+def trench_field(cfg, *, rng=None, name="inspection_trench_field", tour: bool = False):
+    """Four 20 m lanes of a snake, each crossed by three trenches 0.30 to 0.50 m wide.
+
+    Five metres between a corner and the first trench: a 90 degree turn at
+    speed swings the ball almost a metre off the lane, and it needs that
+    distance to settle before a jump."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    walls = _boundary(-1.5, -1.5, 21.5, 10.5)
+    gaps = []
+    for lane in range(4):
+        y = 3.0 * lane
+        for x in (5.0, 10.0, 15.0):
+            w = float(rng.uniform(0.30, 0.50))
+            gaps.append([x, y, w / 2, 1.2, 0.40])          # across the lane (half_x = width/2)
+    route = [(0.0, 0.0), (20.0, 0.0), (20.0, 3.0), (0.0, 3.0), (0.0, 6.0), (20.0, 6.0), (20.0, 9.0), (0.0, 9.0)]
+    return _make(name, route, walls, tour=tour, gaps=gaps)      # the tour is the same snake: 12 jumps
+
+
+def box_steps(cfg, *, rng=None, name="inspection_box_steps", tour: bool = False):
+    """A lane that alternates low walls (0.15 to 0.30 m) and gaps (0.35 to 0.50 m)."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    walls = _boundary(-1.5, -1.5, 34.5, 1.5)
+    steps, gaps = [], []
+    for i in range(10):
+        x = 3.0 + 3.0 * i
+        if i % 2 == 0:
+            steps.append(_beam(x, 0.0, "y", float(rng.uniform(0.15, 0.30)), 2.8, 0.12))
+        else:
+            w = float(rng.uniform(0.35, 0.50))
+            gaps.append([x, 0.0, w / 2, 1.4, 0.40])
+    route = [(0.0, 0.0), (33.0, 0.0)]
+    if tour:
+        route = [(0.0, 0.0), (33.0, 0.0), (33.0, 0.6), (0.0, 0.6), (0.0, 0.0), (33.0, 0.0)]
+    return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps)
+
+
 INSPECTION_SCENARIOS = {
     "inspection_warehouse": warehouse,
     "inspection_pipe_alley": pipe_alley,
@@ -385,4 +435,7 @@ INSPECTION_SCENARIOS = {
     "inspection_solar_farm": solar_farm,
     "inspection_quarry": quarry,
     "inspection_rubble_site": rubble_site,
+    "inspection_hurdle_lane": hurdle_lane,
+    "inspection_trench_field": trench_field,
+    "inspection_box_steps": box_steps,
 }
