@@ -30,7 +30,7 @@ from radial_sphere.mujoco_env import MujocoRadialSphereEnv
 from radial_sphere.scenario import generate_scenario
 from skills import execute_skill
 
-OUT = Path(__file__).resolve().parents[2] / "skills" / "hop_calibration.json"
+OUT = Path(__file__).resolve().parents[2] / "skills" / "mid_level" / "hop_calibration.json"   # the table hop_planner reads
 CROUCH_STEPS = 22
 MAX_BURN = 45          # give up on the burn after this many steps
 G = 9.81
@@ -130,11 +130,12 @@ def main():
                   f"{row['travel_max']:>8.2f}{row['z_lift_mean']:>8.2f}")
     env.close()
 
-    OUT.write_text(json.dumps({
+    out = Path(args.out) if getattr(args, "out", None) else OUT
+    out.write_text(json.dumps({
         "config": args.config, "crouch_steps": CROUCH_STEPS,
         "max_burn": MAX_BURN, "wall_lock": args.wall_lock,
         "rows": rows}, indent=2))
-    print(f"\nwrote {len(rows)} cells -> {OUT}")
+    print(f"\nwrote {len(rows)} cells -> {out}")
 
 
 if __name__ == "__main__":

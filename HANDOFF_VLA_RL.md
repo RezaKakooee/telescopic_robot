@@ -419,6 +419,21 @@ The jump maze has a sixth lane: five 2.2 m decks, 0.10, 0.20, 0.40, 0.20,
 0.10 m, a 0.25 m pit between each pair, jumped on with a pause on every
 deck, up and down (a pit before a lower deck counts as a gap now).
 
+**Short decks and the standing hop (2026-09-18, measured).** The maze deck
+row is 1.6 x 1.2 m (`scenario.jump_maze.deck_length`, `deck_width`): with
+the running jump, 2.2 m keeps 8 of 8 episodes, 1.6 m 6, 1.4 m 5, 1.2 m
+and 1.0 m none; width 0.8 m gives 15 hits per episode, 0.6 m 19 (the
+ball falls off the side). A standing jump does not need the run-up, so
+the option has a hop mode: with under 0.8 m of run-up and a slow ball it
+plans an aimed hop (`jump_to`, `hop_planner`, no back-up) instead. It is
+gated to the long-stroke build. On the standard build (0.16 m rods) it
+cannot work: calibrated (`hop_calibration_standard.json`), the aimed hop
+rises 0.20 to 0.33 m on a bad orientation, the planner finds no plan for
+any rise, and from 0.55 m it bounced off a 0.20 m deck face 0 of 8; the
+full-power standing jump rises 0.47 to 0.69 m but scatters 0.4 to 1.9 m
+forward and landed on a 1 m deck at best 3 of 8. Decks the ball barely
+fits on need the long-stroke build: that is `demos/doubling_boxes`.
+
 Known limits: crawl_pipe and traverse_rough still run per macro step;
 `no_target` jump frames keep the jump label (the `results` column says
 what ran; the converter does not filter on it yet).

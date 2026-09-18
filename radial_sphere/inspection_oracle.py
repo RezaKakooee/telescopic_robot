@@ -60,6 +60,11 @@ MIN_JUMP_HEIGHT = 0.08          # lower slabs are curbs the ball simply rolls ov
 # Short decks (box tops under this length along the route): land, brake, back
 # up, run, jump. A longer deck gives the running jump its run-up by itself.
 SHORT_DECK = 2.6
+#: A deck shorter than this cannot give the running jump its run-up even
+#: after a back-up (1.2 m and 1.0 m decks: 0 of 8 either way): the routine
+#: is brake, settle, jump, and the jump option hops from a standstill where
+#: the build can (the long-stroke build). 1.6 m decks still need the back-up.
+HOP_DECK = 1.2
 DECK_REAR = 0.7                 # back up to this far past the deck's near edge
 DECK_STOP_STEPS = 4             # macro steps of braking after the landing
 DECK_SETTLE_STEPS = 3           # macro steps of standing still at the rear
@@ -231,7 +236,9 @@ class InspectionOracle:
         if self._deck_phase == "stop":
             self._deck_count -= 1
             if self._deck_count <= 0:
-                self._deck_phase = "back"
+                short = (deck.s_end - deck.s_start) < HOP_DECK
+                self._deck_phase = "settle" if short else "back"
+                self._deck_count = DECK_SETTLE_STEPS
             return "stop", {}, f"{deck.label}: brake"
         if self._deck_phase == "back":
             rear = min(DECK_REAR, 0.3 * (deck.s_end - deck.s_start))     # short decks: back up less

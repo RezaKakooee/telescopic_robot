@@ -4,6 +4,9 @@
 
 config: "configs/rl/pillar_course.yaml"
 
+#: where to write the table; empty = skills/mid_level/hop_calibration.json (the long-stroke table the pillar demos read)
+out: ""
+
 repeats: 10
 
 #: burn with the leading sector shut (course mode)

@@ -175,8 +175,30 @@ def plan_jump(edges: list[Edge], ground: float | None = None) -> dict | None:
             continue                                     # a step down: roll it, look past it
         if e.kind == "rise" and e.level < ground - MIN_EDGE:
             return None                                  # the far wall of a pit or a lower level
-        return {"edge": e, "shape": shape, "trigger": TRIGGER[shape]}
+        return {"edge": e, "shape": shape, "trigger": TRIGGER[shape], "edges": edges, "ground": ground}
     return None
+
+
+def hop_target(plan: dict) -> dict | None:
+    """The surface a standing hop must land on, for ``hop_planner.plan_standing_hop``.
+
+    In the plan's own frame: the ball at 0, distances along the heading,
+    heights relative to the floor the ball stands on. A beam, tread or
+    platform is landed on its top; a trench is crossed onto the level after
+    it. ``far`` is the end of that surface, or 2 m on when it is not seen.
+    """
+    e, edges, ground = plan["edge"], plan["edges"], plan["ground"]
+    if e.kind == "rise":
+        top = e.level + e.change
+        length = e.length if np.isfinite(e.length) else 2.0
+        return {"near": e.dist, "far": e.dist + length, "height": top - ground}
+    # a gap: the level after it begins where the ground comes back up
+    after = [x for x in edges if x.dist > e.dist + e.length - 1e-6 and x.kind == "rise"]
+    if not after:
+        return None
+    a = after[0]
+    length = a.length if np.isfinite(a.length) else 2.0
+    return {"near": a.dist, "far": a.dist + length, "height": a.level + a.change - ground}
 
 
 class TerrainProbe:

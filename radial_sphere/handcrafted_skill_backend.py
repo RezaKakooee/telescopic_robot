@@ -77,11 +77,38 @@ TIMED_JUMPS = frozenset({"jump_forward_while_moving"})
 #: starts from rest, so allow the distance at half speed, 1 to 4 s.
 APPROACH_SPEED = 1.1
 APPROACH_MIN_S, APPROACH_MAX_S = 1.0, 4.0
+#: With less run-up than this before the trigger point, and the ball slow,
+#: the running jump cannot get up to speed: the option hops instead (an
+#: aimed standing hop, `jump_to`, planned by skills.mid_level.hop_planner
+#: from the edge's own geometry). Short decks are jumped this way.
+RUNUP_MIN = 0.8
+HOP_SPEED_MAX = 0.5
+#: Creep to the hop's stand point in short pushes (the gait cannot go slow),
+#: this near is near enough.
+HOP_STAND_TOL = 0.08
 #: Re-measure the edge with the probe this often during the approach (every
 #: control step: the heading follows the route, so the edge distance is
 #: measured along the current heading); odometry fills in when the probe
 #: loses the edge for a moment.
 REPROBE_EVERY = 1
+
+
+def hop_calibration_path(env):
+    """The aimed-hop calibration for this build, or None when the build cannot hop.
+
+    Only the long-stroke build (0.26 m rods) has a usable table. On the
+    standard 0.16 m build the aimed hop rises 0.20 to 0.33 m on a bad
+    orientation and bounces off a 0.20 m deck face 0.55 m away (0 of 8);
+    the full-power standing jump lands on a 1 m deck 3 times in 8 at best.
+    Its table (hop_calibration_standard.json) is kept for the record; with
+    it in use the maze deck row got worse (15 hits per episode, from 4).
+    """
+    from pathlib import Path
+    stroke = float(getattr(env, "max_extend", 0.16))
+    if stroke <= 0.2:
+        return None
+    p = Path(__file__).resolve().parents[1] / "skills" / "mid_level" / "hop_calibration.json"
+    return str(p) if p.exists() else None
 
 
 class SkillOption:
@@ -127,6 +154,8 @@ class SkillOption:
         self.remaining = None                       # distance to the edge, metres
         self.line_origin = self.start_xy.copy()     # the approach holds the line through here
         self.edge_xy = None                         # where the edge is, in the world, for the result check
+        self.hop = None                             # a HopPlan when this jump is a standing hop
+        self.hop_phase_start = 0
         if self.plan is not None:
             self.edge_xy = self.start_xy + self.heading * float(self.plan["edge"].dist)
             self.remaining = float(self.plan["edge"].dist)
@@ -134,10 +163,57 @@ class SkillOption:
             self.approach_budget = math.ceil(seconds / self.dt)
             self.max_steps = self.approach_budget + jump_budget
             self.phase = "approach"
+            runup = self.remaining - float(self.plan["trigger"])
+            if runup < RUNUP_MIN and float(np.linalg.norm(env.data.qvel[:2])) < HOP_SPEED_MAX:
+                self.hop = self._plan_hop()
+                if self.hop is not None:
+                    self.phase = "creep"
+                    self.max_steps = self.approach_budget + math.ceil(1.0 / self.dt) + math.ceil(1.6 / self.dt)
+
+    # ---- the standing hop -------------------------------------------
+    def _plan_hop(self):
+        """An aimed hop onto the edge's surface, or None when the planner cannot promise one."""
+        from radial_sphere.terrain_probe import hop_target
+        from skills.mid_level.hop_planner import STAND_EDGE, load_hop_calibration, plan_standing_hop
+        target = hop_target(self.plan)
+        if target is None:
+            return None
+        table = hop_calibration_path(self.env)
+        if table is None:
+            return None
+        cal = load_hop_calibration(table)
+        return plan_standing_hop(0.0, (-1.0, target["near"] - STAND_EDGE), target, calibration=cal)
+
+    def _hop_step(self, step):
+        """Creep to the stand point, settle, then run the aimed hop."""
+        progress = float((self.env.data.qpos[:2] - self.start_xy) @ self.heading)
+        if self.phase == "creep":
+            err = float(self.hop.x0) - progress
+            if abs(err) <= HOP_STAND_TOL or err < -0.3 or step >= self.approach_budget:
+                self.phase, self.hop_phase_start = "settle", step
+            else:
+                # Short pushes with stops between: the gait cannot go slow.
+                cycle = step % 26
+                if cycle < 6:
+                    return skill_targets(self.env, "move" if err > 0 else "reverse", step,
+                                         d_hat=self.heading, speed=APPROACH_SPEED)
+                return skill_targets(self.env, "stop", step)
+        if self.phase == "settle":
+            if self._settled() or step - self.hop_phase_start > math.ceil(1.0 / self.dt):
+                # Hand over to the jump_to schedule with the planned command.
+                self.name = "jump_to"
+                self.params = {"vx_target": float(self.hop.vx_cmd), "vz_target": float(self.hop.vz_cmd),
+                               "wall_lock": True}
+                self.jump_start = step
+                self.skip_sprint = False
+                self.phase = "crouch"
+                return None
+            return skill_targets(self.env, "stop", step)
+        return None
 
     # ---- the approach ------------------------------------------------
     def approaching(self, step) -> bool:
-        return self.plan is not None and self.phase == "approach"
+        return self.plan is not None and self.phase in ("approach", "creep", "settle")
 
     def _distance_to_edge(self, step) -> float:
         """Distance to the edge along the current heading.
@@ -222,6 +298,10 @@ class SkillOption:
         return "landing" if self.landing_started is not None else "airborne"
 
     def targets(self, step):
+        if self.hop is not None and self.phase in ("creep", "settle"):
+            t = self._hop_step(step)
+            if t is not None:
+                return t
         if self.approaching(step):
             t = self._approach_step(step)
             if t is not None:
