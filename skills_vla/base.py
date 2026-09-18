@@ -120,3 +120,28 @@ class VLASkill(ABC):
         """Execute one control step of a multi-step sequence."""
         targets = self.act(state, camera_heading=camera_heading, **kwargs)
         return SkillResult(targets=targets, done=True)
+
+    # ------------------------------------------------------------------
+    # The option contract. The policy chooses a skill; the skill owns its
+    # own timing and its own end. A skill that aims at terrain says whether
+    # it can start from here and what it plans; the executor
+    # (SkillArbitrationEnv) runs it to its end and reports the result.
+    # ------------------------------------------------------------------
+    def can_start(self, terrain) -> bool:
+        """Is there something for this skill to do from here?
+
+        ``terrain`` is the list of :class:`radial_sphere.terrain_probe.Edge`
+        ahead along the heading, or None when the executor has no probe.
+        The base answer is yes: a skill with no target (roll, brake) always
+        can.
+        """
+        return True
+
+    def plan(self, terrain, ground: float | None = None) -> dict:
+        """What the skill intends, from the terrain ahead (and the floor height, if known).
+
+        For a jump: the edge it aims at and how far before it to fire. The
+        executor drives the approach and fires on the plan. Empty when the
+        skill needs no plan.
+        """
+        return {}

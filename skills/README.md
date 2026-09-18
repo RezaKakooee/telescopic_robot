@@ -5,6 +5,8 @@ extend. That is the whole idea.
 
 Every skill is a **pure function**. State goes in. Rod targets come out.
 
+For the three layers and the skill contract, see [`docs/architecture.md`](../docs/architecture.md).
+
 ```python
 targets = execute_skill("move_forward", quat, dirs_body, max_extend, d_hat=[1, 0])
 env.step(targets)

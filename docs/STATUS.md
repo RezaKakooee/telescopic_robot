@@ -28,6 +28,7 @@ controller moves the 60 bars. See `docs/ENV_OVERVIEW.md` for the env details.
    the walls' free space, Dijkstra field), not straight-line.
 
 ### Recent Skills & Handoffs:
+- [Target architecture: code as policy (three layers, the skill contract)](architecture.md)
 - [Horizontal Wall Run Parkour Skill (Section 14 in Project Journey)](project_journey/02_skill_library_and_the_skill_course.md#14-horizontal-wall-run-parkour-wall-run--inertia-ride)
 - [Verified composed stairs skill](stairs_skill.md)
 - [Cylinder / Motordrome Wall of Death Handoff](cylinder_wall_of_death_handoff.md)

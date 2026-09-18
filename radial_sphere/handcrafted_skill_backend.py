@@ -68,30 +68,137 @@ def decode(action, mode, waypoint_heading):
     return index, name, params, heading
 
 
+#: The running jump is the one option that times itself from the terrain:
+#: given a plan (an edge ahead and a firing distance) it rolls up to the
+#: edge and fires at that distance, so the policy's decision can come a
+#: metre early and still be right.
+TIMED_JUMPS = frozenset({"jump_forward_while_moving"})
+#: Approach speed (the macro `move` speed) and its budget: at worst the ball
+#: starts from rest, so allow the distance at half speed, 1 to 4 s.
+APPROACH_SPEED = 1.1
+APPROACH_MIN_S, APPROACH_MAX_S = 1.0, 4.0
+#: Re-measure the edge with the probe this often during the approach (every
+#: control step: the heading follows the route, so the edge distance is
+#: measured along the current heading); odometry fills in when the probe
+#: loses the edge for a moment.
+REPROBE_EVERY = 1
+
+
 class SkillOption:
     """State routing and bounded jump sequencing, interruptible each env step.
 
     Crouch/burn timings match skills.runner at its nominal 10 ms control
     interval. Flight/landing use local terrain height, so elevated platforms
     do not look like perpetual flight. Landing is latched to avoid chatter.
+
+    With ``plan`` (from ``terrain_probe.plan_jump``) a running jump first
+    approaches: it drives the macro ``move`` along the heading until the
+    edge is ``plan["trigger"]`` metres away, then runs the jump schedule.
+    ``result`` says how it ended: "success" (landed and settled past the
+    edge), "short" (landed and settled before the edge: it hit it or fell
+    short), "timed_out" (the jump budget ran out mid-air or mid-bounce),
+    "approach_timeout" (never got to the edge), "too_close" (the edge got
+    under the rods before the ball was settled enough to fire; it was
+    rolled), "interrupted" (the episode ended during the option), or None
+    while running.
     """
 
-    def __init__(self, env, name, params, heading, decision_every, ground_height):
+    def __init__(self, env, name, params, heading, decision_every, ground_height,
+                 plan=None, probe=None, heading_fn=None):
         self.env, self.name = env, name
         self.params, self.heading = dict(params), heading
         self.start_xy = env.data.qpos[:2].copy()
         self.ground_height = ground_height
         self.dt = float(env.model.opt.timestep * env.action_repeat)
         self.is_jump = name in JUMPS
-        self.max_steps = (math.ceil((2.4 if name == "jump_forward_while_moving" else 1.6) / self.dt)
-                          if self.is_jump else decision_every)
+        jump_budget = math.ceil((2.4 if name == "jump_forward_while_moving" else 1.6) / self.dt)
+        self.max_steps = jump_budget if self.is_jump else decision_every
         self.phase = "drive"
         self.landing_started = None
         self.burn_finished = False
         self.skip_sprint = float(np.linalg.norm(env.data.qvel[:2])) > RUNNING_SPEED
+        self.result = None
+        # Self-timed approach (running jump with a plan).
+        self.plan = plan if (plan and name in TIMED_JUMPS) else None
+        self.probe = probe
+        self.heading_fn = heading_fn                # the route's heading now; the approach follows it
+        self.jump_start = 0                         # control step at which the jump schedule began
+        self.approach_budget = 0
+        self.remaining = None                       # distance to the edge, metres
+        self.line_origin = self.start_xy.copy()     # the approach holds the line through here
+        self.edge_xy = None                         # where the edge is, in the world, for the result check
+        if self.plan is not None:
+            self.edge_xy = self.start_xy + self.heading * float(self.plan["edge"].dist)
+            self.remaining = float(self.plan["edge"].dist)
+            seconds = float(np.clip((self.remaining + 0.5) / (APPROACH_SPEED / 2), APPROACH_MIN_S, APPROACH_MAX_S))
+            self.approach_budget = math.ceil(seconds / self.dt)
+            self.max_steps = self.approach_budget + jump_budget
+            self.phase = "approach"
+
+    # ---- the approach ------------------------------------------------
+    def approaching(self, step) -> bool:
+        return self.plan is not None and self.phase == "approach"
+
+    def _distance_to_edge(self, step) -> float:
+        """Distance to the edge along the current heading.
+
+        The approach follows the route like `move` does (the heading is read
+        from the waypoints every step: a frozen heading drifted the ball into
+        a post on a diagonal route), so the odometry count is re-anchored on
+        the probe every step; odometry alone fills in when the probe loses
+        the edge for a moment.
+        """
+        if self.heading_fn is not None:
+            h = np.asarray(self.heading_fn(), dtype=np.float64)[:2]
+            if np.linalg.norm(h) > 1e-6:
+                self.heading = h / np.linalg.norm(h)
+        progress = float((self.env.data.qpos[:2] - self.start_xy) @ self.heading)
+        estimate = float(self.plan["edge"].dist) - progress
+        if self.probe is not None and step % REPROBE_EVERY == 0 and step > 0:
+            fresh = self.probe(self.heading)
+            if fresh is not None and abs(float(fresh["edge"].dist) - estimate) < 0.4:
+                # Same edge, measured again: trust the measurement, and its
+                # shape (a tread seen from far away reads as a platform).
+                self.plan.update(fresh)
+                self.start_xy = self.env.data.qpos[:2].copy()
+                self.edge_xy = self.start_xy + self.heading * float(fresh["edge"].dist)
+                estimate = float(fresh["edge"].dist)
+        return estimate
+
+    def _settled(self) -> bool:
+        pos = self.env.data.qpos[:3]
+        return (pos[2] <= self.ground_height(pos[:2]) + self.env.sphere_radius + .05
+                and abs(float(self.env.data.qvel[2])) < .3)
+
+    def _approach_step(self, step):
+        """Roll on until the edge is at the firing distance, then hand over to the jump.
+
+        An edge already nearer than the trigger is fired at once only when
+        the ball is settled (a jump armed while still bouncing from the last
+        landing hit the next crate every time); until then it rolls on, and
+        if the edge gets under the rods first the option ends as "too_close".
+        """
+        self.remaining = self._distance_to_edge(step)
+        from radial_sphere.terrain_probe import MIN_TARGET
+        if self.remaining < MIN_TARGET:
+            self.result = "too_close"
+            return None
+        if step >= self.approach_budget:
+            self.result = "approach_timeout"
+            return None
+        if self.remaining <= float(self.plan["trigger"]) and (self._settled()
+                                                              or self.remaining < float(self.plan["trigger"]) - 0.15):
+            self.phase = "sprint"
+            self.jump_start = step
+            self.skip_sprint = float(np.linalg.norm(self.env.data.qvel[:2])) > RUNNING_SPEED
+            return None
+        normal = np.array([-self.heading[1], self.heading[0]])
+        cross = float((self.env.data.qpos[:2] - self.line_origin) @ normal)
+        return skill_targets(self.env, "move", step, d_hat=self.heading, speed=APPROACH_SPEED,
+                             cross_track_error=cross)
 
     def _jump_phase(self, step):
-        elapsed = step * self.dt
+        elapsed = (step - self.jump_start) * self.dt
         running = self.name == "jump_forward_while_moving"
         if running and self.skip_sprint:
             # Already rolling: the sprint phase would kick the ball off the
@@ -115,6 +222,14 @@ class SkillOption:
         return "landing" if self.landing_started is not None else "airborne"
 
     def targets(self, step):
+        if self.approaching(step):
+            t = self._approach_step(step)
+            if t is not None:
+                return t
+            if self.result in ("approach_timeout", "too_close"):
+                # Never reached the edge, or it is already under the rods:
+                # end the option on a brake instead of jumping into nothing.
+                return skill_targets(self.env, "stop", step)
         call = dict(self.params)
         if self.is_jump:
             self.phase = self._jump_phase(step)
@@ -133,8 +248,33 @@ class SkillOption:
         The landing rollout can throw the ball back up; handing control to the
         next option mid-bounce makes that option fire in the air.
         """
-        if self.landing_started is None or steps_executed * self.dt < self.landing_started + .20:
+        if self.result in ("approach_timeout", "too_close"):
+            return True
+        if self.approaching(steps_executed):
+            return False
+        if self.landing_started is None or (steps_executed - self.jump_start) * self.dt < self.landing_started + .20:
             return False
         pos = self.env.data.qpos[:3]
         near_ground = pos[2] <= self.ground_height(pos[:2]) + self.env.sphere_radius + .10
-        return near_ground and abs(float(self.env.data.qvel[2])) < .5
+        done = near_ground and abs(float(self.env.data.qvel[2])) < .5
+        if done and self.result is None:
+            self.result = self._landing_result()
+        return done
+
+    def _landing_result(self) -> str:
+        """"success" when the ball came down past the edge it aimed at, else "short"."""
+        if self.edge_xy is None:
+            return "success"
+        past = float((self.env.data.qpos[:2] - self.edge_xy) @ self.heading)
+        return "success" if past > 0.0 else "short"
+
+    def finish(self, steps_executed):
+        """Called once by the executor when the option stops; fixes ``result``."""
+        if self.result is None and self.is_jump:
+            if self.complete(steps_executed):
+                self.result = self.result or self._landing_result()
+            elif steps_executed >= self.max_steps:
+                self.result = "timed_out"
+            else:
+                self.result = "interrupted"          # the episode ended mid-option
+        return self.result

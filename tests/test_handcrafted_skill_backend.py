@@ -97,10 +97,37 @@ class BackendPhysicsTests(unittest.TestCase):
                     self.assertTrue(np.isfinite(reward))
                     self.assertEqual(info["skill_name"], name)
                     self.assertEqual(info["skill_backend"], "skills")
-                    if name in H.JUMPS:
+                    if name in H.TIMED_JUMPS:
+                        # From the spawn nothing is within the probe's reach:
+                        # the self-timed jump has no target and costs one
+                        # macro step of rolling, not a jump into open floor.
+                        self.assertEqual(info["skill_result"], "no_target")
+                        self.assertEqual(info["skill_control_steps"], self.env.k)
+                    elif name in H.JUMPS:
                         self.assertGreater(info["skill_control_steps"], self.env.k)
                         self.assertEqual(info["skill_phase"], "landing")
                         self.assertFalse(info["skill_timed_out"])
+
+    def test_timed_jump_approaches_the_hurdle_and_lands_past_it(self):
+        """Armed 1.5 m early, the running jump rolls up to the hurdle, fires at
+        the calibrated distance and reports success on landing."""
+        self.env.action_mode = "macro"
+        self.env.action_space = H.action_space("macro")
+        self.env.reset(seed=100)
+        hurdle_x = float(self.env.scenario.steps[0][0]) if getattr(self.env.scenario, "steps", None) is not None else None
+        for _ in range(60):
+            if float(self.env.env.data.qpos[0]) > 2.9:
+                break
+            self.env.step(self.action("move"))
+        x0 = float(self.env.env.data.qpos[0])
+        _, _, _, _, info = self.env.step(self.action("jump_forward_while_moving"))
+        self.assertIsNotNone(info["skill_plan"], "the hurdle must be a target from here")
+        self.assertGreater(info["skill_plan"]["edge_dist"], 0.9)
+        self.assertEqual(info["skill_result"], "success")
+        self.assertGreater(info["skill_control_steps"], self.env.k)
+        self.assertGreater(float(self.env.env.data.qpos[0]), x0 + info["skill_plan"]["edge_dist"],
+                           "the ball must come down past the edge it aimed at")
+        self.assertEqual(info["obstacle_hit"], 0)
 
     def test_option_stops_immediately_on_low_level_termination(self):
         self.env.reset(seed=100)

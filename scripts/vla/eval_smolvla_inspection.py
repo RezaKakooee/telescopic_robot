@@ -77,6 +77,8 @@ def run_course(kind, cfg, policy, pre, post, device, out_dir, tour, video, seed=
     max_steps = int(sc.path_length * 14) + 200
     hits, agree, n, info, frames = 0, 0, 0, {}, []
     counts = {}
+    results = {}
+    info = {}
     if video:
         # Same recording as the expert videos: every control step at 25 fps,
         # chase camera, minimap, plus the policy camera as an inset.
@@ -110,7 +112,10 @@ def run_course(kind, cfg, policy, pre, post, device, out_dir, tour, video, seed=
         n_skills = len(action) - 4
         vla_skill = SKILL_NAMES[int(np.argmax(action[:n_skills]))]
         env_skill = ENV_SKILL_MAP[vla_skill]
-        # what the expert would do here, for the agreement score (it does not drive)
+        # what the expert would do here, for the agreement score (it does not drive).
+        # The expert is stateful (flip, deck phases): keep its flip state in
+        # step with the env's, which the policy drives.
+        oracle._flipped = bool(info.get("flipped", False)) if step else False
         exp_name, _, why = oracle.select(pos)
         exp_vla = ENV_TO_VLA[exp_name]
         if exp_vla == "jump_forward" and "gap" in why:
@@ -125,6 +130,9 @@ def run_course(kind, cfg, policy, pre, post, device, out_dir, tour, video, seed=
         act[env.skill_names.index(env_skill)] = 1.0
         _, _, term, trunc, info = env.step(act)
         hits += int(info.get("obstacle_hit", 0))
+        r = info.get("skill_result")
+        if r:
+            results[r] = results.get(r, 0) + 1
         if video:
             hud_state["hits"] = hits
         if term or trunc:
@@ -135,7 +143,8 @@ def run_course(kind, cfg, policy, pre, post, device, out_dir, tour, video, seed=
         imageio.mimsave(str(out_dir / f"{kind}_{'success' if success else 'fail'}_hits{hits}.mp4"), frames, fps=FPS)
     res = {"course": kind, "success": success, "hits": hits, "clean": success and hits == 0, "steps": step + 1,
            "final_dist": round(float(np.linalg.norm(env.env.data.qpos[:2] - np.asarray(sc.goal)[:2])), 2),
-           "agreement": round(agree / max(n, 1), 3), "skills": counts, "stalled": bool(info.get("stalled", False))}
+           "agreement": round(agree / max(n, 1), 3), "skills": counts, "results": results,
+           "stalled": bool(info.get("stalled", False))}
     print(f"{kind:28s} success={success!s:5s} hits={hits:3d} steps={step + 1:4d} dist={res['final_dist']:5.2f} "
           f"agree={res['agreement']:.2f} skills={counts}")
     return res

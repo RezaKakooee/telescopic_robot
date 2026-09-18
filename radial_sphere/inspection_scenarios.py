@@ -307,7 +307,10 @@ def utility_tunnel(cfg, *, rng=None, name="inspection_utility_tunnel", tour: boo
     pipes = [[1.0, 0.0, 2.4, 0.44, 0.46, 0.0], [9.0, 3.5, 2.4, 0.44, 0.46, 90.0]]   # second pipe 3.5 m after the corner
     gaps = [[7.4, 0.0, 0.25, 0.45, 0.50]]                                    # open manhole on leg A, 0.5 m along the travel
     sand = [[6.0, 0.0, 0.4, 0.5]]                                             # standing water
-    steps = [_beam(4.4, 0.0, "y", 0.10, 1.4, 0.10)]                           # cable cover
+    # Cable cover 1.4 m past the branch corner. At 4.4 m it sat 0.4 m past the
+    # corner: no jump can be timed from there (the ball turns, and the cover
+    # is already under its rods), which is where the tour kept failing.
+    steps = [_beam(5.4, 0.0, "y", 0.10, 1.4, 0.10)]
     route = [(0.0, 0.0), (9.0, 0.0), (9.0, 8.0)]
     if tour:   # visit the dead-end branch, go to the end, come back through the pipe, and go again
         route = [(0.0, 0.0), (4.0, 0.0), (4.0, -2.4), (4.0, 0.0), (9.0, 0.0), (9.0, 7.6), (9.0, 1.0), (5.0, 0.0), (9.0, 0.0), (9.0, 8.0)]
@@ -433,7 +436,7 @@ def box_steps(cfg, *, rng=None, name="inspection_box_steps", tour: bool = False)
 # 14. Jump maze: every jump form the expert knows, one lane each
 # --------------------------------------------------------------------------- #
 def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False):
-    """A five-lane snake between partition walls; each lane drills one jump form.
+    """A six-lane snake between partition walls; each lane drills one jump form.
 
     ==  ===================  =================================================
     0   hurdles              five beams rising 0.10 -> 0.26 m, then a beam pair
@@ -443,16 +446,26 @@ def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False)
     3   platforms            jump onto a 0.25 m and a 0.30 m box, roll off,
                              a beam pair, a gap
     4   angled approach      a zig-zag route crosses beams and a gap at ~16 deg
+    5   deck row             five 2.2 x 1.2 m decks, 0.30, 0.50, 0.90, 0.50, 0.30 m,
+                             a pit between each pair: jump on, pause, jump on
     ==  ===================  =================================================
 
     Lanes are 4 m wide and 24 m long, the first station 5 m after each
     corner (the turn swings the ball almost 1 m off the lane) and 3 m
-    between stations. Heights and widths are jittered per seed."""
+    between stations. Heights and widths are jittered per seed.
+
+    The deck row (lane 5) is the doubling-box drill inside the maze: on
+    every deck the expert lands, brakes, backs up, settles, runs and jumps
+    the pit onto the next (the deck routine in `inspection_oracle`). The
+    rises are 0.20 then 0.40 m, the running jump's limit, then the drops
+    mirror them. No pit before the first deck: from the floor a jump onto a
+    low deck behind a pit lands on the lip and stops (measured on the
+    doubling boxes); the first deck is jumped onto from flat floor."""
     rng = rng if rng is not None else np.random.default_rng(0)
     L, W = 24.0, 4.0
     j = lambda lo, hi: float(rng.uniform(lo, hi))
-    walls = _boundary(-1.5, -2.0, L + 1.5, 4 * W + 2.0)
-    for k in range(1, 5):                         # partitions, open 3 m at the turning end
+    walls = _boundary(-1.5, -2.0, L + 1.5, 5 * W + 2.0)
+    for k in range(1, 6):                         # partitions, open 3 m at the turning end
         y = k * W - W / 2
         walls.append(_seg(-1.5, y, L - 3.0, y) if k % 2 else _seg(3.0, y, L + 1.5, y))
     steps, gaps, staircases, ramps = [], [], [], []
@@ -497,8 +510,26 @@ def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False)
         steps.append(beam(x, y, h + j(-0.02, 0.02)))
     gaps.append(gap(22.0, y, j(0.30, 0.40)))
 
+    # lane 5 (-x): the deck row, 5 m after the corner, decks 2.2 m long with
+    # 0.25 m pits between them (the running jump needs the 2.2 m for its
+    # run-up after the back-up; a pit wider than 0.3 m puts the landing on
+    # the far edge)
+    # Decks 1.2 m wide: the rod span is 0.62 m and a landing scatters about
+    # 0.3 m sideways. Heights 0.30, 0.50, 0.90 m then back down: the rises
+    # are 0.20 and 0.40 m, and 0.40 is the running jump's limit.
+    y = 5 * W
+    deck, pit, deck_hw = 2.2, 0.25, 0.6
+    x_far = 19.0
+    for i, h in enumerate((0.30, 0.50, 0.90, 0.50, 0.30)):
+        near, far = x_far - deck, x_far
+        steps.append([0.5 * (near + far), y, deck / 2, deck_hw, h + j(-0.01, 0.01)])
+        if i < 4:
+            gaps.append([near - pit / 2, y, pit / 2, 1.8, 0.40])
+        x_far = near - pit
+
     route = [(0.0, 0.0), (L, 0.0), (L, W), (0.0, W), (0.0, 2 * W), (L, 2 * W), (L, 3 * W), (0.0, 3 * W),
-             (0.0, 4 * W), (5.0, y + 0.7), (10.0, y - 0.7), (15.0, y + 0.7), (20.0, y - 0.7), (L, y)]
+             (0.0, 4 * W), (5.0, 4 * W + 0.7), (10.0, 4 * W - 0.7), (15.0, 4 * W + 0.7), (20.0, 4 * W - 0.7), (L, 4 * W),
+             (L, 5 * W), (0.0, 5 * W)]
     return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps,      # the tour is the same snake
                  staircases=staircases, ramps=ramps)
 

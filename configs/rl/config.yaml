@@ -226,6 +226,7 @@ camera:                   # follows the sphere; looks toward the goal.
 
 rl:                       # high-level steering policy (train_rl.py / eval_rl.py)
   skill_backend: skills_rl # playground/campus: skills_rl primitives | skills controllers + jump options
+  self_timed_jumps: true   # skills backend: the running jump rolls up to the next edge and fires itself
   decision_every: 10      # low-level env steps one RL action is held for
   include_drive: true     # RL also commands speed (drive), not just direction
   obs_obstacles: 3        # nearest pillars in the observation (3 dims each)

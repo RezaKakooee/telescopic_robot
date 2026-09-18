@@ -11,6 +11,7 @@ from __future__ import annotations
 import numpy as np
 
 from ._gym import gym, spaces
+from .terrain_probe import TerrainProbe
 from .map_perception import LocalMapPatchExtractor, MonotonicWaypointTracker, WaypointTracker
 from .mujoco_env import MujocoRadialSphereEnv
 import skills_rl as S
@@ -75,6 +76,11 @@ class SkillArbitrationEnv(gym.Env):
 
         self.scenario = self.env.scenario
         self.patch_extractor = LocalMapPatchExtractor(self.scenario)
+        # A running jump times itself from the terrain ahead (rl.self_timed_jumps,
+        # on by default): the policy says "jump the next edge", the option
+        # rolls up to it and fires at the calibrated distance.
+        self.self_timed_jumps = bool(getattr(rl, "self_timed_jumps", True))
+        self.terrain_probe = TerrainProbe(self.env) if self.handcrafted else None
         if self.scenario.kind == "playground" and hasattr(self.env, "model"):
             self.patch_extractor.rasterize_physics(
                 self.env.model, self.env.data, self.env._terrain_ray_groups)
@@ -273,22 +279,52 @@ class SkillArbitrationEnv(gym.Env):
             # turns the travel direction around; "move" while flipped runs
             # the reverse gait. The ball always drives "forward".
             option_name = skill_name
+            skill_result = None
+            plan = plan_at_decision = None
             if skill_name == "flip":
                 self.flipped = not self.flipped
                 option_name, skill_params = "stop", {}
             elif skill_name == "move" and self.flipped:
+                # Back along the route, towards a point behind the ball. The
+                # forward guidance aims at a point ahead and pulls towards the
+                # line; its opposite pushes an off-line ball further off (and
+                # off the side of a narrow deck). The reverse gait rolls
+                # against its heading, so the heading is set away from the
+                # point behind.
                 option_name = "reverse"
+                tracker = self.waypoint_tracker
+                closest_idx, _ = tracker.get_path_progress(self.env.data.qpos[:3])
+                back = tracker.path_pts[max(int(closest_idx) - int(tracker.lookahead_steps), 0)]
+                to_back = np.asarray(back, dtype=np.float64) - self.env.data.qpos[:2]
+                if np.linalg.norm(to_back) > 0.05:
+                    heading = -to_back / np.linalg.norm(to_back)
+            elif skill_name in self.handcrafted.TIMED_JUMPS and self.self_timed_jumps:
+                # The skill's own contract (skills_vla.JumpForwardSkill.plan):
+                # aim at the first edge ahead. With nothing to aim at the
+                # decision costs one macro step of rolling, not a jump into
+                # open floor.
+                plan = self.terrain_probe.plan(heading)
+                plan_at_decision = dict(plan) if plan else None
+                if plan is None:
+                    option_name, skill_params, skill_result = "move", {"speed": skill_params.get("speed", 1.1)}, "no_target"
             def ground_height(xy):
                 ix, iy = self.patch_extractor._world_to_grid(*xy)
                 return float(self.patch_extractor.global_elevation[iy, ix])
+            def route_heading():
+                g = self.waypoint_tracker.get_guidance(self.env.data.qpos[:3])
+                return g[:2]
             option = self.handcrafted.SkillOption(
-                self.env, option_name, skill_params, heading, self.k, ground_height)
+                self.env, option_name, skill_params, heading, self.k, ground_height,
+                plan=plan, probe=self.terrain_probe.plan if plan else None,
+                heading_fn=route_heading if plan else None)
         elif self.action_mode == "hybrid":
             # Option 1: skills_rl decode
+            skill_result, plan, plan_at_decision = None, None, None
             skill_name, skill_params = S.decode(action)
             skill_idx = S.SKILL_NAMES.index(skill_name)
         else:
             # Option 2: Macro skills
+            skill_result, plan, plan_at_decision = None, None, None
             act_arr = np.asarray(action, dtype=np.float32).reshape(-1)
             skill_idx = int(np.argmax(act_arr[:len(S.SKILL_NAMES)]))
             skill_name = S.SKILL_NAMES[skill_idx]
@@ -341,6 +377,9 @@ class SkillArbitrationEnv(gym.Env):
                            or self.env.data.qpos[2] < -.15
                            or self.control_steps >= self.max_steps * self.k):
                 break
+
+        if option is not None and skill_result is None:
+            skill_result = option.finish(executed)
 
         # Preserve primitive timing; long options consume their actual control budget.
         duration = executed / self.k if option else 1
@@ -488,6 +527,11 @@ class SkillArbitrationEnv(gym.Env):
             "skill_control_steps": executed,
             "control_steps": self.control_steps,
             "skill_phase": option.phase if option else None,
+            "skill_result": skill_result,
+            "skill_plan": ({"shape": plan_at_decision["shape"], "trigger": float(plan_at_decision["trigger"]),
+                            "edge_dist": float(plan_at_decision["edge"].dist),
+                            "edge_change": float(plan_at_decision["edge"].change)}
+                           if plan_at_decision else None),
             "skill_timed_out": bool(option and option.is_jump and executed == option.max_steps
                                     and not option.complete(executed) and not (terminated or truncated)),
             "speed": float(np.linalg.norm(v_xy)),

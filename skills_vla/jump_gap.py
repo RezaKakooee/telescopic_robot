@@ -10,6 +10,7 @@ import numpy as np
 
 from skills.low_level.jumping import jump_to
 from .base import ParamSpec, RobotState, SkillResult, VLASkill
+from radial_sphere.terrain_probe import plan_jump
 from .common import call_skill, jump_phase, resolve_heading
 
 SCHEDULE = "jump_forward_while_stopped"
@@ -36,6 +37,19 @@ class JumpGapSkill(VLASkill):
             vel = np.array([v[0], v[1], vz])
         return call_skill(jump_to, state, d_hat=d_world, phase=phase, vel=vel,
                           vx_target=float(vx_target), vz_target=float(vz_target), wall_lock=True)
+
+    def can_start(self, terrain) -> bool:
+        """A jump needs an edge to aim at: a beam, a tread, a deck or a trench ahead."""
+        return terrain is None or plan_jump(terrain) is not None
+
+    def plan(self, terrain, ground: float | None = None) -> dict:
+        """The edge to aim at and the distance before it to fire (``terrain_probe.plan_jump``).
+
+        ``ground`` is the floor the ball stands on; pass it when known (inside
+        a pipe the first ray sample is the roof, not the floor)."""
+        if terrain is None:
+            return {}
+        return plan_jump(terrain, ground=ground) or {}
 
     def act(self, state: RobotState, camera_heading: float = 0.0, *,
             heading_ego: float = 0.0, vx_target: float = 0.6, vz_target: float = 2.6, **kwargs) -> np.ndarray:

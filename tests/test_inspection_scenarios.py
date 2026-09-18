@@ -70,8 +70,23 @@ class InspectionScenarioTests(unittest.TestCase):
         self.assertEqual(seen[4], "flip")
         self.assertNotIn("reverse", seen)
         self.assertEqual(seen.count("flip"), 2, seen)              # back up, then face forward again
-        self.assertEqual(seen[-1], "move")
+        # Facing forward again at the deck's rear, the next pit is within
+        # ARM_DIST: the expert says "jump" at once and the skill does the
+        # approach and the timing.
+        self.assertEqual(seen[-1], "jump_forward_while_moving")
         self.assertFalse(oracle._flipped)
+
+    def test_expert_arms_the_jump_early_and_only_once_in_reach(self):
+        """No firing windows in the expert: any decision inside ARM_DIST is "jump"."""
+        from radial_sphere.inspection_oracle import ARM_DIST
+        cfg = load_config()
+        sc = generate_scenario("inspection_hurdle_lane", cfg, seed=0)
+        oracle = InspectionOracle(sc)
+        beam_x = float(sc.steps[0][0])
+        far = oracle.select([beam_x - ARM_DIST - 0.5, 0.0, 0.18])[0]
+        near = [oracle.select([beam_x - d, 0.0, 0.18])[0] for d in (ARM_DIST - 0.05, 1.0, 0.5)]
+        self.assertEqual(far, "move")
+        self.assertEqual(near, ["jump_forward_while_moving"] * 3)
 
     def test_flip_turns_move_into_the_reverse_gait(self):
         """The env runs the reverse gait for "move" while flipped, and info says so."""

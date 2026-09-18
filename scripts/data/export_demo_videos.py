@@ -31,11 +31,14 @@ def main():
                 g = f[k]
                 frames, skills, hit = g["frames"][:], g["skills"][:], g["hit_flags"][:]
                 reasons = [r.decode() if isinstance(r, bytes) else str(r) for r in g["reasons"][:]]
+                results = ([r.decode() if isinstance(r, bytes) else str(r) for r in g["results"][:]]
+                           if "results" in g else None)
                 vid = []
                 for t in range(len(frames)):
                     img = cv2.resize(frames[t], (256 * a.scale, 256 * a.scale), interpolation=cv2.INTER_NEAREST)
                     cv2.rectangle(img, (0, 0), (img.shape[1], 24), (12, 16, 24), -1)
-                    cv2.putText(img, f"t={t / 10:5.1f}s  {SKILL_NAMES[int(skills[t])]:14s} {reasons[t][:30]}", (6, 17),
+                    tag = f" [{results[t]}]" if results and results[t] else ""
+                    cv2.putText(img, f"t={t / 10:5.1f}s  {SKILL_NAMES[int(skills[t])]:14s} {reasons[t][:30]}{tag}", (6, 17),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (230, 235, 245), 1, cv2.LINE_AA)
                     if hit[t]:
                         cv2.putText(img, "HIT", (img.shape[1] - 50, 17), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 80, 80), 2, cv2.LINE_AA)

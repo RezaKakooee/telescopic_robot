@@ -8,6 +8,9 @@ For every macro decision (10 Hz) the record holds:
 * ``params``        (T, 4) float32            [heading_ego, speed, power, 0] in [-1, 1]
 * ``reasons``       (T,) str                  the oracle's one-line reason ("jump slab 3 (0.16 m)")
 * ``hits``          (T,) int8                 obstacle hit in that step
+* ``results``       (T,) str                  how the option ended: success, short, timed_out, no_target, ...
+* ``plan_shapes``   (T,) str                  what a jump aimed at (beam, riser, platform, gap), else ""
+* ``plan_dists``    (T,) float32              distance to that edge at the decision, else nan
 * attrs             course, seed, task text, success, hits, path length
 
 Jitter per episode: start pose, policy-camera pose, course seed. The simulation
@@ -80,6 +83,11 @@ def unit(v: np.ndarray) -> np.ndarray:
     return v / n if n > 1e-6 else np.array([1.0, 0.0], dtype=np.float32)
 
 
+#: The expert arms a jump this far before the station, drawn per episode so
+#: the data holds decisions from the whole window, not one distance.
+ARM_RANGE = (0.9, 1.6)
+
+
 def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_steps: int | None = None) -> dict:
     sc = generate_scenario(kind, cfg, seed=seed, tour=True)
     env = SkillArbitrationEnv(cfg, scenario=sc, seed=seed, max_steps=8000)
@@ -93,11 +101,11 @@ def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_ste
                 "azimuth": CAM_BASE["azimuth"] + rng.uniform(-15, 15)}
     cam_yaw = np.radians(cam_pose["azimuth"])           # camera forward direction in the world (for heading_ego)
     renderer = mujoco.Renderer(env.env.model, height=256, width=256)
-    oracle = InspectionOracle(sc)
+    oracle = InspectionOracle(sc, arm_dist=float(rng.uniform(*ARM_RANGE)))
     goal = np.asarray(sc.goal, dtype=np.float32)[:2]
     max_steps = max_steps or int(sc.path_length * 14) + 200
 
-    frames, states, skills, params, reasons, hits_t = [], [], [], [], [], []
+    frames, states, skills, params, reasons, hits_t, results, plan_shapes, plan_dists = [], [], [], [], [], [], [], [], []
     hits, info = 0, {}
     for step in range(max_steps):
         pos = env.env.data.qpos[:3].copy()
@@ -110,7 +118,7 @@ def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_ste
         states.append(np.concatenate([pos[:2], vel[:2], guidance[0:2], guidance[3:5], [guidance[5]], quat]).astype(np.float32))
         vla = ENV_TO_VLA[name]
         if vla == "jump_forward" and "gap" in why:
-            vla = "jump_gap"
+            vla = "jump_gap"                 # refined below from what the option aimed at
         skills.append(SKILL_TO_IDX[vla])
         # A flipped ball rolls the other way: the heading is the route's, turned around.
         backwards = name == "reverse" or (name == "move" and env.flipped)
@@ -126,6 +134,15 @@ def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_ste
         h = int(info.get("obstacle_hit", 0))
         hits += h
         hits_t.append(h)
+        results.append(str(info.get("skill_result") or ""))
+        plan = info.get("skill_plan")
+        plan_shapes.append(plan["shape"] if plan else "")
+        plan_dists.append(float(plan["edge_dist"]) if plan else np.nan)
+        if plan and vla in ("jump_forward", "jump_gap"):
+            # The class says what the jump aimed at: a trench is jump_gap,
+            # a beam, a tread or a deck is jump_forward. The reason string
+            # names the station, which is not always the edge the probe found.
+            skills[-1] = SKILL_TO_IDX["jump_gap" if plan["shape"] == "gap" else "jump_forward"]
         if term or trunc:
             break
     env.close()
@@ -134,7 +151,9 @@ def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_ste
         "steps": len(frames), "path_length": float(sc.path_length), "stalled": bool(info.get("stalled", False)),
         "frames": np.asarray(frames, dtype=np.uint8), "states": np.asarray(states, dtype=np.float32),
         "skills": np.asarray(skills, dtype=np.int64), "params": np.asarray(params, dtype=np.float32),
-        "reasons": reasons, "hit_flags": np.asarray(hits_t, dtype=np.int8), "camera": cam_pose,
+        "reasons": reasons, "results": results, "plan_shapes": plan_shapes,
+        "plan_dists": np.asarray(plan_dists, dtype=np.float32),
+        "hit_flags": np.asarray(hits_t, dtype=np.int8), "camera": cam_pose, "arm_dist": float(oracle.arm_dist),
     }
 
 
@@ -159,6 +178,10 @@ def worker(args):
             for key in ("states", "skills", "params", "hit_flags"):
                 g.create_dataset(key, data=ep[key])
             g.create_dataset("reasons", data=np.array(ep["reasons"], dtype=h5py.string_dtype()))
+            g.create_dataset("results", data=np.array(ep["results"], dtype=h5py.string_dtype()))   # option result per step
+            g.create_dataset("plan_shapes", data=np.array(ep["plan_shapes"], dtype=h5py.string_dtype()))
+            g.create_dataset("plan_dists", data=ep["plan_dists"])
+            g.attrs["arm_dist"] = ep["arm_dist"]
             for k in ("course", "seed", "success", "hits", "steps", "path_length"):
                 g.attrs[k] = ep[k]
             g.attrs["task"] = TASK_TEXT[kind]

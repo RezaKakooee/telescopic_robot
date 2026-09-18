@@ -9,6 +9,7 @@ import numpy as np
 
 from skills.low_level.jumping import jump_forward_while_moving
 from .base import ParamSpec, RobotState, SkillResult, VLASkill
+from radial_sphere.terrain_probe import plan_jump
 from .common import call_skill, jump_phase, resolve_heading
 
 SCHEDULE = "jump_forward_while_moving"
@@ -29,6 +30,19 @@ class JumpForwardSkill(VLASkill):
 
     def _targets(self, state, d_world, phase, power):
         return call_skill(jump_forward_while_moving, state, d_hat=d_world, phase=phase, power=float(power))
+
+    def can_start(self, terrain) -> bool:
+        """A jump needs an edge to aim at: a beam, a tread, a deck or a trench ahead."""
+        return terrain is None or plan_jump(terrain) is not None
+
+    def plan(self, terrain, ground: float | None = None) -> dict:
+        """The edge to aim at and the distance before it to fire (``terrain_probe.plan_jump``).
+
+        ``ground`` is the floor the ball stands on; pass it when known (inside
+        a pipe the first ray sample is the roof, not the floor)."""
+        if terrain is None:
+            return {}
+        return plan_jump(terrain, ground=ground) or {}
 
     def act(self, state: RobotState, camera_heading: float = 0.0, *,
             heading_ego: float = 0.0, power: float = 0.85, **kwargs) -> np.ndarray:

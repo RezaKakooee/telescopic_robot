@@ -18,9 +18,9 @@ inspection course (and on new ones) without editing:
 * the stretch across a stone field uses ``traverse_rough_terrain``;
 * everything else is ``move`` along the waypoints, and ``stop`` at the goal.
 
-Positions are measured as arc length along the route, so the windows are the
-same distances that were measured on the playground: 0.55-0.85 m for the
-running jump at cruise speed, 0.38-0.55 m for a stair riser.
+Positions are measured as arc length along the route. The expert arms a
+jump once its station is within ``ARM_DIST``; the jump skill itself measures
+the edge ahead and fires at the calibrated distance (``terrain_probe``).
 
     oracle = InspectionOracle(scenario)
     name, params, why = oracle.select(env.env.data.qpos[:3])
@@ -34,10 +34,28 @@ import numpy as np
 from .map_perception import DECK_MIN_HALF_SIZE, MonotonicWaypointTracker, WaypointTracker
 from .terrain import Gap, Pipe, Staircase, Step, StoneField, rows
 
-# Trigger windows (metres before the obstacle edge along the route).
-JUMP_WINDOW = (0.55, 0.85)
-GAP_WINDOW = (0.25, 0.45)        # closer than a beam: the far edge must be under the flight
-STAIR_WINDOW = (0.38, 0.55)
+# The jump skill times itself: it rolls up to the next edge and fires at the
+# calibrated distance (radial_sphere/terrain_probe.py, TRIGGER). The expert
+# only has to say "jump" once the station is within reach of the probe,
+# which makes any decision in the last ARM_DIST metres a right one. It used
+# to fire the jump itself from 0.2 m wide windows (slabs 0.55-0.85 m, gaps
+# 0.25-0.45 m, risers 0.38-0.55 m): at 1.1 m/s and 10 Hz that was 2 or 3
+# decisions, and the policy learning from it kept missing the moment.
+ARM_DIST = 1.6                  # say "jump" once the station's edge is this near (metres along the route)
+ARM_MIN = -0.1                  # ...and not once the ball is past it
+ARM_VIEW_DEG = 35.0             # ...and only when the station lies within this bearing of the ball's
+                                # heading: the skill probes along the heading, and a station round a
+                                # corner is not on it yet (arming it there only costs roll steps, but
+                                # a late arm is what the data should show)
+ARM_ALWAYS = 0.5                # ...except this near, where the bearing is noise: arm regardless
+#: A stall is 6 macro steps with under 5 cm of arc progress AND under 15 cm
+#: of travel: arc length alone read a ball rolling past a corner as stalled
+#: (the tracker clamps the segment fraction) and fired the retry at 1.5 m/s.
+STALL_XY = 0.15
+#: A station already under the rods (nearer than the skill's MIN_TARGET) cannot
+#: be jumped from here; when the ball then stops moving for 2 steps, back up
+#: and jump at once rather than after 6 steps of pushing into it.
+TOO_CLOSE = 0.35
 MIN_JUMP_HEIGHT = 0.08          # lower slabs are curbs the ball simply rolls over
 # Short decks (box tops under this length along the route): land, brake, back
 # up, run, jump. A longer deck gives the running jump its run-up by itself.
@@ -45,7 +63,6 @@ SHORT_DECK = 2.6
 DECK_REAR = 0.7                 # back up to this far past the deck's near edge
 DECK_STOP_STEPS = 4             # macro steps of braking after the landing
 DECK_SETTLE_STEPS = 3           # macro steps of standing still at the rear
-DECK_GAP_WINDOW = (0.30, 0.50)  # the run-up is short, so launch nearer the edge
 PIPE_APPROACH = 2.0
 GOAL_STOP_DIST = 0.45
 
@@ -56,11 +73,14 @@ class Station:
     s_start: float      # arc length where the station begins (near edge / entry)
     s_end: float        # arc length where it ends
     label: str
+    heading: np.ndarray = None   # the route's direction at s_start (set after building)
+    xy: np.ndarray = None        # the route point at s_start
 
 
 class InspectionOracle:
-    def __init__(self, scenario):
+    def __init__(self, scenario, arm_dist: float = ARM_DIST):
         self.sc = scenario
+        self.arm_dist = float(arm_dist)
         self.path = np.asarray(scenario.path_pts, dtype=np.float64).reshape(-1, 2)
         tracker_cls = MonotonicWaypointTracker if getattr(scenario, "monotonic_path", False) else WaypointTracker
         self.tracker = tracker_cls(self.path, scenario.goal)
@@ -68,6 +88,7 @@ class InspectionOracle:
         self.s = self.tracker._arc_lengths[: len(self.path)]
         self.stations = self._build_stations()
         self._recent = []          # recent arc positions, to notice a stall in front of a station
+        self._recent_xy = []       # ...and recent positions: a stall is no progress AND no travel
         self._script = []          # queued decisions of a retry (flip, back up, flip, jump)
         self._flipped = False      # what the env's travel direction is, as far as this expert has commanded
         self._deck = None          # the short deck the ball is on, or None
@@ -150,7 +171,18 @@ class InspectionOracle:
         gap_ends = [z.s_end for z in st if z.kind == "gap"]
         st = [z for z in st if not (z.kind == "jump" and any(0.0 <= z.s_start - e <= 0.4 for e in gap_ends))]
         st.sort(key=lambda z: z.s_start)
+        for z in st:
+            z.heading = self._route_heading_at(z.s_start)
+            z.xy = self.path[int(np.clip(np.searchsorted(self.s, z.s_start), 0, len(self.path) - 1))]
         return st
+
+    def _route_heading_at(self, s_at: float) -> np.ndarray:
+        """Unit direction of the route at arc length ``s_at``."""
+        i = int(np.clip(np.searchsorted(self.s, s_at), 1, len(self.path) - 1))
+        a, b = self.path[max(i - 3, 0)], self.path[min(i + 3, len(self.path) - 1)]
+        d = b - a
+        n = float(np.linalg.norm(d))
+        return d / n if n > 1e-9 else np.array([1.0, 0.0])
 
     # ------------------------------------------------------------------ #
     # Runtime
@@ -181,7 +213,7 @@ class InspectionOracle:
         deck shorter than 2.6 m the ball would launch from a standstill or
         coast off the far edge. Instead: brake after the landing, back up to
         the deck's rear, stand still, then run and jump from the nearer
-        `DECK_GAP_WINDOW`. Measured on the doubling boxes: 2.2 m decks pass
+        self-timed jump. Measured on the doubling boxes: 2.2 m decks pass
         with this, 1.5 m decks only sometimes, 2.0 m decks never without it.
         """
         deck = next((st for st in self.stations
@@ -230,33 +262,47 @@ class InspectionOracle:
         if routine is not None:
             return routine
         on_deck = self._deck is not None
-        # 6 macro steps without 5 cm of progress: the env itself gives up after 10.
+        # 6 macro steps without 5 cm of progress and without 15 cm of travel:
+        # the env itself gives up after 10.
         self._recent = (self._recent + [s_here])[-6:]
-        stalled = len(self._recent) == 6 and (max(self._recent) - min(self._recent)) < 0.05
+        self._recent_xy = (self._recent_xy + [pos[:2].copy()])[-6:]
+        travel = float(np.max(np.linalg.norm(np.asarray(self._recent_xy) - self._recent_xy[0], axis=1))) if self._recent_xy else 0.0
+        stalled = (len(self._recent) == 6 and (max(self._recent) - min(self._recent)) < 0.05
+                   and travel < STALL_XY)
+        if not stalled and len(self._recent_xy) >= 2:
+            # Under the rods of a jump station and not moving: do not wait 6 steps.
+            crept = float(np.linalg.norm(self._recent_xy[-1] - self._recent_xy[-2])) < 0.03
+            under = any(st.kind in ("jump", "gap", "stair") and -0.1 <= st.s_start - s_here < TOO_CLOSE
+                        for st in self.stations)
+            stalled = crept and under and self._last.startswith("jump")
         if stalled and on_deck:
             # A blind 1 m reverse would back off the deck's rear edge: run the
             # deck routine again instead.
-            self._recent = []
+            self._recent, self._recent_xy = [], []
             self._deck_phase, self._deck_count = "stop", 1
             return "stop", {}, f"{self._deck.label}: stalled, again"
         for st in self.stations:
             # Stalled right in front of a jump station (a failed jump, a landing
             # short of the next riser): back up ~1 m for a run-up, then jump.
-            if stalled and st.kind in ("jump", "gap", "stair") and -1.2 <= st.s_start - s_here <= 1.0:
-                self._recent = []
+            # ...but only when the station is still ahead or under the ball: a
+            # ball that cleared it and stalled past a corner must not back into it.
+            if stalled and st.kind in ("jump", "gap", "stair") and s_here <= st.s_end + 0.3 and st.s_start - s_here <= 1.0:
+                self._recent, self._recent_xy = [], []
                 steps = [("flip", f"retry {st.label}: back up (flip)")] if not self._flipped else []
                 steps += [("move", f"retry {st.label}: back up")] * 7
-                steps += [("flip", "retry: face forward (flip)"), ("jump_forward_while_moving", "retry: jump")]
+                steps += [("flip", "retry: face forward (flip)"), ("jump_forward_while_moving", f"retry: jump {st.label}")]
                 self._script = steps[1:]
                 return steps[0][0], {}, steps[0][1]
-        gap_window = DECK_GAP_WINDOW if on_deck else GAP_WINDOW
+        # The nearest jump station ahead: say "jump" as soon as it is in reach.
+        # The skill finds the edge itself and fires at the right distance.
+        here = self._route_heading_at(s_here)
         for st in self.stations:
             ahead = st.s_start - s_here
-            if st.kind == "jump" and JUMP_WINDOW[0] <= ahead <= JUMP_WINDOW[1]:
-                return "jump_forward_while_moving", {}, f"jump {st.label}"
-            if st.kind == "gap" and gap_window[0] <= ahead <= gap_window[1]:
-                return "jump_forward_while_moving", {}, f"jump {st.label}"
-            if st.kind == "stair" and STAIR_WINDOW[0] <= ahead <= STAIR_WINDOW[1]:
+            if st.kind in ("jump", "gap", "stair") and ARM_MIN <= ahead <= self.arm_dist:
+                to_station = st.xy - pos[:2]
+                dist = float(np.linalg.norm(to_station))
+                if ahead > ARM_ALWAYS and dist > 1e-6 and float(to_station @ here) / dist < np.cos(np.radians(ARM_VIEW_DEG)):
+                    continue                     # round a corner: the probe cannot see it yet
                 return "jump_forward_while_moving", {}, f"jump {st.label}"
         for st in self.stations:
             if st.kind == "pipe" and st.s_start <= s_here <= st.s_end:

@@ -346,6 +346,83 @@ Also fixed on 2026-09-15: a tour that passes the goal position early no
 longer ends there (`SkillArbitrationEnv` gates the low-level goal
 termination on `path_dist_remaining < 1.0` for monotonic routes).
 
+## 7b. Code as policy: the skills own their timing (2026-09-18)
+
+The target architecture is in `docs/architecture.md`. Three layers: scripted
+gaits and servos at the bottom, skills that own their own timing and their
+own end in the middle, RL or a VLA choosing the next skill on top.
+
+What changed:
+
+- **The running jump times itself.** `radial_sphere/terrain_probe.py` rays
+  the ground ahead along the heading and finds the next edge (a beam, a
+  tread, a platform, a trench, a wall). `SkillOption` (in
+  `handcrafted_skill_backend.py`) first approaches: it rolls along the
+  route, re-measuring the edge every control step, and fires the jump
+  when the edge is at the calibrated distance (beam 0.75 m, tread 0.50,
+  platform 0.75, trench 0.40). With nothing to aim at the decision costs
+  one macro step of rolling (`skill_result: no_target`). Flag
+  `rl.self_timed_jumps` (default true).
+- **The skill contract.** `skills_vla.VLASkill.can_start(terrain)` and
+  `plan(terrain)`; the executor reports `info["skill_result"]` (success,
+  timed_out, approach_timeout, no_target) and `info["skill_plan"]`.
+- **The expert arms, it does not time.** `inspection_oracle.py` says
+  "jump" once a station is within `ARM_DIST` 1.6 m. The old 0.2-0.3 m
+  windows are gone. Any decision in the last 1.6 m is a right one: at
+  1.1 m/s and 10 Hz that is 15 decisions instead of 2 or 3.
+- Demos record `results` (the option result per step). New tools:
+  `scripts/vla/trace_inspection_expert.py` (decisions step by step, with
+  the plan and the result) and `scripts/vla/check_inspection_expert.py`
+  (keep rates over jittered tour episodes, the collector's conditions).
+
+Measured, expert, seed 7 short routes: 14 of 15 courses pass; hits fell on
+most (boiler 3 -> 0, hurdle 2 -> 0, box steps 1 -> 0, maze 4 -> 2).
+Pipe alley fails on that seed inside the conduit (the crawl, not a jump).
+
+Jittered tour episodes (the collector's conditions), 8 per course, after
+the review fixes:
+
+| Course | Kept | Old keep rate (of 30) |
+|---|---|---|
+| tank farm, substation, boiler house, rubble, hurdle lane, trench field, box steps, jump maze, doubling boxes | 8/8 | 27-30, drills 18-30 |
+| quarry | 7/8 | 27-30 |
+| loading dock | 6/8 | 8 |
+| solar farm | 6/8 | 18-20 |
+| warehouse | 4/8 | 16-17 |
+| pipe alley | 4/8 | 20 |
+| utility tunnel | 4/12 | 10-12 |
+
+The tunnel's cable cover moved from 0.4 m to 1.4 m past the branch
+corner: no jump can be timed from a turn 0.35 m before the edge, and that
+one spot was most of the tunnel's failures. Its failures now are in the
+second conduit (the crawl). A/B on 24 episodes against the previous
+commit, before the review fixes: warehouse 9 -> 12, solar 11 -> 12, box
+steps 24 -> 22.
+
+Review fixes (three reviewers, all findings closed): "success" now means
+the ball came down past the edge it aimed at, else "short"; an edge under
+the rods is rolled, not looked past (`MIN_TARGET` 0.35); a jump armed
+while the ball still bounces from the last landing waits until it is
+settled; a ramp is followed, not read as a chain of beams; a pit's far
+wall is not a target; the shape and trigger refresh on every re-probe;
+three ray lines (centre and shoulders); the ball's own floor is the
+reference level (inside a pipe the first ray hits the roof); the stall
+test needs no travel, not just no arc progress (a ball past a corner read
+as stalled); the retry only for a station still ahead; a fast retry when
+the station is under the rods; the collector draws the arm distance per
+episode from 0.9-1.6 m, sets the jump class from the executed plan and
+records `results`, `plan_shapes`, `plan_dists`; the converter writes a
+`result` feature; the evaluator tallies results and keeps the expert's
+flip state in step with the env.
+
+The jump maze has a sixth lane: five 2.2 m decks, 0.10, 0.20, 0.40, 0.20,
+0.10 m, a 0.25 m pit between each pair, jumped on with a pause on every
+deck, up and down (a pit before a lower deck counts as a gap now).
+
+Known limits: crawl_pipe and traverse_rough still run per macro step;
+`no_target` jump frames keep the jump label (the `results` column says
+what ran; the converter does not filter on it yet).
+
 ## 8. Earlier VLA / RL results (playground, before the inspection courses)
 
 - BC on the clean playground demos: 100 % clean success on 3 seeds.

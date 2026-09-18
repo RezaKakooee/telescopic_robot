@@ -28,6 +28,7 @@ import numpy as np
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
+# Must equal skills_vla.SKILL_NAMES in order (not imported: the LeRobot venv has no mujoco).
 SKILLS = ("roll", "jump_forward", "jump_gap", "traverse_rough", "brake_stop", "crawl_pipe", "flip")
 STATE_NAMES = ["pos_x", "pos_y", "vel_x", "vel_y", "wp_dir_x", "wp_dir_y", "goal_dir_x", "goal_dir_y", "goal_dist",
                "quat_w", "quat_x", "quat_y", "quat_z"]
@@ -54,6 +55,7 @@ def main():
         "observation.state": {"dtype": "float32", "shape": (13,), "names": STATE_NAMES},
         "action": {"dtype": "float32", "shape": (len(ACTION_NAMES),), "names": ACTION_NAMES},
         "reason": {"dtype": "string", "shape": (1,), "names": None},
+        "result": {"dtype": "string", "shape": (1,), "names": None},    # how the option ended (empty in old demos)
     }
     ds = LeRobotDataset.create(repo_id=a.repo_id, fps=a.fps, features=features, root=root, robot_type="roboball",
                                use_videos=True, image_writer_threads=4)
@@ -77,6 +79,8 @@ def main():
                 frames, states = g["frames"][:], g["states"][:]
                 skills, params = g["skills"][:], g["params"][:]
                 reasons = [r.decode() if isinstance(r, bytes) else str(r) for r in g["reasons"][:]]
+                results = ([r.decode() if isinstance(r, bytes) else str(r) for r in g["results"][:]]
+                           if "results" in g else [""] * len(reasons))
                 def write(lo, hi):
                     for t in range(lo, hi):
                         onehot = np.zeros(len(SKILLS), dtype=np.float32)
@@ -86,6 +90,7 @@ def main():
                             "observation.state": states[t].astype(np.float32),
                             "action": np.concatenate([onehot, params[t]]).astype(np.float32),
                             "reason": reasons[t],
+                            "result": results[t],
                             "task": task,
                         })
                     ds.save_episode()
