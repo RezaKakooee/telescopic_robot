@@ -1,0 +1,38 @@
+# Doubling boxes, pillar style: nine 1 m decks, up five and down four, each
+# step up twice the last (0.05, 0.10, 0.20, 0.40 m) and the same drops back
+# down, a 0.25 m pit between each pair. Hopped up from a standstill; rolled
+# off the edge on the way down.
+#
+# A 1 m deck is too short to roll on, so every hop is a standing jump, and
+# a standing jump goes high but not far: the same LONG-STROKE build as the
+# pillar course (see configs/rl/pillar_course.yaml for the stroke table).
+# The first deck is 0.45 m so the rods (0.41 m reach) cannot touch the floor
+# beside it; from a lower deck the push is weak and uneven. See the runner.
+# The expert's running-jump version of this row (2.2 m decks, the standard
+# build) is `inspection_doubling_boxes` with playground_parkour_skills.
+defaults:
+  - config
+  - _self_
+
+scenario:
+  name: "inspection_doubling_boxes"
+  kind: "inspection_doubling_boxes"
+  doubling_boxes:
+    box_length: 1.2       # 1.0 m is at the landing scatter limit: hops land up to 0.6 m off the plan
+    valley: 0.25
+    valley_down: 0.35     # wider than the 0.30 m core, so a roll-off would drop in; 0.45 is past the weakest hop's reach
+    # up: the RISES double (0.05, 0.10, 0.20, 0.40); down: the same drops in
+    # reverse, then 0.45 to the floor. Every deck has a pit on both sides.
+    heights: [0.45, 0.50, 0.60, 0.80, 1.20, 0.80, 0.60, 0.50, 0.45]
+    stairs_down: false    # the descent is decks and pits too, not stairs
+
+robot:
+  appearance_theme: "realistic"
+  max_extend: 0.26        # long-stroke build; 0.16 is the default
+
+sim2real:
+  enabled: true
+  rubber_friction_sliding: 1.2
+  rubber_friction_torsional: 0.05
+  rubber_friction_rolling: 0.005
+  actuator_force_limit: 100.0

@@ -17,29 +17,33 @@ from . import mjcf_features as features
 
 
 def _decompose_floor_slabs(x_range: tuple[float, float], y_range: tuple[float, float], holes: list[tuple[float, float, float, float]]) -> list[tuple[float, float, float, float]]:
-    """Partition a 2D bounding box into non-overlapping rectangular slabs that exclude the given holes."""
-    x0, x1 = x_range
-    y0, y1 = y_range
-    x_cuts = sorted(set([x0, x1] + [h[0] for h in holes] + [h[1] for h in holes]))
-    slabs = []
-    for i in range(len(x_cuts) - 1):
-        xa, xb = x_cuts[i], x_cuts[i + 1]
-        if xb - xa < 1e-5:
-            continue
-        xm = (xa + xb) / 2.0
-        active_holes = [h for h in holes if h[0] <= xm <= h[1]]
-        if not active_holes:
-            slabs.append((xa, xb, y0, y1))
-        else:
-            y_cuts = sorted(set([y0, y1] + [h[2] for h in active_holes] + [h[3] for h in active_holes]))
-            for j in range(len(y_cuts) - 1):
-                ya, yb = y_cuts[j], y_cuts[j + 1]
-                if yb - ya < 1e-5:
-                    continue
-                ym = (ya + yb) / 2.0
-                is_hole = any(h[2] <= ym <= h[3] for h in active_holes)
-                if not is_hole:
-                    slabs.append((xa, xb, ya, yb))
+    """Partition a 2D bounding box into non-overlapping rectangular slabs that exclude the given holes.
+
+    Every seam between two slabs is a place where a rod tip can catch a box
+    edge and get a sideways push, so the seams have to stay near the hole
+    they belong to. Each hole is cut out of the slabs it touches with two
+    cuts across the arena along the hole's long side and two short cuts
+    between them: a trench across a lane (long in y) leaves long seams at
+    the lane's edges, where nothing rolls, and short seams at its own two
+    curbs. Cutting every hole's x-edges across the whole arena instead put
+    a seam under every other lane at that x, and a running jump launched on
+    such a seam veered and failed.
+    """
+    slabs = [(x_range[0], x_range[1], y_range[0], y_range[1])]
+    for hx0, hx1, hy0, hy1 in holes:
+        long_in_y = (hy1 - hy0) >= (hx1 - hx0)
+        out = []
+        for xa, xb, ya, yb in slabs:
+            ix0, ix1, iy0, iy1 = max(xa, hx0), min(xb, hx1), max(ya, hy0), min(yb, hy1)
+            if ix1 - ix0 < 1e-5 or iy1 - iy0 < 1e-5:
+                out.append((xa, xb, ya, yb))
+                continue
+            if long_in_y:       # long cuts at the hole's y-edges, short cuts at its x-edges
+                pieces = [(xa, xb, ya, iy0), (xa, xb, iy1, yb), (xa, ix0, iy0, iy1), (ix1, xb, iy0, iy1)]
+            else:               # long cuts at the hole's x-edges, short cuts at its y-edges
+                pieces = [(xa, ix0, ya, yb), (ix1, xb, ya, yb), (ix0, ix1, ya, iy0), (ix0, ix1, iy1, yb)]
+            out += [p for p in pieces if p[1] - p[0] >= 1e-5 and p[3] - p[2] >= 1e-5]
+        slabs = out
     return slabs
 
 

@@ -4,6 +4,10 @@ from __future__ import annotations
 import numpy as np
 
 
+#: Half-size (m) from which a `steps` box counts as a deck the ball can land on.
+DECK_MIN_HALF_SIZE = 0.4
+
+
 class LocalMapPatchExtractor:
     """Extracts an egocentric 2D local elevation and obstacle occupancy patch around the robot.
 
@@ -159,6 +163,21 @@ class LocalMapPatchExtractor:
                 gx, gy, hx, hy, depth = gap
                 in_gap = (np.abs(XX - gx) <= hx) & (np.abs(YY - gy) <= hy)
                 self.global_elevation[in_gap] = -depth
+
+        # 7. Decks: `steps` boxes wide enough to land on. The jump option ends
+        # when the ball is near the ground under it, so a deck that is not in
+        # the map keeps the option airborne for its whole 2.4 s and the ball
+        # coasts off the far edge. Beams and curbs stay out on purpose: they
+        # are not landing surfaces, and a beam in the map would start the
+        # landing phase while the ball is still passing over it.
+        steps = getattr(self.scenario, "steps", None)
+        if steps is not None and len(steps) > 0:
+            for step in steps:
+                sx, sy, hx, hy, height = (float(v) for v in step[:5])
+                if min(hx, hy) < DECK_MIN_HALF_SIZE:
+                    continue
+                on_deck = (np.abs(XX - sx) <= hx) & (np.abs(YY - sy) <= hy)
+                self.global_elevation[on_deck] = np.maximum(self.global_elevation[on_deck], height)
 
     def get_patch(self, core_pos: np.ndarray, grid_size: int = 16, patch_span: float = 4.0) -> np.ndarray:
         """Extract a local grid_size x grid_size patch centered on core_pos.

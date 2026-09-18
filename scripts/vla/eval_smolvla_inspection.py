@@ -6,8 +6,8 @@ Run with the LeRobot environment:
         --checkpoint storage_local/<run>/train/checkpoints/020000/pretrained_model [--tour] [--video] [course ...]
 
 At every macro step (10 Hz) the policy sees the 256x256 policy camera, the
-13-D state and the course instruction, and predicts a 10-D action: one-hot
-skill (6) + params. The argmax skill is executed through SkillArbitrationEnv
+13-D state and the course instruction, and predicts an 11-D action: one-hot
+skill (7, with flip; 6 + 4 = 10-D for the round 1 and 2 models) + params. The argmax skill is executed through SkillArbitrationEnv
 (same options as the expert). The policy plans a chunk; ``--replan`` sets
 how many actions of a chunk are executed before it looks again.
 
@@ -106,7 +106,9 @@ def run_course(kind, cfg, policy, pre, post, device, out_dir, tour, video, seed=
         frame = render_policy_frame(env.env, renderer, CAM_BASE)
         state = np.concatenate([pos[:2], vel[:2], guidance[0:2], guidance[3:5], [guidance[5]], quat]).astype(np.float32)
         action = predict(policy, pre, post, frame, state, task, device)
-        vla_skill = SKILL_NAMES[int(np.argmax(action[:6]))]
+        # one-hot skills first, then 4 params: 6 + 4 for the round 1 / 2 models, 7 + 4 with flip
+        n_skills = len(action) - 4
+        vla_skill = SKILL_NAMES[int(np.argmax(action[:n_skills]))]
         env_skill = ENV_SKILL_MAP[vla_skill]
         # what the expert would do here, for the agreement score (it does not drive)
         exp_name, _, why = oracle.select(pos)

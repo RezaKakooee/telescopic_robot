@@ -17,6 +17,7 @@ from .jump_gap import JumpGapSkill, jump_gap
 from .traverse_rough import TraverseRoughSkill, traverse_rough
 from .brake_stop import BrakeStopSkill, brake_stop
 from .crawl_pipe import CrawlPipeSkill, crawl_pipe
+from .flip import FlipSkill, flip
 
 # Registry of independent skill instances
 SKILL_REGISTRY: dict[str, VLASkill] = {
@@ -26,6 +27,7 @@ SKILL_REGISTRY: dict[str, VLASkill] = {
     "traverse_rough": TraverseRoughSkill(),
     "brake_stop": BrakeStopSkill(),
     "crawl_pipe": CrawlPipeSkill(),
+    "flip": FlipSkill(),          # appended: earlier indices stay valid
 }
 
 # Synonyms and aliases for natural language compatibility
@@ -38,6 +40,8 @@ _ALIASES: dict[str, str] = {
     "leap": "jump_forward",
     "leap_gap": "jump_gap",
     "jump_chasm": "jump_gap",
+    "turn_around": "flip",
+    "reverse": "flip",
     "rough_terrain": "traverse_rough",
     "cobblestones": "traverse_rough",
     "stop": "brake_stop",
@@ -60,6 +64,7 @@ ENV_SKILL_MAP: dict[str, str] = {
     "traverse_rough": "traverse_rough_terrain",
     "brake_stop": "stop",
     "crawl_pipe": "crawl_pipe",
+    "flip": "flip",
 }
 
 
@@ -138,6 +143,8 @@ __all__ = [
     "brake_stop",
     "CrawlPipeSkill",
     "crawl_pipe",
+    "FlipSkill",
+    "flip",
     "SKILL_REGISTRY",
     "SKILL_NAMES",
     "ENV_SKILL_MAP",

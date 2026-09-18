@@ -56,11 +56,13 @@ TASK_TEXT = {
     "inspection_hurdle_lane": "Run the hurdle lane. Jump every beam.",
     "inspection_trench_field": "Cross the trench field. Jump every trench.",
     "inspection_box_steps": "Run the box lane. Jump the walls and the gaps.",
+    "inspection_jump_maze": "Run the jump maze. Jump the beams, the trenches, the stairs and the boxes.",
+    "inspection_doubling_boxes": "Climb the row of boxes. Jump from each box top onto the next.",
 }
 
 # env option name -> skills_vla class; jumps are split by station kind below
 ENV_TO_VLA = {"move": "roll", "reverse": "roll", "stop": "brake_stop", "traverse_rough_terrain": "traverse_rough",
-              "crawl_pipe": "crawl_pipe", "jump_forward_while_moving": "jump_forward"}
+              "crawl_pipe": "crawl_pipe", "jump_forward_while_moving": "jump_forward", "flip": "flip"}
 CAM_BASE = dict(distance=2.8, elevation=-32.0, azimuth=135.0)
 
 
@@ -110,9 +112,11 @@ def collect_episode(kind: str, cfg, seed: int, rng: np.random.Generator, max_ste
         if vla == "jump_forward" and "gap" in why:
             vla = "jump_gap"
         skills.append(SKILL_TO_IDX[vla])
-        heading_world = np.arctan2(guidance[1], guidance[0]) + (np.pi if name == "reverse" else 0.0)
+        # A flipped ball rolls the other way: the heading is the route's, turned around.
+        backwards = name == "reverse" or (name == "move" and env.flipped)
+        heading_world = np.arctan2(guidance[1], guidance[0]) + (np.pi if backwards else 0.0)
         heading_ego = (heading_world - cam_yaw + np.pi) % (2 * np.pi) - np.pi
-        speed = {"crawl_pipe": 0.6, "traverse_rough_terrain": 0.8, "stop": 0.0}.get(name, 1.1)
+        speed = {"crawl_pipe": 0.6, "traverse_rough_terrain": 0.8, "stop": 0.0, "flip": 0.0}.get(name, 1.1)
         params.append(np.array([heading_ego / np.pi, speed / 1.6 * 2 - 1, 0.9 * 2 - 1, 0.0], dtype=np.float32))
         reasons.append(why)
 

@@ -114,11 +114,97 @@ Simple objects, industrial situations, each with its own layout:
 | hurdle_lane (drill) | 45 m lane | 14 beams 0.10-0.20 m; tour = there and back, 42 jumps |
 | trench_field (drill) | four 20 m lanes, snake | 12 trenches 0.30-0.50 m; tour = the same snake |
 | box_steps (drill) | 33 m lane | 5 low walls + 5 gaps; tour = there and back, 30 jumps |
+| jump_maze (drill) | five 24 m lanes between walls, snake | one jump form per lane: rising beams and a beam pair; widening trenches and beam+gap; stairs up, a beam on the deck, stairs down, a riser and a ramp down; two 3 m platforms to land on; beams and a trench crossed at an angle. 27 jumps; tour = the same snake |
+| doubling_boxes (drill) | 28 m lane | five 2.2 m boxes, heights 0.05, 0.10, 0.20, 0.40, 0.80 m, a 0.25 m pit between each pair, stairs down at the end. The only way on is a jump from each box top onto the next; on every deck the expert lands, brakes, backs up, settles, runs and jumps (4 jumps, 12/12 pass); tour = the same single pass |
 
-The three drills exist to get jump examples: a pass gives 36 jumps against
-about 5 on a normal course. Rule from building them: the first obstacle
-after a 90 degree corner needs 5 m; the turn swings the ball almost 1 m off
-the lane.
+The drills exist to get jump examples: a pass gives 27 to 36 jumps against
+about 5 on a normal course. The first three each drill one form; the jump
+maze (2026-09-15) has every form the expert knows, so one demo covers
+beams, trenches, risers, platforms, pairs, combinations and angled
+approaches. Rules from building them: the first obstacle after a 90 degree
+corner needs 5 m (the turn swings the ball almost 1 m off the lane); 2 m
+between two beams and 2.5 m between a beam and a trench (at 1.5 m the ball
+lands on the second obstacle); a 0.6 m ramp down sends the ball into the
+next corner at 3 m/s, 0.3 m with 4 m of run-out is fine. A 3 m platform is
+landed on; a 1.5 m one is simply cleared, the running jump flies 3 m.
+From the doubling boxes: the running jump is airborne for only about
+0.7 m (the rest of the 1.1 m macro travel is the dip and the roll-out),
+so a box-to-box pit must be 0.25 m or narrower; a pit before the first,
+low box fails from the floor (the ball lands on the lip and stops) while
+the same pit works from a box top, so the row starts with a curb; the
+0.40 m step up succeeds about three times in four from a 3 m deck.
+
+**Two fixes from the doubling boxes (2026-09-15 evening).** (1) The
+heightmap (`map_perception._rasterize_scenario`) had no `steps`, so every
+box top read as floor height and the jump option, which ends when the ball
+is near the ground under it, never saw its landing on a deck: it coasted
+for its whole 2.4 s (2.5 m instead of 1.4 m). Decks (boxes at least 0.8 m
+across, `DECK_MIN_HALF_SIZE`) are in the map now; beams stay out because a
+beam in the map would start the landing phase mid-flight. (2) The expert has
+the platform routine on short decks (`SHORT_DECK` 2.6 m): after a jump
+lands on one it brakes 4 macro steps, reverses to 0.7 m past the deck's
+near edge, stands 3 steps, then runs and jumps from `DECK_GAP_WINDOW`
+(0.30-0.50 m before the pit; the usual 0.25-0.45 from cruise). A box right
+behind a pit no longer gets its own jump window: it fired half a metre too
+early and put the ball into the face. With both, 2.2 m decks pass 12/12;
+1.5 m decks only sometimes (the run-up is too short), 2.0 m never without
+the routine. The 13 other courses give the same hit counts at seed 7 and
+the maze stays 12/12. These are the `demos/platforms` ideas (back up for a
+run-up) done at the macro level, so the demos record them as
+`stop` / `reverse` decisions.
+
+**Short decks are a different skill.** `demos/doubling_boxes` (config
+`configs/rl/doubling_boxes.yaml`) hops up five 1.2 m decks and down four
+the pillar way, a pit between every pair: stand at a planned point,
+`jump_to` with a planned velocity, brake, creep in pulses, hop again
+(`skills/mid_level/hop_planner`, long-stroke build). Found while building
+it: the running-jump macros cannot do decks under 2 m (the flight plus
+roll-out is 2.3 m); the standing hop needs a deck at least about 0.3 m
+tall, else the 0.41 m rods stand on the floor beside it and the push is
+weak (hops from 0.05 / 0.10 m decks abort); rises past about 0.45 m are
+outside the hop calibration; so the decks are 0.45, 0.50, 0.60, 0.80,
+1.20, 0.80, 0.60, 0.50, 0.45 m (the rises and drops double, the heights
+cannot). Hops land up to 0.6 m off the planner's bracket, so 1.0 m decks
+are at the scatter limit (1 of 5 starts made the way up) and 1.2 m is the
+default. The creep cannot go below 1 m/s on this build (`gain_for_speed`
+clamps to the measured curve), so the line-up is pulsed. Pits: 0.25 m up,
+0.35 m down (wider than the 0.30 m core, so the ball must hop down; the
+weakest hop cannot cross 0.45 m). Descent hops scatter about 1 m (longer
+flight, strong cells only), so each lands about 85 % of the time and the
+whole nine-hop course passes for 1 of 8 start orientations. With
+`valley_down: 0.25` the descent is rolled off the lip (`fall_down`, 1.5 m/s
+creep, line-up 0.5 m back) and 4 of 6 starts make the whole course.
+This is a demo, not expert data: the macro env has no planned hop yet.
+
+**`flip`, the seventh skill (2026-09-15 night).** There is no reverse
+decision any more. The ball always drives "forward"; to back up it says
+`flip` (the env brakes for that macro step and turns the travel direction
+around), then `move`, then `flip` again to face forward. The expert's deck
+routine and its stall retry both work this way now. Before, `reverse` was
+recorded as `roll` with the heading param turned by 180 degrees, and the
+evaluator only reads the skill class, so every learned back-up was played
+back as a forward roll: 1,791 frames (0.67 %) in 101 of the 510 existing
+episodes, all the expert's retries. Changes: `SkillArbitrationEnv.flipped`
+and the `flip` option in `handcrafted_skill_backend.SKILL_NAMES` (appended,
+old indices stay valid); `skills_vla.FlipSkill` (index 6, appended);
+`generate_inspection_demos` records it; the LeRobot action is now 11-D
+(7 one-hot + 4 params; the round 1 and 2 datasets and checkpoints are
+10-D, and `eval_smolvla_inspection` reads the width off the action);
+`convert_inspection_demos_to_lerobot` oversamples flips like the other
+rare skills. Round 3 must be trained from the base model on a fresh
+conversion. Turning is not a decision: on these courses the route tracker
+sets the heading, so `roll` always follows the route; a turn action would
+mean the policy takes over navigation, which is a later step.
+
+**Floor seams (fixed 2026-09-15).** A course with trenches gets a floor of
+box slabs. The old cut put every trench's x-edges across the whole arena,
+so a trench in one lane left a seam under every other lane at that x, and
+a running jump launched on a seam veered sideways and failed (jump maze:
+3 of 3 seeds at the first beam; with the seams gone 12 of 12 episodes pass).
+`_decompose_floor_slabs` now cuts around each hole along its long side, so
+the seams stay at the trench's own lane edges. Trench field went from
+18/30 kept to 12/12 in a check; the 13 other courses give the same hit
+counts as before at seed 7.
 
 `tour=True` gives a long route (30 to 150 m) that revisits obstacles and may
 cross itself. Tours set `monotonic_path=True`, which makes the env use
@@ -246,8 +332,10 @@ loading dock (stalls at the ramp), tunnel (leaves crawl mode early),
 rubble (mistimes the crack). More data and oversampling helped a little;
 the failure mode is unchanged: the moment of a rare skill.
 
-Round 3 plan (not started): convert all three demo runs (10 courses x 2 +
-the 3 drills) with `--oversample 4`, train 20k steps, evaluate with
+Round 3 plan (not started): collect the jump maze and the doubling boxes
+(`generate_inspection_demos.py --courses inspection_jump_maze inspection_doubling_boxes --episodes 30`,
+27 and 4 jumps per pass; 12/12 each in a check), then convert all demo runs
+(10 courses x 2 + the 5 drills) with `--oversample 4`, train 20k steps, evaluate with
 `--replan 1 --video` on all 13 courses. The drills add about 2,500 jump
 decisions, the thing the policy gets wrong. Other levers after that: the
 10k/15k checkpoints; a smaller action chunk (`--policy.chunk_size 10`);

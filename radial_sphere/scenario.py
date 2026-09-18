@@ -31,7 +31,7 @@ KINDS = ("path", "goal", "roundtrip", "obstacle", "maze", "rocky_terrain", "slop
          "inspection_warehouse", "inspection_pipe_alley", "inspection_tank_farm", "inspection_substation",
          "inspection_loading_dock", "inspection_boiler_house", "inspection_utility_tunnel",
          "inspection_solar_farm", "inspection_quarry", "inspection_rubble_site",
-         "inspection_hurdle_lane", "inspection_trench_field", "inspection_box_steps")
+         "inspection_hurdle_lane", "inspection_trench_field", "inspection_box_steps", "inspection_jump_maze", "inspection_doubling_boxes")
 
 
 

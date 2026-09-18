@@ -18,6 +18,7 @@ SKILL_NAMES = (
     "traverse_rough_terrain", "jump_up", "jump_forward_while_stopped",
     "jump_forward_while_moving", "jump_to",
     "crawl_pipe",      # appended: earlier indices stay valid for old checkpoints
+    "flip",            # turn the travel direction around; "move" then goes the other way
 )
 JUMPS = frozenset(SKILL_NAMES[6:10])
 MAX_PARAMS = 3

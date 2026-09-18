@@ -107,6 +107,10 @@ class SkillArbitrationEnv(gym.Env):
         self.prev_path_dist = 0.0
         self.last_skill_idx = self.skill_names.index("stop") if self.handcrafted else 0
         self.last_skill_name = "stop" if self.handcrafted else "stance"
+        # "flip" turns the travel direction around: while flipped, "move" runs
+        # the reverse gait. The ball always drives "forward"; there is no
+        # reverse decision, only a flip and then forward again.
+        self.flipped = False
         # Match the actuator model, not the visual/mechanical rod layout.
         from skills_rl.calibration import profile_for_config
         self.profile = profile_for_config(self.cfg)
@@ -231,6 +235,7 @@ class SkillArbitrationEnv(gym.Env):
         self.no_progress_steps = 0
         self.last_skill_idx = self.skill_names.index("stop") if self.handcrafted else 0
         self.last_skill_name = "stop" if self.handcrafted else "stance"
+        self.flipped = False
         self.stagnant_steps = 0
         self.cleared_milestones = set()
         self.episode_hits = 0
@@ -238,12 +243,18 @@ class SkillArbitrationEnv(gym.Env):
         obs = self._get_obs()
         info["skill_name"] = self.last_skill_name
         info["skill_backend"] = self.skill_backend
+        info["flipped"] = self.flipped
         info["closest_waypoint_idx"] = closest_idx
         info["path_dist_remaining"] = self.prev_path_dist
         info["out_of_bounds"] = False
         info["stalled"] = False
         info["training_start"] = training_start
         return obs, info
+
+    def _one_hot(self, name: str) -> np.ndarray:
+        act = np.full(len(self.skill_names), -1.0, dtype=np.float32)
+        act[self.skill_names.index(name)] = 1.0
+        return act
 
     def step(self, action: np.ndarray):
         self.current_step += 1
@@ -257,11 +268,21 @@ class SkillArbitrationEnv(gym.Env):
         if self.handcrafted:
             skill_idx, skill_name, skill_params, heading = self.handcrafted.decode(
                 action, self.action_mode, theta_waypoint)
+            # The decision is what gets recorded (skill_name); the option is
+            # the gait that runs it. "flip" brakes for one macro step and
+            # turns the travel direction around; "move" while flipped runs
+            # the reverse gait. The ball always drives "forward".
+            option_name = skill_name
+            if skill_name == "flip":
+                self.flipped = not self.flipped
+                option_name, skill_params = "stop", {}
+            elif skill_name == "move" and self.flipped:
+                option_name = "reverse"
             def ground_height(xy):
                 ix, iy = self.patch_extractor._world_to_grid(*xy)
                 return float(self.patch_extractor.global_elevation[iy, ix])
             option = self.handcrafted.SkillOption(
-                self.env, skill_name, skill_params, heading, self.k, ground_height)
+                self.env, option_name, skill_params, heading, self.k, ground_height)
         elif self.action_mode == "hybrid":
             # Option 1: skills_rl decode
             skill_name, skill_params = S.decode(action)
@@ -456,6 +477,7 @@ class SkillArbitrationEnv(gym.Env):
             "out_of_bounds": out_of_bounds,
             "stalled": bool(stalled and not success and not out_of_bounds),
             "no_progress_steps": self.no_progress_steps,
+            "flipped": self.flipped,
             "wall_contact": int(wall_contact),
             "obstacle_hit": int(bool(hit_geoms)),
             "obstacle_hit_geoms": sorted(hit_geoms),

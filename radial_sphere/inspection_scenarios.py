@@ -1,4 +1,4 @@
-"""Ten industrial-inspection courses built from the simple scenario features.
+"""Industrial-inspection courses and jump drills built from the simple scenario features.
 
 Each course has its own layout, not just its own obstacles:
 
@@ -13,6 +13,11 @@ Each course has its own layout, not just its own obstacles:
 8   solar_farm              open field, snake through four post rows, ditch
 9   quarry                  switchback road up a hill, rock fall, descent
 10  rubble_site             open square, random slabs, collapsed wall, crack
+11  hurdle_lane             drill: a lane of beams
+12  trench_field            drill: a snake of trenches
+13  box_steps               drill: low walls and gaps in turn
+14  jump_maze               drill: every jump form, one lane each, walls between
+15  doubling_boxes          drill: five boxes, each twice as high, pits between
 ==  ======================  ==================================================
 
 The objects are plain boxes, pillars, pits, ramps, stairs, pipes, pebbles and
@@ -424,6 +429,134 @@ def box_steps(cfg, *, rng=None, name="inspection_box_steps", tour: bool = False)
     return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps)
 
 
+# --------------------------------------------------------------------------- #
+# 14. Jump maze: every jump form the expert knows, one lane each
+# --------------------------------------------------------------------------- #
+def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False):
+    """A five-lane snake between partition walls; each lane drills one jump form.
+
+    ==  ===================  =================================================
+    0   hurdles              five beams rising 0.10 -> 0.26 m, then a beam pair
+    1   trenches             five gaps widening 0.30 -> 0.54 m, then beam+gap
+    2   stairs               2 risers up, a beam on the deck, 3 risers down;
+                             1 riser up, a ramp down
+    3   platforms            jump onto a 0.25 m and a 0.30 m box, roll off,
+                             a beam pair, a gap
+    4   angled approach      a zig-zag route crosses beams and a gap at ~16 deg
+    ==  ===================  =================================================
+
+    Lanes are 4 m wide and 24 m long, the first station 5 m after each
+    corner (the turn swings the ball almost 1 m off the lane) and 3 m
+    between stations. Heights and widths are jittered per seed."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    L, W = 24.0, 4.0
+    j = lambda lo, hi: float(rng.uniform(lo, hi))
+    walls = _boundary(-1.5, -2.0, L + 1.5, 4 * W + 2.0)
+    for k in range(1, 5):                         # partitions, open 3 m at the turning end
+        y = k * W - W / 2
+        walls.append(_seg(-1.5, y, L - 3.0, y) if k % 2 else _seg(3.0, y, L + 1.5, y))
+    steps, gaps, staircases, ramps = [], [], [], []
+    beam = lambda x, y, h: _beam(x, y, "y", h, 3.6, 0.10)
+    gap = lambda x, y, w: [x, y, w / 2, 1.8, 0.40]
+
+    # lane 0 (+x): rising hurdles, then two beams 2 m apart (1.5 m: the second is often hit)
+    for i, x in enumerate((5.0, 8.0, 11.0, 14.0, 17.0)):
+        steps.append(beam(x, 0.0, 0.10 + 0.04 * i + j(-0.01, 0.01)))
+    steps += [beam(19.5, 0.0, j(0.12, 0.18)), beam(21.5, 0.0, j(0.12, 0.18))]
+
+    # lane 1 (-x): widening trenches, then a beam 2.5 m after the last one and
+    # 2.5 m before a gap (1.5 m either way: the ball lands on the edge)
+    for i, x in enumerate((19.5, 17.0, 14.5, 12.0, 9.5)):
+        gaps.append(gap(x, W, 0.30 + 0.06 * i + j(-0.02, 0.02)))
+    steps.append(beam(7.0, W, j(0.12, 0.18)))
+    gaps.append(gap(4.5, W, j(0.35, 0.45)))
+
+    # lane 2 (+x): stairs up, a deck with a beam, stairs down; one riser up, a ramp down.
+    # A 0.6 m ramp sent the ball into the corner wall at 3 m/s; 0.3 m and 4 m of
+    # run-out before the corner is fine.
+    y = 2 * W
+    staircases.append([5.0, y, 2, 0.30, 1.8, 3.0, 0.0, False])          # x in [5.0, 8.6], top 0.60
+    ramps.append(_plateau(10.1, y, 3.0, 3.0, 0.60))                       # deck x in [8.6, 11.6]
+    steps.append(beam(10.8, y, 0.60 + j(0.10, 0.14)))                     # 2.2 m past the top riser
+    staircases.append([11.6, y, 3, 0.20, 0.6, 3.0, 0.0, True])           # down, x in [11.6, 13.4]
+    staircases.append([15.5, y, 1, 0.30, 1.5, 3.0, 0.0, False])          # x in [15.5, 17.0], top 0.30
+    ramps.append(_plateau(17.5, y, 1.0, 3.0, 0.30))                       # x in [17.0, 18.0]
+    ramps.append(_slope(19.0, y, 2.0, 3.0, 0.30, 0.0, up=False))          # down to x = 20.0
+
+    # lane 3 (-x): two 3 m platforms (the running jump flies about 3 m, so a
+    # shorter box is simply cleared), a beam pair, a gap before the corner
+    y = 3 * W
+    steps.append([19.0, y, 1.5, 1.8, j(0.22, 0.27)])                      # x in [17.5, 20.5]
+    steps.append([13.0, y, 1.5, 1.8, j(0.27, 0.32)])                      # x in [11.5, 14.5]
+    steps += [beam(9.0, y, j(0.15, 0.20)), beam(7.0, y, j(0.15, 0.20))]
+    gaps.append(gap(4.5, y, j(0.30, 0.40)))
+
+    # lane 4 (+x): the route zig-zags, so every crossing is at about 22 degrees
+    y = 4 * W
+    for x, h in ((7.5, 0.12), (12.5, 0.18), (17.5, 0.22)):
+        steps.append(beam(x, y, h + j(-0.02, 0.02)))
+    gaps.append(gap(22.0, y, j(0.30, 0.40)))
+
+    route = [(0.0, 0.0), (L, 0.0), (L, W), (0.0, W), (0.0, 2 * W), (L, 2 * W), (L, 3 * W), (0.0, 3 * W),
+             (0.0, 4 * W), (5.0, y + 0.7), (10.0, y - 0.7), (15.0, y + 0.7), (20.0, y - 0.7), (L, y)]
+    return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps,      # the tour is the same snake
+                 staircases=staircases, ramps=ramps)
+
+
+# --------------------------------------------------------------------------- #
+# 15. Doubling boxes: five boxes in a row, each twice the height of the last
+# --------------------------------------------------------------------------- #
+def doubling_boxes(cfg, *, rng=None, name="inspection_doubling_boxes", tour: bool = False,
+                   base_height: float = 0.05, box_length: float = 2.2, valley: float = 0.25,
+                   n_boxes: int = 5):
+    """Five 2.2 m boxes in a row, a pit between each pair, heights doubling 0.05 -> 0.80 m.
+
+    The pits span the lane between its walls, so from the first box on the
+    only way forward is a jump from each box top onto the next. The step up
+    grows 0.05, 0.10, 0.20, 0.40 m. The decks are short on purpose: the
+    expert lands, brakes, backs up to the deck's rear, stands still, then
+    runs and jumps (the platform routine in `inspection_oracle`), so every
+    box is a jump, a pause and a jump again. Four stairs lead down off the
+    last box. The tour is the same single pass.
+
+    Measured while building it: a pit before the first, low box fails from
+    the floor (the ball lands on the lip and stops) while the same pit works
+    from a box top, so the row starts with a curb; a pit wider than 0.3 m
+    puts the landing on the far edge; 2.2 m decks pass 12/12 with the
+    routine, 3 m decks 10/12 without it, 2 m and shorter never without it."""
+    rng = rng if rng is not None else np.random.default_rng(0)
+    # `scenario.doubling_boxes` in the config overrides the arguments: the
+    # pillar-style demo runs 1 m decks on the long-stroke build.
+    knobs = getattr(getattr(cfg, "scenario", None), "doubling_boxes", None)
+    base_height = float(getattr(knobs, "base_height", base_height))
+    box_length = float(getattr(knobs, "box_length", box_length))
+    valley = float(getattr(knobs, "valley", valley))
+    valley_down = float(getattr(knobs, "valley_down", valley))   # pits on the way down (before a lower deck)
+    box_length_down = float(getattr(knobs, "box_length_down", box_length))   # decks on the way down
+    n = int(getattr(knobs, "n_boxes", n_boxes))
+    heights = getattr(knobs, "heights", None)                 # explicit list beats the doubling
+    heights = [float(h) for h in heights] if heights is not None else [base_height * 2 ** i for i in range(n)]
+    L = 28.0
+    walls = _boundary(-1.5, -1.5, L + 1.5, 1.5)
+    steps, gaps = [], []
+    x = 5.0
+    for i, h in enumerate(heights):
+        down = i > 0 and h < heights[i - 1]
+        if i:
+            pit = valley_down if down else valley
+            if pit > 0:
+                gaps.append([x + pit / 2, 0.0, pit / 2, 1.4, 0.40])     # the pit before box i
+            x += pit
+        length = box_length_down if down else box_length
+        steps.append([x + length / 2, 0.0, length / 2, 1.4, h])
+        x += length
+    top = heights[-1]
+    stairs_down = bool(getattr(knobs, "stairs_down", True))      # False: the row itself comes back down
+    staircases = [[x, 0.0, 4, top / 4, 0.6, 2.8, 0.0, True]] if stairs_down else None   # down off the last box
+    route = [(0.0, 0.0), (L, 0.0)]
+    return _make(name, route, walls, tour=tour, steps=steps, gaps=gaps or None, staircases=staircases)
+
+
 INSPECTION_SCENARIOS = {
     "inspection_warehouse": warehouse,
     "inspection_pipe_alley": pipe_alley,
@@ -438,4 +571,6 @@ INSPECTION_SCENARIOS = {
     "inspection_hurdle_lane": hurdle_lane,
     "inspection_trench_field": trench_field,
     "inspection_box_steps": box_steps,
+    "inspection_jump_maze": jump_maze,
+    "inspection_doubling_boxes": doubling_boxes,
 }

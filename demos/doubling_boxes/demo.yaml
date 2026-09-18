@@ -1,0 +1,18 @@
+# doubling_boxes: everything about showing one skill.
+#   python scripts/run_demo.py demo=doubling_boxes
+# `knobs` is what this demo's own runner.py reads.
+
+description: Hop up five short decks and hop down four, each step twice the last, a pit between each pair.
+runner: true
+knobs:
+  config: configs/rl/doubling_boxes.yaml
+  video: false
+  camera: chase         # the inspection videos' camera; pillar_side is the side-on view
+  fps: 25
+  frame_every: 4
+  seed: 17              # start orientation; the hops are chaotic, this seed lands every deck
+  max_probes: 5
+  max_retries: 3
+  gear: 0.5
+  edge_speed: 1.5       # the roll-off creep (pits up to 0.30 m): 1.2 lands on the pit lip, 2.0 flies over the deck
+  start_on: null        # testing: begin on this deck, skip the hops up

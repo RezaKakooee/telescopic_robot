@@ -9,7 +9,7 @@ Features
 --------
 observation.image   (3, 256, 256) uint8 video   the policy camera
 observation.state   (13,) float32               [pos xy, vel xy, waypoint dir, goal dir, goal dist, quat]
-action              (10,) float32               one-hot skill (6) + [heading_ego, speed, power, 0] in [-1, 1]
+action              (11,) float32               one-hot skill (7) + [heading_ego, speed, power, 0] in [-1, 1]
 task                str                          the course instruction
 reason              str                          the oracle's reason for the step (extra column)
 
@@ -28,7 +28,7 @@ import numpy as np
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-SKILLS = ("roll", "jump_forward", "jump_gap", "traverse_rough", "brake_stop", "crawl_pipe")
+SKILLS = ("roll", "jump_forward", "jump_gap", "traverse_rough", "brake_stop", "crawl_pipe", "flip")
 STATE_NAMES = ["pos_x", "pos_y", "vel_x", "vel_y", "wp_dir_x", "wp_dir_y", "goal_dir_x", "goal_dir_y", "goal_dist",
                "quat_w", "quat_x", "quat_y", "quat_z"]
 ACTION_NAMES = [f"skill_{s}" for s in SKILLS] + ["heading_ego", "speed", "power", "spare"]
@@ -52,13 +52,13 @@ def main():
     features = {
         "observation.image": {"dtype": "video", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
         "observation.state": {"dtype": "float32", "shape": (13,), "names": STATE_NAMES},
-        "action": {"dtype": "float32", "shape": (10,), "names": ACTION_NAMES},
+        "action": {"dtype": "float32", "shape": (len(ACTION_NAMES),), "names": ACTION_NAMES},
         "reason": {"dtype": "string", "shape": (1,), "names": None},
     }
     ds = LeRobotDataset.create(repo_id=a.repo_id, fps=a.fps, features=features, root=root, robot_type="roboball",
                                use_videos=True, image_writer_threads=4)
     n_ep, n_frames, n_extra = 0, 0, 0
-    rare = {1, 2, 5, 3}     # jump_forward, jump_gap, crawl_pipe, traverse_rough
+    rare = {1, 2, 5, 3, 6}  # jump_forward, jump_gap, crawl_pipe, traverse_rough, flip
 
     def rare_windows(skills):
         """Index ranges around every switch into a rare skill."""
@@ -79,7 +79,7 @@ def main():
                 reasons = [r.decode() if isinstance(r, bytes) else str(r) for r in g["reasons"][:]]
                 def write(lo, hi):
                     for t in range(lo, hi):
-                        onehot = np.zeros(6, dtype=np.float32)
+                        onehot = np.zeros(len(SKILLS), dtype=np.float32)
                         onehot[int(skills[t])] = 1.0
                         ds.add_frame({
                             "observation.image": frames[t],

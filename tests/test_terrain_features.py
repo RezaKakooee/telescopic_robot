@@ -8,12 +8,14 @@ import os
 import re
 import unittest
 
+import numpy as np
+
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 from radial_sphere import mjcf_features as features
 from radial_sphere import terrain as T
 from radial_sphere.config import load_config
-from radial_sphere.mujoco_mjcf import build_mujoco_scene_mjcf
+from radial_sphere.mujoco_mjcf import _decompose_floor_slabs, build_mujoco_scene_mjcf
 from radial_sphere.scenario import KINDS, generate_scenario
 
 RECORD_FOR = {
@@ -133,6 +135,41 @@ class FeatureBuilderTests(unittest.TestCase):
         for centre, half in zip(tops, slabs):
             self.assertAlmostEqual(float(centre) + float(half), 0.0, places=6,
                                    msg="walkable floor surface must sit at z = 0")
+
+    def test_floor_slabs_tile_the_floor_minus_the_holes(self):
+        """Random hole layouts: no overlap, no slab over a hole, no bare floor."""
+        rng = np.random.default_rng(0)
+        for trial in range(100):
+            holes = []
+            for _ in range(int(rng.integers(1, 8))):
+                cx, cy = rng.uniform(-8, 8, size=2)
+                hx, hy = rng.uniform(0.1, 3.0, size=2)
+                holes.append((cx - hx, cx + hx, cy - hy, cy + hy))
+            slabs = _decompose_floor_slabs((-10, 10), (-10, 10), holes)
+            pts = rng.uniform(-10, 10, size=(2000, 2))
+            in_hole = np.zeros(len(pts), dtype=bool)
+            for a, b, c, d in holes:
+                in_hole |= (pts[:, 0] > a) & (pts[:, 0] < b) & (pts[:, 1] > c) & (pts[:, 1] < d)
+            cover = np.zeros(len(pts), dtype=int)
+            for a, b, c, d in slabs:
+                cover += ((pts[:, 0] > a) & (pts[:, 0] < b) & (pts[:, 1] > c) & (pts[:, 1] < d)).astype(int)
+            self.assertTrue((cover[in_hole] == 0).all(), f"trial {trial}: a slab covers a hole")
+            self.assertTrue((cover[~in_hole] == 1).all(), f"trial {trial}: floor bare or double-covered")
+
+    def test_floor_seams_stay_in_the_lane_of_their_trench(self):
+        """A trench across one lane must not put a seam under a neighbouring lane.
+
+        The old decomposition cut every hole's x-edges across the whole arena,
+        so a trench in lane 3 left a seam under lane 0 at the same x. A running
+        jump launched on that seam veered sideways and failed (jump_maze,
+        3 of 3 seeds); with the seam gone it passed 12 of 12.
+        """
+        trench = (4.3, 4.7, 10.2, 13.8)          # across lane y = 12, x in [4.3, 4.7]
+        slabs = _decompose_floor_slabs((-20, 20), (-20, 20), [trench])
+        for xa, xb, ya, yb in slabs:
+            for seam_x in (xa, xb):
+                if abs(seam_x) < 19.9 and ya < 0.0 < yb:
+                    self.fail(f"seam at x = {seam_x} crosses lane y = 0")
 
 
 if __name__ == "__main__":
