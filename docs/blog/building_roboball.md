@@ -629,7 +629,6 @@ seed 42, and no randomization.*
 [Watch the six-second run](./assets/move-forward.mp4).
 Video path for the later HTML version: `assets/move-forward.mp4`.
 
-
 Implementation: [movement skills](../../skills/low_level/locomotion.py).
 Reproduce the results with the [measurement script](./plot_move_forward.py);
 the [recorded data](./assets/move-forward.csv) and
@@ -864,11 +863,11 @@ standing forward jump or resuming movement after a running jump.
 
 The comparison recordings show three consecutive requests without resetting:
 
-| Requested rise | Measured vertical-jump rise | Measured moving-jump rise |
-|---|---:|---:|
-| $20\,\text{cm}$ | $20.9\,\text{cm}$ | $21.0\,\text{cm}$ |
-| $35\,\text{cm}$ | $30.5\,\text{cm}$ | $30.3\,\text{cm}$ |
-| $50\,\text{cm}$ | $53.4\,\text{cm}$ | $45.7\,\text{cm}$ |
+| Requested rise    | Measured vertical-jump rise | Measured moving-jump rise |
+| ----------------- | --------------------------: | ------------------------: |
+| $20\,\text{cm}$ |         $20.9\,\text{cm}$ |       $21.0\,\text{cm}$ |
+| $35\,\text{cm}$ |         $30.5\,\text{cm}$ |       $30.3\,\text{cm}$ |
+| $50\,\text{cm}$ |         $53.4\,\text{cm}$ |       $45.7\,\text{cm}$ |
 
 These are measured rises, not obstacle-clearance tests.
 
@@ -1244,7 +1243,6 @@ Defaults are $35\,\text{cm}$ for goal tolerance, $28^\circ$ for heading
 error, and $0.0018\,\text{cm}^{-1}$ for the curvature threshold.
 Selecting `stop` starts braking; it does not establish that velocity is zero.
 
-
 ```python
 targets = execute_skill(
     "follow_path", quat, dirs_body, max_extend,
@@ -1446,17 +1444,17 @@ choose different actions and encounter different parts of the terrain.
 The arena contains 160 boulders up to $8\,\text{cm}$, eight
 $6.5\,\text{cm}$ ledges, and eight $4\,\text{cm}$-deep pits.
 
-| Recorded 120-second run | Feedback off | Active suspension |
-|---|---:|---:|
-| Distance travelled | $8485\,\text{cm}$ | $9769\,\text{cm}$ |
-| Mean speed | $70.6\,\text{cm/s}$ | $81.3\,\text{cm/s}$ |
-| Time below $6\,\text{cm/s}$ | $1.6\%$ | $1.3\%$ |
-| Longest interval below that speed | $0.23\,\text{s}$ | $0.38\,\text{s}$ |
-| Control updates in climb mode | 21 | 49 |
-| Control updates in escape-turn mode | 0 | 0 |
-| Mean core height | $20.54\,\text{cm}$ | $20.53\,\text{cm}$ |
-| Core-height standard deviation | $2.09\,\text{cm}$ | $2.10\,\text{cm}$ |
-| Vertical-speed RMS | $20.68\,\text{cm/s}$ | $21.61\,\text{cm/s}$ |
+| Recorded 120-second run             |           Feedback off |      Active suspension |
+| ----------------------------------- | ---------------------: | ---------------------: |
+| Distance travelled                  |    $8485\,\text{cm}$ |    $9769\,\text{cm}$ |
+| Mean speed                          |  $70.6\,\text{cm/s}$ |  $81.3\,\text{cm/s}$ |
+| Time below$6\,\text{cm/s}$        |              $1.6\%$ |              $1.3\%$ |
+| Longest interval below that speed   |     $0.23\,\text{s}$ |     $0.38\,\text{s}$ |
+| Control updates in climb mode       |                     21 |                     49 |
+| Control updates in escape-turn mode |                      0 |                      0 |
+| Mean core height                    |   $20.54\,\text{cm}$ |   $20.53\,\text{cm}$ |
+| Core-height standard deviation      |    $2.09\,\text{cm}$ |    $2.10\,\text{cm}$ |
+| Vertical-speed RMS                  | $20.68\,\text{cm/s}$ | $21.61\,\text{cm/s}$ |
 
 The climb-mode counts are **control updates, not completed climbs**.
 The active run travelled about $15\%$ farther, but these measurements do not
@@ -1487,18 +1485,19 @@ In earlier iterations with single-stage antenna rods, an active-braking PPO poli
 
 #### Comprehensive Generalization Benchmark Matrix
 
-| # | Maze Layout & Topology | Single-Stage Baseline (Old Ball + Old Policy) | Zero-Shot Transfer (New Ball + Old Policy) | **Retrained Policy (New Ball + New Policy)** |
-| :---: | :--- | :---: | :---: | :---: |
-| **0** | **Training Maze** (Level 3, Fixed 7×6) | 100% Success \| 0.0% Hits \| ~1.1 m/s | **FAILED** (Timeout) \| 0.06 m/s | **SUCCESS** \| 422 steps \| **1.03 m/s** \| 1.2% hits |
-| **1** | **Orthogonal Spiral Labyrinth** (Level 1) | 100% Success \| 0.0% Hits \| ~0.9 m/s | **FAILED** (Timeout) \| 0.02 m/s | **SUCCESS** \| 1,122 steps \| **0.61 m/s** \| 1.2% hits |
-| **2** | **High-Density Multi-Loop Braid** (Level 2) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.15 m/s | **SUCCESS** \| 356 steps \| **0.89 m/s** \| 1.1% hits |
-| **3** | **Deep Branching Tree Maze** (Level 3) | 100% Success \| 0.0% Hits \| ~0.8 m/s | **FAILED** (Timeout) \| 0.01 m/s | **FAILED** (Timeout) \| 0.25 m/s \| 0.1% hits |
-| **4** | **Random Diagonal Endpoints Route** (Level 2) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.08 m/s | **FAILED** (Timeout) \| 0.18 m/s \| 82.9% hits |
-| **5** | **Large 7×6 45m Gauntlet** (Level 3) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.02 m/s | **SUCCESS** \| 522 steps \| **0.88 m/s** \| **0.0% hits** |
-| **6** | **Dense S-Curve Switchback** (Level 3) | 100% Success \| 0.0% Hits \| ~1.0 m/s | **FAILED** (Timeout) \| 0.10 m/s | **SUCCESS** \| 461 steps \| **0.84 m/s** \| 0.7% hits |
-| **Total** | **Overall Benchmark** | **6 / 6 Solved (100%)** | **0 / 7 Solved (0%)**<br>Mean speed: **0.061 m/s** | **5 / 7 Solved (71.4%)**<br>Mean speed: **0.669 m/s** |
+|        #        | Maze Layout & Topology                              | Single-Stage Baseline (Old Ball + Old Policy) |         Zero-Shot Transfer (New Ball + Old Policy)         |             **Retrained Policy (New Ball + New Policy)**             |
+| :-------------: | :-------------------------------------------------- | :-------------------------------------------: | :--------------------------------------------------------: | :-------------------------------------------------------------------------: |
+|   **0**   | **Training Maze** (Level 3, Fixed 7×6)       |     100% Success\| 0.0% Hits \| ~1.1 m/s     |           **FAILED** (Timeout) \| 0.06 m/s           |      **SUCCESS** \| 422 steps \| **1.03 m/s** \| 1.2% hits      |
+|   **1**   | **Orthogonal Spiral Labyrinth** (Level 1)     |     100% Success\| 0.0% Hits \| ~0.9 m/s     |           **FAILED** (Timeout) \| 0.02 m/s           |     **SUCCESS** \| 1,122 steps \| **0.61 m/s** \| 1.2% hits     |
+|   **2**   | **High-Density Multi-Loop Braid** (Level 2)   |     100% Success\| 0.0% Hits \| ~1.0 m/s     |           **FAILED** (Timeout) \| 0.15 m/s           |      **SUCCESS** \| 356 steps \| **0.89 m/s** \| 1.1% hits      |
+|   **3**   | **Deep Branching Tree Maze** (Level 3)        |     100% Success\| 0.0% Hits \| ~0.8 m/s     |           **FAILED** (Timeout) \| 0.01 m/s           |             **FAILED** (Timeout) \| 0.25 m/s \| 0.1% hits             |
+|   **4**   | **Random Diagonal Endpoints Route** (Level 2) |     100% Success\| 0.0% Hits \| ~1.0 m/s     |           **FAILED** (Timeout) \| 0.08 m/s           |            **FAILED** (Timeout) \| 0.18 m/s \| 82.9% hits            |
+|   **5**   | **Large 7×6 45m Gauntlet** (Level 3)         |     100% Success\| 0.0% Hits \| ~1.0 m/s     |           **FAILED** (Timeout) \| 0.02 m/s           | **SUCCESS** \| 522 steps \| **0.88 m/s** \| **0.0% hits** |
+|   **6**   | **Dense S-Curve Switchback** (Level 3)        |     100% Success\| 0.0% Hits \| ~1.0 m/s     |           **FAILED** (Timeout) \| 0.10 m/s           |      **SUCCESS** \| 461 steps \| **0.84 m/s** \| 0.7% hits      |
+| **Total** | **Overall Benchmark**                         |         **6 / 6 Solved (100%)**         | **0 / 7 Solved (0%)**Mean speed: **0.061 m/s** |        **5 / 7 Solved (71.4%)**Mean speed: **0.669 m/s**        |
 
 #### Key Insights & Visual Evidence
+
 - **Thrust & Velocity Restoration**: Locomotion speed surged from $0.061\,\text{m/s}$ up to **$1.03\,\text{m/s}$**, proving that PPO quickly adapts to the higher damping and multi-joint kinematics of concentric rods.
 - **Unseen Generalization Intact**: Without any maze randomization during training, the policy successfully solved 4 out of 6 unseen topologies, including the **45m Gauntlet** with **0 wall collisions** ($0.0\%$).
 - **Experiment Directory**: [`storage_local/20260911_0011__local_455348__train_rl/`](../../storage_local/20260911_0011__local_455348__train_rl/) contains all run checkpoints (`final.zip`, `vecnormalize.pkl`), quantitative evaluations, and full video recordings.
@@ -1510,10 +1509,91 @@ In earlier iterations with single-stage antenna rods, an active-braking PPO poli
 <img src="./assets/maze-policy-transfer-comparison.png" alt="Side-by-side comparison of old policy vs retrained policy on new multi-stage ball" width="800">
 
 #### Experiment Video Suite (`storage_local/20260911_0011__local_455348__train_rl/renders/`)
+
 All demonstration videos are rendered at 25 fps with faststart streamable MP4 encoding:
+
 - [Side-by-side transfer comparison video](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_policy_transfer_comparison.mp4) ([recording script](./render_maze_comparison.py))
 - [Maze 5: Unseen 45m Gauntlet (Level 3)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_5_unseen_gauntlet_level3.mp4) — 522 steps, 0 wall hits ($0.0\%$)
 - [Maze 0: Training Maze (Level 3 Fixed 7×6)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_0_training_level3.mp4) — 422 steps, $1.03\,\text{m/s}$
 - [Maze 2: Unseen High-Density Multi-Loop Braid (Level 2)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_2_unseen_multiloop_braid_level2.mp4) — 356 steps, $0.89\,\text{m/s}$
 - [Maze 6: Unseen Dense S-Curve Switchback (Level 3)](../../storage_local/20260911_0011__local_455348__train_rl/renders/maze_6_unseen_switchback_level3.mp4) — 461 steps, $0.84\,\text{m/s}$
 - [Video render script for experiment suite](../../scripts/render_experiment_videos.py)
+
+### 5.15 Combining skills along an inspection route
+
+RoboBall can move and jump, but how does it know **when** to jump?
+Imagine following a route through a warehouse: roll along the aisle, jump
+a trench, then crawl through a pipe. The actuators do not need a new
+controller for this task. We need a coordinator that chooses among the
+skills we already have.
+
+The current `InspectionOracle` is that coordinator. Here, *oracle* means a
+scripted expert with access to the supplied route and obstacle geometry.
+It does not discover the route or recognize obstacles from camera images.
+
+#### 5.15.1 Turn the route into decision points
+
+The coordinator marks where the route crosses each obstacle. Think of
+these as bookmarks along a line: a trench starts here, a pipe ends there.
+It measures the robot's progress along that line, rather than using only
+its world x-coordinate, so the same rules work around bends.
+
+For example, on an ordinary approach, a trench between $25$ and
+$45\,\text{cm}$ ahead triggers a running jump. Away from obstacles, it
+requests `move`; near a pipe, `crawl_pipe`; across a stone field,
+`traverse_rough_terrain`.
+
+The responsibilities stay separate:
+
+```text
+Route + obstacle geometry + current position
+                    ↓
+        Coordinator chooses a skill
+                    ↓
+      Skill generates rod-extension targets
+                    ↓
+          PD controllers apply forces
+                    ↓
+         Simulation advances the robot
+```
+
+A jump takes longer than one rod-control update. The execution layer runs
+its phases before returning control to the coordinator. Selecting
+“jump” therefore means starting a behavior, not sending one brief push.
+
+#### 5.15.2 Remember what comes next
+
+A short platform shows why choosing a skill from position alone is not
+enough. After landing, immediately requesting another jump may leave too
+little room to build speed.
+
+For short decks followed by another gap or slab, the expert uses this
+sequence when it detects entry after a jump:
+
+```text
+Brake → back up → settle → run → jump
+```
+
+It remembers the current phase—a small **state machine**. Braking and
+settling last a set number of decisions; reversing ends when the robot
+reaches the rear part of the deck. The next gap then uses a
+$30$–$50\,\text{cm}$ launch window. These distances are tuned approach
+rules, not a calculation of the full flight trajectory.
+
+This is skill composition: the coordinator decides **what to do next**,
+while each skill decides **how to move the rods**. A learned selector can
+later take over that choice; the scripted expert gives us a starting point
+and demonstrations to learn from.
+
+Watch the box-course example below: notice how the coordinator alternates
+moving and jumping with braking and backing up on the decks.
+
+<video controls preload="metadata" width="800" src="./assets/inspection-skill-composition.mp4"></video>
+
+[Watch the skill-composition demonstration](./assets/inspection-skill-composition.mp4).
+
+Video path for the later HTML version: `assets/inspection-skill-composition.mp4`.
+
+Implementation: [scripted coordinator](../../radial_sphere/inspection_oracle.py) ·
+[skill execution environment](../../radial_sphere/skill_arbitration_env.py) ·
+[inspection demonstration runner](../../scripts/vla/run_inspection_oracle.py).
