@@ -487,9 +487,35 @@ The jump maze has a sixth lane now:
 
 | Lane | What it drills |
 |---|---|
-| 5 | five 2.2 m decks, 0.10, 0.20, 0.40, 0.20, 0.10 m high, 0.25 m pits between them |
+| 5 | five 1.6 x 1.2 m decks, 0.30, 0.50, 0.90, 0.50, 0.30 m high, 0.25 m pits between them |
 
 The ball jumps onto each deck. It pauses on each (the deck routine). Up, then down.
+The deck size is a config knob: `scenario.jump_maze.deck_length`, `deck_width`.
+
+Measured deck sizes, 8 jittered tour episodes each:
+
+| Length x width | Kept | Hits per episode |
+|---|---|---|
+| 2.2 x 1.2 m | 8 | 2 |
+| 1.6 x 1.2 m (default) | 6 | 4 |
+| 1.4 x 1.2 m | 5 | 11 |
+| 1.2 x 1.2 m, 1.0 x 1.2 m | 0 | |
+| 1.6 x 0.8 m | 5 | 15 |
+| 1.6 x 0.6 m | 6 | 19 |
+
+The running jump needs its run-up after the back-up. Below 1.4 m there is none.
+Below 1.2 m wide the ball falls off the side.
+
+The standing hop does not need a run-up. The option has a hop mode for it.
+With under 0.8 m of run-up and a slow ball it plans an aimed hop (`jump_to`, `hop_planner`).
+It runs only on the long-stroke build (0.26 m rods). On the standard build it cannot work:
+
+| Standard build, from a standstill | Result |
+|---|---|
+| aimed hop, calibrated (`hop_calibration_standard.json`) | rise 0.20 to 0.33 m on a bad orientation; the planner finds no plan for any rise |
+| aimed hop onto a 0.20 m deck from 0.55 m | 0 of 8, bounced off the face |
+| full-power standing jump (`jump_forward_while_stopped`) | rise 0.47 to 0.69 m, but 0.4 to 1.9 m forward |
+| full-power standing jump onto a 1 m deck | 3 of 8 at best |
 
 Unit tests: 234 pass.
 
@@ -522,7 +548,7 @@ What it showed:
 - Turning is the route tracker's. The heading comes from the waypoints.
 - The approach follows the waypoints too. A turn action would hand navigation to the policy. That is a later step.
 - The env calls `TerrainProbe.plan`, not `VLASkill.plan`. The two share `plan_jump`. Only the env passes the floor height and three ray lines.
-- Decks under 2 m need a standing hop. That exists only as a demo (`demos/doubling_boxes`).
+- Decks under 1.4 m need a standing hop. On the standard build no standing jump lands on one (section 6). The hop mode runs only on the long-stroke build; `demos/doubling_boxes` shows it.
 - Warehouse, pipe alley and the utility tunnel keep under 5 of 8.
 - SmolVLA round 3 has not been trained on self-timed demos.
 - An LLM writing skill programs is a later step. It would sit on top of the same skills.

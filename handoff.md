@@ -1,6 +1,6 @@
 # Handoff — current state
 
-Date: 2026-09-14. Supersedes earlier handoffs.
+Date: 2026-09-18. Supersedes earlier handoffs.
 The VLA work (skills for a policy, the playground course, the ten inspection
 courses, the generic expert, demo collection for SFT) is in `HANDOFF_VLA_RL.md`.
 
@@ -17,7 +17,7 @@ library of motion skills, a set of demos that prove them, and an RL stack.
 | `skills_vla/` | The policy-facing skill layer: six classes with bounded params, each a thin wrapper over `skills`. |
 | `skills/mid_level/` | 4 modules. Choose a low-level skill each step and delegate: `follow_path`, `stay_in_boundary`, `climb_stairs`, plus the jump planners. |
 | `skills/high_level/` | 1 module. `go_to_goal` plans a route and answers with a skill name plus arguments, never rod targets. |
-| `demos/<name>/` | 17 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
+| `demos/<name>/` | 20 folders. `demo.yaml` plus `runner.py` when the control flow is the point. |
 | `configs/rl/` | 45 scenario presets: arena, floor, robot, sim2real. |
 | `configs/run/` | 16 knob files, one per entry script, grouped like `scripts/`. |
 | `scripts/` | Entry points: RL training, imitation, calibration, `run_demo.py`, `run_tests.py`. |
@@ -32,7 +32,7 @@ No command-line flags anywhere. Every entry script takes `key=value`
 overrides, and `--help` prints its full knob list with current values.
 
 ```bash
-PYTHONPATH=. python scripts/run_tests.py              # 190 tests, ~60 s
+PYTHONPATH=. python scripts/run_tests.py              # 234 tests, ~70 s
 PYTHONPATH=. python scripts/run_tests.py all=true     # plus the ~10 min drivers
 
 PYTHONPATH=. python scripts/run_demo.py list=true     # what demos exist
@@ -54,10 +54,29 @@ BLOG_ASSETS_DIR=$PWD/regen_check python docs/blog/render_wall_push.py
 
 ## State
 
-`main` is at `ab6a22e` (the VLA day). The working tree holds the SmolVLA
-evaluator and round-2 tooling (mine, see `HANDOFF_VLA_RL.md` section 10) plus
-files from another session (`wall_jump`, `shaft_climbing`, chimney demo)
-that were not reviewed here. 190 tests passed before those files appeared.
+`main` is at `a13f749`. Nothing is uncommitted. 234 tests pass.
+The target architecture is `docs/architecture.md`: scripted gaits at the
+bottom, skills that own their timing and their end in the middle, RL or a
+VLA choosing the next skill on top. `HANDOFF_VLA_RL.md` section 7b has
+what changed on 2026-09-18 and the measurements.
+
+## Just done (2026-09-18)
+
+- **The running jump times itself.** `radial_sphere/terrain_probe.py`
+  finds the next edge ahead; the jump option approaches and fires at the
+  calibrated distance. The expert only arms it. Any decision in the last
+  1.6 m is right, not 2 or 3 of them.
+- **`flip` instead of `reverse`.** The ball always drives forward; to back
+  up it flips, rolls, flips. Seven VLA classes, 11-D actions.
+- **Two courses:** `inspection_jump_maze` (six lanes, every jump form, a
+  deck row 1.6 x 1.2 m jumped on with a pause on each) and
+  `inspection_doubling_boxes` (2.2 m boxes, heights doubling). Demo
+  `doubling_boxes` hops 1.2 m decks on the long-stroke build.
+- **Three fixes the courses exposed:** floor seams around pits crossed
+  every lane; the heightmap had no box tops; a box right behind a pit had
+  its own, too-early jump window.
+- Storage: 39 debug folders and 6.7 GB of intermediate SmolVLA checkpoints
+  removed.
 
 ## Just done (2026-09-14, VLA day)
 

@@ -6,6 +6,9 @@ extend. That is the whole idea.
 Every skill is a **pure function**. State goes in. Rod targets come out.
 
 For the three layers and the skill contract, see [`docs/architecture.md`](../docs/architecture.md).
+The policy-facing layer is `skills_vla/`: seven classes (`roll`, `jump_forward`, `jump_gap`,
+`traverse_rough`, `brake_stop`, `crawl_pipe`, `flip`), each a thin wrapper over a function here.
+`flip` turns the travel direction around; there is no reverse decision.
 
 ```python
 targets = execute_skill("move_forward", quat, dirs_body, max_extend, d_hat=[1, 0])
@@ -161,7 +164,7 @@ better in a plan, not because they are different gaits.
 | 14 | `circle` | Continuous circular orbit with pure-pursuit lead & dynamic understeer compensation. Holds radius to within ±1.5 cm. | `ball_xy`, `center_xy`, `radius`, `speed`, `clockwise` |
 | 15 | `straddle_gap` | Dual-flank outrigger locomotion across a central hole/trench between two platforms (Box 1 & Box 2). Tucks central underbelly while driving on lateral flanks with active heading centering. | `d_hat`, `speed`, `lateral_offset`, `min_lat` |
 | 16 | `chimney_climb` | Between two walls, under free physics: `launch` off the floor, `push`/`fly` wall-jump zig-zag up, `hold` (clamp both walls, ~1 kN), `descend` (clamp extension servoed on vz). Exits over the LOWER wall onto its top. | `wall_axis`, `phase`, `side`, `clamp_ext`, `push_frac`, `x_off` |
-| 17 | `backflip` | **Planned, not built.** The code was removed and no `backflip`, `somersault` or `flip` name is in the registry today. `docs/backflip_skill.md` is the specification it will be rebuilt from. | `phase`, `direction`, `launch_power`, `launch_torque` |
+| 17 | `backflip` | **Planned, not built.** The code was removed and no `backflip` or `somersault` name is in the registry today (`flip` is the VLA turn-around, not a somersault). `docs/backflip_skill.md` is the specification it will be rebuilt from. | `phase`, `direction`, `launch_power`, `launch_torque` |
 | 18 | `stairs` | Dispatches a composed stair traversal: planned `jump_to` hops, `stop`, `move`, and controlled `fall_down` drops; aliases: `climb_stairs`, `step_vault`. | `phase`, `d_hat`, live velocity, planned takeoff/drop values |
 | 19 | `crawl_pipe` | Rolls inside a round conduit without touching its walls: the `move` gait with every rod capped at the free length to the wall, and the heading steered to the axis. Works down to a 0.22 m radius (the tucked ball is 0.40 m wide). | `d_hat` (axis), `pipe_radius`, `axis_offset`, `speed` |
 | 20 | `zigzag_climb` | The phase machine around `chimney_climb`: `launch` off the floor, then wall-jump zig-zag (`push`, `fly`, `push` ...) up between two walls, `exit` over the lower wall's lip, `land` and `brake` on its top, `stand`. `next_phase` in `shaft_climbing.py` picks the phase from position and velocity. With `Shaft.target_z` it holds and descends instead. Aliases: `zigzag`, `chimney_zigzag`. | `phase`, `side`, `wall_axis`, `lin_vel`, `along_off`, `core_z`, `clamp_ext` |

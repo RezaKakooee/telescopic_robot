@@ -5,6 +5,8 @@ retracting 60 bars. Built on RoboVerse/metasim + MuJoCo, exposed as a
 Gymnasium env, with a scripted low-level controller and a high-level RL
 steering policy (PPO).
 
+The target architecture (three layers, the skill contract) is [`docs/architecture.md`](docs/architecture.md).
+
 ## Layout
 
 - `radial_sphere/` — the library: env, MJCF robot, scenarios, controller,

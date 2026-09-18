@@ -1,10 +1,12 @@
 # Handoff: VLA skills, inspection courses, expert demos, SmolVLA SFT
 
-Date: 2026-09-15 (evening). Supersedes the earlier version of this file.
-Committed as `ab6a22e` on `main`; the SmolVLA evaluator, the demo video
-export and the round-2 changes are in the working tree (see section 10).
+Date: 2026-09-18. Supersedes the earlier version of this file.
+`main` is at `a13f749`. The target architecture is `docs/architecture.md`.
 Environment: conda `roboverse`, run from the repo root with `MUJOCO_GL=egl PYTHONPATH=.`.
 LeRobot / SmolVLA live in a separate venv: `/home/storage_group/envs/lerobot/bin/python`.
+
+Read in this order: section 7b (what changed on 2026-09-18 and why), then
+1 to 3 for the courses and skills, then 6 and 7 for the SmolVLA rounds.
 
 ## 1. What the robot does now
 
@@ -453,45 +455,46 @@ All VLA scripts default to a new timestamped run dir. Exceptions kept on
 purpose: `storage_local/_assets` (blog scripts), `storage_local/sci_out`
 (SLURM logs).
 
-## 10. Working tree at handoff
+## 10. Commits since the VLA day
 
-Uncommitted and mine (evening): the hit-prefix fix in `mujoco_env.py`,
-the goal gating in `skill_arbitration_env.py`, the three drill courses and
-the dock/pipe-alley tweaks in `inspection_scenarios.py`, the drill task
-texts in `generate_inspection_demos.py`, plus (afternoon):
-`scripts/vla/eval_smolvla_inspection.py`,
-`scripts/data/export_demo_videos.py`, the `--oversample` converter,
-`run_inspection_oracle.py` (`--seed=N`, `--no-video`), `ops/watch.sh`,
-`ops/setup_lerobot_env.sh`, `skills/__init__.py` and `skills/runner.py`
-(crawl_pipe entry-zone fix), `radial_sphere/scenario.py`.
+| Commit | What |
+|---|---|
+| `0a87d76` | SmolVLA closed-loop eval, round-2 data tooling, zigzag shaft climbing |
+| `93978b6` | jump maze and doubling-box courses, the flip skill, floor-seam and heightmap fixes |
+| `2aa4c7f` | code as policy: the jump times itself, the expert only arms it (section 7b) |
+| `8d65577`, `b905fca` | the maze deck row 1.6 x 1.2 m, length and width as config knobs |
+| `a13f749` | aimed standing hop for short decks, gated to the long-stroke build |
 
-Uncommitted and from another session (not reviewed here):
-`configs/rl/wall_jump.yaml`, `demos/wall_jump/`, `demos/chimney/*`,
-`skills/mid_level/shaft_climbing.py`, `skills/mid_level/__init__.py`,
-`tests/test_skills.py`, `tests/test_zigzag_skill.py`.
-
-The disk filled up once (shared machine); it was expanded to 495 GB.
-Each SmolVLA checkpoint is 1.3 GB with its optimizer state.
+Nothing is uncommitted. The disk was expanded to 495 GB; each SmolVLA
+checkpoint is 1.3 GB, and only the final one of each run is kept.
 
 ## 11. Open
 
-- Loading dock and utility tunnel keep rates (8/30, 10/30). Longer straight
-  approaches or a smaller start jitter would help.
+- **Round 3 is the next job.** Every demo on disk is from the old expert
+  (windowed jumps, `reverse` as `roll`, 10-D actions). Collect all 15
+  courses with the new expert, convert with `--oversample 4`, train from
+  the base model, evaluate with `--replan 1`.
+- Warehouse, pipe alley and the utility tunnel keep under 5 of 8 jittered
+  tour episodes. The failures are in the crawl (pipe alley, tunnel) and at
+  the warehouse's spill and beam; the jumps are not the cause any more.
+- `crawl_pipe` and `traverse_rough` still run per macro step: they have no
+  own end. They are the next skills to move under the contract.
+- `no_target` jump frames keep the jump label; the `results` column says
+  what ran, and the converter does not filter on it yet.
+- Short decks: on the standard build no standing jump lands on a deck under
+  1.4 m (section 7b). Decks the ball barely fits on need the long-stroke
+  build (`demos/doubling_boxes`).
 - Tanks render as short domes (pillars). No tall cylinder object exists yet.
-- The hurdle and the wall sit at the physical limit; small changes flip them.
-- `jump_to` (aimed hop) is unused: unreliable from a rolling start.
 - Hybrid mode (the VLA also picks speed and power) is not wired for demos.
-  Today one power serves every jump.
-- SmolVLA reaches 6/10 short routes after round 2; the failures are the
-  timing of rare skills, not class confusion. See section 7 for the levers.
 
 ## 12. Quick checks
 
 ```bash
-MUJOCO_GL=egl PYTHONPATH=. python scripts/run_tests.py                       # 190 tests, ~60 s
-MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/run_inspection_oracle.py --tour  # 10 tours with videos
-MUJOCO_GL=egl PYTHONPATH=. python scratch/record_oracle_video.py             # playground oracle video
+MUJOCO_GL=egl PYTHONPATH=. python scripts/run_tests.py                       # 234 tests, ~70 s
+MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/check_inspection_expert.py --episodes=8 --workers=16   # keep rates, all 15 courses, ~10 min
+MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/trace_inspection_expert.py inspection_jump_maze --seed=7 --probe   # one course, step by step
+MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/run_inspection_oracle.py --seed=7 inspection_jump_maze   # a video
 MUJOCO_GL=egl PYTHONPATH=. /home/storage_group/envs/lerobot/bin/python scripts/vla/eval_smolvla_inspection.py \
-    --checkpoint storage_local/20260914_1639__local__train_smolvla__inspection_tours_216ep/train/checkpoints/020000/pretrained_model \
-    --replan 1 --video inspection_tank_farm                                   # one course, ~2 min
+    --checkpoint storage_local/20260915_0203__local__train_smolvla__inspection_tours_x2_os4/train/checkpoints/020000/pretrained_model \
+    --replan 1 --video inspection_tank_farm                                   # round 2 model, one course, ~2 min
 ```
