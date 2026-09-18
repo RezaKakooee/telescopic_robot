@@ -61,19 +61,22 @@ class InspectionScenarioTests(unittest.TestCase):
         x_on = float(sc.path_pts[np.searchsorted(oracle.s, deck.s_start + 0.9)][0])
         oracle._last = "jump_forward_while_moving"
         seen = []
-        for _ in range(16):
+        for _ in range(24):
             name, _, why = oracle.select([x_on, 0.0, 0.3])
             seen.append(name)
-            if name == "move" and oracle._flipped:
-                x_on -= 0.15
+            if name == "move":
+                x_on += -0.15 if oracle._flipped else 0.11        # the ball rolls the way it faces
+            if name.startswith("jump"):
+                break
         self.assertEqual(seen[:4], ["stop"] * 4)
         self.assertEqual(seen[4], "flip")
         self.assertNotIn("reverse", seen)
         self.assertEqual(seen.count("flip"), 2, seen)              # back up, then face forward again
-        # Facing forward again at the deck's rear, the next pit is within
-        # ARM_DIST: the expert says "jump" at once and the skill does the
-        # approach and the timing.
-        self.assertEqual(seen[-1], "jump_forward_while_moving")
+        # Facing forward again at the deck's rear, the next pit comes within
+        # ARM_DIST after at most a roll or two: the expert says "jump" and the
+        # skill does the approach and the timing.
+        self.assertEqual(seen[-1], "jump_forward_while_moving", seen)
+        self.assertLessEqual(seen[::-1].index("stop"), 3, "the jump follows the settle within a few rolls")
         self.assertFalse(oracle._flipped)
 
     def test_expert_arms_the_jump_early_and_only_once_in_reach(self):

@@ -234,7 +234,8 @@ class InspectionOracle:
                 self._deck_phase = "back"
             return "stop", {}, f"{deck.label}: brake"
         if self._deck_phase == "back":
-            if s_here - deck.s_start > DECK_REAR:
+            rear = min(DECK_REAR, 0.3 * (deck.s_end - deck.s_start))     # short decks: back up less
+            if s_here - deck.s_start > rear:
                 return self._go(True, f"{deck.label}: back up")
             self._deck_phase, self._deck_count = "settle", DECK_SETTLE_STEPS
         if self._deck_phase == "settle":

@@ -1,6 +1,6 @@
 """Pass rate of the expert on jittered episodes, the way the demo collector runs them.
 
-    MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/check_inspection_expert.py [course ...] [--episodes=12] [--seed-offset=1000] [--workers=12] [--short]
+    MUJOCO_GL=egl PYTHONPATH=. python scripts/vla/check_inspection_expert.py [course ...] [--episodes=12] [--seed-offset=1000] [--workers=12] [--short] [--set=key=value ...]
 
 Every episode uses the tour route (``--short`` for the short one), the demo
 collector's start jitter, and a fresh seed. Prints one line per course:
@@ -18,14 +18,14 @@ import numpy as np
 
 
 def run_episode(job):
-    kind, seed, tour = job
+    kind, seed, tour, overrides = job
     import os
     os.environ.setdefault("MUJOCO_GL", "egl")
     from radial_sphere.config import load_config_cli
     from radial_sphere.inspection_oracle import InspectionOracle
     from radial_sphere.scenario import generate_scenario
     from radial_sphere.skill_arbitration_env import SkillArbitrationEnv
-    cfg = load_config_cli(name="playground_parkour_skills", overrides=[])
+    cfg = load_config_cli(name="playground_parkour_skills", overrides=list(overrides))
     sc = generate_scenario(kind, cfg, seed=seed, tour=tour)
     env = SkillArbitrationEnv(cfg, scenario=sc, seed=seed, max_steps=8000)
     env.reset(seed=seed)
@@ -59,7 +59,8 @@ def main():
     offset = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--seed-offset=")), 1000)
     workers = next((int(a.split("=")[1]) for a in sys.argv if a.startswith("--workers=")), 12)
     tour = "--short" not in sys.argv
-    jobs = [(k, offset + i, tour) for k in courses for i in range(episodes)]
+    overrides = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--set=")]   # e.g. --set=scenario.jump_maze.deck_length=1.2
+    jobs = [(k, offset + i, tour, overrides) for k in courses for i in range(episodes)]
     with mp.get_context("spawn").Pool(workers) as pool:
         rows = pool.map(run_episode, jobs)
     summary = {}

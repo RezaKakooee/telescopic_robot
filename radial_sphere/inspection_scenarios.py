@@ -31,6 +31,7 @@ from __future__ import annotations
 import numpy as np
 
 WALL_HEIGHT = 1.0        # fences and partitions: too tall to jump over by accident
+MAZE_DECK_LENGTH = 1.6   # the jump maze deck row: 2.2 m keeps 8 of 8 episodes, 1.6 m 6 of 8, 1.4 m 5, 1.2 m none
 
 
 # --------------------------------------------------------------------------- #
@@ -446,7 +447,7 @@ def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False)
     3   platforms            jump onto a 0.25 m and a 0.30 m box, roll off,
                              a beam pair, a gap
     4   angled approach      a zig-zag route crosses beams and a gap at ~16 deg
-    5   deck row             five 2.2 x 1.2 m decks, 0.30, 0.50, 0.90, 0.50, 0.30 m,
+    5   deck row             five 1.6 x 1.2 m decks, 0.30, 0.50, 0.90, 0.50, 0.30 m,
                              a pit between each pair: jump on, pause, jump on
     ==  ===================  =================================================
 
@@ -510,15 +511,17 @@ def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False)
         steps.append(beam(x, y, h + j(-0.02, 0.02)))
     gaps.append(gap(22.0, y, j(0.30, 0.40)))
 
-    # lane 5 (-x): the deck row, 5 m after the corner, decks 2.2 m long with
-    # 0.25 m pits between them (the running jump needs the 2.2 m for its
-    # run-up after the back-up; a pit wider than 0.3 m puts the landing on
-    # the far edge)
+    # lane 5 (-x): the deck row, 5 m after the corner, decks 1.6 m long
+    # (scenario.jump_maze.deck_length) with 0.25 m pits between them. The
+    # running jump needs a run-up after the back-up: 2.2 m keeps 8 of 8
+    # episodes, 1.6 m 6, 1.4 m 5, 1.2 m none. A pit wider than 0.3 m puts
+    # the landing on the far edge.
     # Decks 1.2 m wide: the rod span is 0.62 m and a landing scatters about
     # 0.3 m sideways. Heights 0.30, 0.50, 0.90 m then back down: the rises
     # are 0.20 and 0.40 m, and 0.40 is the running jump's limit.
     y = 5 * W
-    deck, pit, deck_hw = 2.2, 0.25, 0.6
+    knobs = getattr(getattr(cfg, "scenario", None), "jump_maze", None)
+    deck, pit, deck_hw = float(getattr(knobs, "deck_length", MAZE_DECK_LENGTH)), 0.25, 0.6
     x_far = 19.0
     for i, h in enumerate((0.30, 0.50, 0.90, 0.50, 0.30)):
         near, far = x_far - deck, x_far
