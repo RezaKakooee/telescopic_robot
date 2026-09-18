@@ -143,6 +143,7 @@ scenario:                 # what the agent is asked to do (see scenario_generato
     x_range: [2.0, 5.0]
     y_range: [-1.5, 1.5]
   jump_maze:              # inspection_jump_maze, lane 5: the deck row (jump on, pause, jump on)
+    deck_width: 1.2       # metres across the route; the rod span is 0.62 m and a landing scatters about 0.3 m sideways
     deck_length: 1.6      # metres along the route. Measured, 8 jittered episodes: 2.2 m 8 kept, 1.6 m 6, 1.4 m 5, 1.2 m 0. The running jump needs its run-up after the back-up.
   obstacles:              # obstacle kind: random pillars between spawn and goal
     enabled: true         # Set false to disable blockers/pillars (spawns 0 blockers)

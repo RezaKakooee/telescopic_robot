@@ -521,7 +521,8 @@ def jump_maze(cfg, *, rng=None, name="inspection_jump_maze", tour: bool = False)
     # are 0.20 and 0.40 m, and 0.40 is the running jump's limit.
     y = 5 * W
     knobs = getattr(getattr(cfg, "scenario", None), "jump_maze", None)
-    deck, pit, deck_hw = float(getattr(knobs, "deck_length", MAZE_DECK_LENGTH)), 0.25, 0.6
+    deck, pit = float(getattr(knobs, "deck_length", MAZE_DECK_LENGTH)), 0.25
+    deck_hw = 0.5 * float(getattr(knobs, "deck_width", 1.2))
     x_far = 19.0
     for i, h in enumerate((0.30, 0.50, 0.90, 0.50, 0.30)):
         near, far = x_far - deck, x_far
